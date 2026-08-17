@@ -4974,17 +4974,45 @@ const CWAdminPanel = (() => {
           </div>
           <div style="background:#1a1630;border-radius:8px;padding:12px;border-left:3px solid #7dd3fc">
             <div style="font-size:.72rem;text-transform:uppercase;color:#888;margin-bottom:4px">Event suivant</div>
-            ${nxt ? `
+            ${nxt ? (() => {
+              const startD = new Date(nxt.startDate);
+              const pad = n => String(n).padStart(2,'0');
+              const dStr = `${startD.getFullYear()}-${pad(startD.getMonth()+1)}-${pad(startD.getDate())}`;
+              const tStr = `${pad(startD.getHours())}:${pad(startD.getMinutes())}`;
+              const durDays = nxt.endDate && nxt.startDate
+                ? Math.round((nxt.endDate - nxt.startDate) / 86400000)
+                : (state.config?.event?.durationDays ?? 10);
+              return `
               <div style="font-weight:700;color:#7dd3fc;margin-bottom:4px">${tags.find(t=>t.id===nxt.tagId)?.name||nxt.tagId}</div>
               <div style="font-size:.78rem;color:#aaa">📆 Début le ${fmtDate(nxt.startDate)}</div>
               <div style="font-size:.78rem;color:#94a3b8;margin-top:2px">Dans ${nextIn}</div>
               ${tagStats(nxt.tagId)}
-              <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
-                <label style="font-size:.75rem;color:#aaa">Tag :</label>
-                ${tagSelect('ev-nxt-tag', nxt.tagId)}
-                <button class="admin-btn admin-btn-secondary admin-btn-sm" onclick="CWAdminPanel._saveNextTag()">✓</button>
-                <button class="admin-btn admin-btn-sm" style="background:#1e3a5f;border:1px solid #3b82f6" onclick="CWAdminPanel._randomNextTag()" title="Tag aléatoire">🎲</button>
-              </div>` :
+              <div class="admin-grid" style="margin-top:8px;margin-bottom:6px">
+                <div class="admin-field">
+                  <label>Tag</label>
+                  <div style="display:flex;gap:4px">
+                    ${tagSelect('ev-nxt-tag', nxt.tagId)}
+                    <button class="admin-btn admin-btn-sm" style="background:#1e3a5f;border:1px solid #3b82f6;flex-shrink:0" onclick="CWAdminPanel._randomNextTag()" title="Aléatoire">🎲</button>
+                  </div>
+                </div>
+                <div class="admin-field">
+                  <label>Date de début</label>
+                  <input type="date" id="ev-nxt-edit-date" value="${dStr}" style="font-size:.8rem">
+                </div>
+                <div class="admin-field">
+                  <label>Heure de début</label>
+                  <input type="time" id="ev-nxt-edit-time" value="${tStr}" style="font-size:.8rem">
+                </div>
+                <div class="admin-field">
+                  <label>Durée (jours)</label>
+                  <input type="number" id="ev-nxt-edit-duration" value="${durDays}" min="1" max="60" style="font-size:.8rem">
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                <button class="admin-btn admin-btn-success admin-btn-sm" onclick="CWAdminPanel._saveNextEventEdit()">💾 Enregistrer les modifications</button>
+                <button class="admin-btn admin-btn-danger admin-btn-sm" onclick="CWAdminPanel._cancelNextEvent()">❌ Annuler cet Event</button>
+              </div>`;
+            })() :
               `<div style="color:#94a3b8;font-size:.82rem;margin-bottom:8px">Aucun Event suivant planifié.</div>
               ${tags.length ? (() => {
                 const defaultTag = tags.find(t=>t.id!==cur?.tagId)?.id || tags[0]?.id;
@@ -5248,6 +5276,31 @@ const CWAdminPanel = (() => {
     const tagId = document.getElementById('ev-nxt-tag')?.value;
     if (tagId) CWGameState.setNextEventTag(tagId);
     _notify('✅ Tag Event suivant mis à jour.'); switchTab('event');
+  }
+
+  /** Enregistre les modifications (tag/date/heure/durée) d'un event suivant déjà planifié */
+  function _saveNextEventEdit() {
+    const tagId    = document.getElementById('ev-nxt-tag')?.value;
+    const dateStr  = document.getElementById('ev-nxt-edit-date')?.value;
+    const timeStr  = document.getElementById('ev-nxt-edit-time')?.value || '00:00';
+    const duration = parseInt(document.getElementById('ev-nxt-edit-duration')?.value) || null;
+    if (!tagId) { alert('Sélectionne un Tag.'); return; }
+    if (!dateStr) { alert('Sélectionne une date.'); return; }
+
+    const startDate = new Date(`${dateStr}T${timeStr}:00`);
+    if (isNaN(startDate.getTime())) { alert('Date invalide.'); return; }
+
+    CWGameState.planifyNextEvent(tagId, startDate, duration);
+    _notify('✅ Event suivant modifié.');
+    switchTab('event');
+  }
+
+  /** Annule l'event suivant planifié */
+  function _cancelNextEvent() {
+    if (!confirm('Annuler cet Event planifié ? Il faudra le reprogrammer entièrement si tu changes d\'avis.')) return;
+    CWGameState.cancelNextEvent();
+    _notify('❌ Event suivant annulé.');
+    switchTab('event');
   }
 
   function _planifyNextEvent() {
@@ -6626,6 +6679,7 @@ const CWAdminPanel = (() => {
     _saveEventTemplate, _resetEventTemplate, _addEventTplQuest, _deleteEventTplQuest,
     _saveCurrentTag, _saveNextTag, _onTplDayTypeChange, _forceStartEvent, _stopEvent,
     _randomCurrentTag, _randomNextTag, _randomStartTag, _planifyNextEvent, _randomNextTagNew,
+    _saveNextEventEdit, _cancelNextEvent,
     _saveQuest, _editQuest, _toggleQuest, _deleteQuest, _clearQuestForm,
     _savePassive, _editPassive, _deletePassive, _clearPassiveForm, _updatePassiveParamsFields,
     _saveGachaConfig, _saveBanner, _editBanner, _deleteBanner, _clearBannerForm, _filterBannerFeaturedList, _updateBannerPoolFields,

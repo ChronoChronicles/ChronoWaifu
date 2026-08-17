@@ -1312,6 +1312,14 @@ const CWGameState = (() => {
     _autoSave();
   }
 
+  /** Annule l'Event suivant planifié (aucun effet si aucun n'est planifié) */
+  function cancelNextEvent() {
+    if (!_state.player.event) return;
+    _state.player.event.next = null;
+    _notify('eventConfigChanged');
+    _autoSave();
+  }
+
   /** Force le tag de l'event en cours (sans changer les dates ni la progression) */
   function setCurrentEventTag(tagId) {
     if (!_state.player.event?.current) return;
@@ -1883,7 +1891,7 @@ const CWGameState = (() => {
     addShopListing, updateShopListing, removeShopListing, purchaseShopListing,
     refreshRotatingShop, getRotatingShopListings,
     checkEvent, getActiveEvent, setEventConfig, setNextEventConfig, setNextEventTag, setCurrentEventTag,
-    trackEventQuestProgress, claimEventQuest, planifyNextEvent, getPlayerStatBonus,
+    trackEventQuestProgress, claimEventQuest, planifyNextEvent, cancelNextEvent, getPlayerStatBonus,
     getCharacterAuraScore, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
     getTourneeProgress, getLeaderboardSnapshot,
     getStoryChapterProgress, completeStoryStage, isFeatureUnlocked,
