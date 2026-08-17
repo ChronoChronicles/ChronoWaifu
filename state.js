@@ -1073,6 +1073,7 @@ const CWGameState = (() => {
 
     switch (featureId) {
       case 'gacha':    return stagesInChapter(1) >= 5;  // Chap.2 Stage 5
+      case 'shop':     return stagesInChapter(1) >= 5;  // Chap.2 Stage 5 (même condition que le Gacha)
       case 'caprice':  return chapterDone(1);            // Fin Chap.2
       case 'saga':     return chapterDone(3);            // Fin Chap.4
       case 'tournee':  return chapterDone(2);            // Fin Chap.3

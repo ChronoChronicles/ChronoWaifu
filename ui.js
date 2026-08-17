@@ -718,7 +718,7 @@ const CWGameUI = (() => {
       <div class="nav-new-btn" id="nav-gacha-btn" data-screen="gacha">
         <span class="nav-ico">📜</span><span class="nav-lbl">CONTRAT</span>
       </div>
-      <div class="nav-new-btn" data-screen="shop">
+      <div class="nav-new-btn" id="nav-shop-btn" data-screen="shop">
         <span class="nav-ico">🛍️</span><span class="nav-lbl">SHOP</span>
       </div>
       <div class="nav-new-btn" id="nav-plus-btn">
@@ -746,6 +746,14 @@ const CWGameUI = (() => {
     const lockBadge = document.getElementById('hub-gacha-lock');
     if (lockBadge) lockBadge.style.display = gachaUnlocked ? 'none' : 'flex';
 
+    // Bouton Shop — verrouillé selon la même condition que le Gacha
+    const shopBtn = document.getElementById('nav-shop-btn');
+    const shopUnlocked = CWGameState.isFeatureUnlocked?.('shop') ?? true;
+    if (!shopUnlocked && shopBtn) {
+      shopBtn.style.opacity = '.45';
+      shopBtn.title = 'Disponible au Chapitre 2, Stage 5';
+    }
+
     // Hub zones
     document.querySelectorAll('.hub-zone').forEach(z => {
       z.addEventListener('click', () => {
@@ -765,7 +773,13 @@ const CWGameUI = (() => {
         if (s === 'hub')       { showScreen('hub');        _setNavActive('hub');        return; }
         if (s === 'collection'){ showScreen('collection'); _setNavActive('collection'); return; }
         if (s === 'team-hub')  { showScreen('team-hub');  _setNavActive('team-hub');  return; }
-        if (s === 'shop')      { showScreen('shop');       _setNavActive('shop');      return; }
+        if (s === 'shop') {
+          if (!CWGameState.isFeatureUnlocked?.('shop')) {
+            _showToast('🔒 Shop disponible au Chapitre 2, Stage 5', 'info');
+            return;
+          }
+          showScreen('shop'); _setNavActive('shop'); return;
+        }
       });
     });
 
