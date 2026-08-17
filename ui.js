@@ -3125,6 +3125,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     // exactement ce qu'il faut montrer, et on se contente de l'injecter tel
     // quel dans le DOM une fois le délai écoulé.
     let onRetreat = null;
+    let subtitle  = null; // "→ Cible : effet", affiché sous le nom du passif pour plus de clarté
 
     if (effectType === 'end_turn_aoe_damage') {
       const targetIds = data.extra?.targetIds || [];
@@ -3136,6 +3137,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         if (dmg != null) _spawnFloatText(targetCard, `-${dmg}`, 'float-passive-dmg', 0);
       });
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.hitNormal);
+      subtitle = `→ ${targetIds.length} ennemi${targetIds.length > 1 ? 's' : ''} touché${targetIds.length > 1 ? 's' : ''}`;
       // Snapshot des PV actuels (déjà appliqués par le moteur) de chaque cible
       const hpSnapshot = {};
       targetIds.forEach(id => { const c = _findCombatantById(id); if (c) hpSnapshot[id] = c.currentHp; });
@@ -3160,6 +3162,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       // hpAfter est déjà un instantané figé fourni par le moteur : sûr à utiliser tel quel
       const healedId = data.extra?.healedId;
       const hpAfter  = data.extra?.hpAfter;
+      const healedName = _findCombatantById(healedId)?.name || 'Allié·e';
+      subtitle = `→ ${healedName} : +${amount ?? '?'} PV`;
       onRetreat = () => {
         const healed = _findCombatantById(healedId);
         if (healed && hpAfter !== undefined) {
@@ -3179,6 +3183,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.gachaPull);
       // Icônes de statut figées maintenant (le buff est déjà appliqué côté moteur)
       const buffedId = data.extra?.buffedId;
+      const buffedName = _findCombatantById(buffedId)?.name || 'Allié·e';
+      subtitle = `→ ${buffedName} : Charisme renforcé`;
       const buffedIconsHtml = (() => {
         const c = _findCombatantById(buffedId);
         return c ? _renderStatusIcons(c) : null;
@@ -3192,6 +3198,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     } else if (effectType === 'pre_attack_cleanse_self') {
       _spawnPassiveFx(sourceCard, 'cleanse');
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.hitResist);
+      subtitle = '→ Soi-même : Statuts nettoyés';
       const srcId = data.combatantId;
       const srcIconsHtml = (() => {
         const c = _findCombatantById(srcId);
@@ -3210,6 +3217,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       const targetCard = document.getElementById(`fighter-${data.extra?.targetId}`);
       const targetId   = data.extra?.targetId;
       const dmg = data.extra?.damage;
+      const counterTargetName = _findCombatantById(targetId)?.name || '';
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.hitWeak);
 
       // Flash éclair sur le riposteur
@@ -3234,7 +3242,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           text-shadow:0 0 12px rgba(244,63,94,1);
           opacity:0; transition:opacity 150ms ease;
         `;
-        miniB.textContent = '⚡ Contre-Attaque !';
+        miniB.textContent = counterTargetName ? `⚡ Contre-Attaque ! → ${counterTargetName}` : '⚡ Contre-Attaque !';
         document.body.appendChild(miniB);
         requestAnimationFrame(() => requestAnimationFrame(() => { miniB.style.opacity = '1'; }));
         setTimeout(() => { miniB.style.opacity = '0'; setTimeout(() => miniB.remove(), 200); }, 700);
@@ -3269,16 +3277,23 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     } else if (effectType === 'stat_boost_evasion') {
       _spawnPassiveFx(sourceCard, 'adorable');
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.hitResist);
+      subtitle = '→ Soi-même : Esquive renforcée';
 
     } else if (effectType === 'stat_boost_crit_damage') {
       _spawnPassiveFx(sourceCard, 'scenique');
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.hitWeak);
+      subtitle = '→ Soi-même : Critique renforcé';
 
     } else if (['on_hit_paralyze', 'on_hit_poison', 'on_hit_charm'].includes(effectType)) {
       const statusVariant = effectType === 'on_hit_paralyze' ? 'paralysis'
                           : effectType === 'on_hit_poison'   ? 'poison'
                           :                                    'charm';
+      const statusLabel = effectType === 'on_hit_paralyze' ? 'Paralysie'
+                         : effectType === 'on_hit_poison'   ? 'Poison'
+                         :                                    'Charme';
       const targetId = data.extra?.targetId;
+      const targetName = _findCombatantById(targetId)?.name || 'Cible';
+      subtitle = `→ ${targetName} : ${statusLabel}`;
       _spawnPassiveFx(document.getElementById(`fighter-${targetId}`), statusVariant);
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.hitWeak);
       const targetIconsHtml = (() => {
@@ -3295,7 +3310,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     // La grande bannière centrale dure ~2.46s ; si onRetreat est fourni, elle
     // attend encore 1s après sa disparition avant de l'appeler puis de libérer
     // la file (cf. _spawnPassiveBanner). Sinon elle libère la file directement.
-    _spawnPassiveBanner(sourceCard, data.passiveName, data.extra?.copiedPassiveName || null, { onRetreat });
+    _spawnPassiveBanner(sourceCard, data.passiveName, data.extra?.copiedPassiveName || null, { onRetreat, subtitle });
   }
   /** Réagit à un effet de statut qui tique tout seul (poison) ou bloque un tour (paralysie/charme) */
   function _onStatusTriggered(data) {
@@ -3429,18 +3444,33 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     `;
     document.body.appendChild(clone);
 
-    // Bannière principale (Mystère)
+    // Bannière principale (nom du passif + sous-titre cible/effet, si fourni)
     const banner = document.createElement('div');
     banner.style.cssText = `
       position:fixed; left:50%; transform:translateX(-50%);
       top:${bannerTop}; z-index:10000; pointer-events:none;
+      display:flex; flex-direction:column; align-items:center; gap:3px;
       background:linear-gradient(90deg,rgba(150,100,255,.1),rgba(150,100,255,.3),rgba(150,100,255,.1));
       border:1px solid rgba(150,100,255,.6); border-radius:24px;
-      padding:8px 24px; font-family:var(--font-display); font-size:1rem;
-      font-weight:800; color:#fff; letter-spacing:.08em; white-space:nowrap;
-      text-shadow:0 0 18px rgba(150,100,255,1); opacity:0; transition:opacity 280ms ease;
+      padding:8px 24px; font-family:var(--font-display);
+      white-space:nowrap; opacity:0; transition:opacity 280ms ease;
     `;
-    banner.textContent = `✨ ${text}`;
+    const bannerMain = document.createElement('div');
+    bannerMain.style.cssText = `
+      font-size:1rem; font-weight:800; color:#fff; letter-spacing:.08em;
+      text-shadow:0 0 18px rgba(150,100,255,1);
+    `;
+    bannerMain.textContent = `✨ ${text}`;
+    banner.appendChild(bannerMain);
+    if (opts.subtitle) {
+      const bannerSub = document.createElement('div');
+      bannerSub.style.cssText = `
+        font-size:.74rem; font-weight:700; color:#e9d8ff; letter-spacing:.03em;
+        text-shadow:0 0 10px rgba(150,100,255,.8);
+      `;
+      bannerSub.textContent = opts.subtitle;
+      banner.appendChild(bannerSub);
+    }
     document.body.appendChild(banner);
 
     // Bannière secondaire (passif copié) — même position, style rose/or
@@ -3610,10 +3640,29 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       setTimeout(_combatAnimDone, 100); return;
     }
 
+    // Filet de sécurité : si la cible a une taille nulle (pas encore mise en
+    // page, carte tout juste remplacée par une vague suivante...), impossible
+    // de calculer une trajectoire fiable — on va directement à l'impact plutôt
+    // que de risquer d'envoyer le portrait n'importe où sur l'écran.
+    if (tgtRect.width === 0) {
+      _resolveImpact(targetCard, target, result);
+      applySnapshotAndUpdate(target, targetHpToShow);
+      applySnapshotAndUpdate(attacker, attackerHpSnapshot);
+      setTimeout(_combatAnimDone, 100); return;
+    }
+
     // Déplacement en coordonnées écran → converti en unités locales
-    // Le portrait est déjà en position normale, on anime via transform
-    const dx = (tgtRect.left + tgtRect.width  / 2) - (srcRect.left + srcRect.width  / 2);
-    const dy = (tgtRect.top  + tgtRect.height / 2) - (srcRect.top  + srcRect.height / 2);
+    // Le portrait est déjà en position normale, on anime via transform.
+    // Le point d'arrivée est bridé pour rester dans l'écran (avec une marge),
+    // afin que le portrait ne puisse jamais visuellement sortir du cadre —
+    // même en cas de mise en page inhabituelle ou de mesure imprécise.
+    const EDGE_MARGIN = 40;
+    const srcCenterX = srcRect.left + srcRect.width  / 2;
+    const srcCenterY = srcRect.top  + srcRect.height / 2;
+    const tgtCenterX = Math.max(EDGE_MARGIN, Math.min(window.innerWidth  - EDGE_MARGIN, tgtRect.left + tgtRect.width  / 2));
+    const tgtCenterY = Math.max(EDGE_MARGIN, Math.min(window.innerHeight - EDGE_MARGIN, tgtRect.top  + tgtRect.height / 2));
+    const dx = tgtCenterX - srcCenterX;
+    const dy = tgtCenterY - srcCenterY;
 
     // Stopper l'animation breathe pendant notre animation
     srcPortrait.style.animation = 'none';
@@ -3637,10 +3686,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       srcPortrait.style.boxShadow  = '0 0 6px rgba(255,140,200,.2)';
     }, 507);
 
-    // Phase 3 — impact (effets visuels + chiffre flottant) : c'est le moment
-    // exact où le portrait "tape" la cible.
+    // Phase 3 — impact ET barre de vie strictement au même instant : c'est le
+    // moment exact où le portrait "tape" la cible, ni avant, ni après.
     setTimeout(() => {
       _resolveImpact(targetCard, target, result);
+      applySnapshotAndUpdate(target, targetHpToShow);
+      _renderTurnOrderBar();
     }, 913);
 
     // Phase 4 — retour à la place et taille initiales (500ms), pendant que le
@@ -3651,7 +3702,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       srcPortrait.style.boxShadow  = '';
     }, 1030);
 
-    // Phase 4b — nettoyage du portrait attaquant (déjà revenu à sa place)
+    // Phase 4b — nettoyage du portrait attaquant (déjà revenu à sa place), et
+    // libération de la file d'animation (fin de la séquence complète)
     setTimeout(() => {
       srcPortrait.style.transition  = '';
       srcPortrait.style.transform   = '';
@@ -3661,16 +3713,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       srcPortrait.style.transformOrigin = '';
       attackerCard.style.zIndex = '';  // remettre la carte à son z-index normal
       applySnapshotAndUpdate(attacker, attackerHpSnapshot);
-    }, 1466);
-
-    // Phase 5 — la barre de vie de la cible ne baisse/monte que 0,15s après
-    // l'impact ("le portrait a tapé"), pour rester très proche du coup tout en
-    // évitant qu'elle ne change exactement au même instant que l'impact.
-    setTimeout(() => {
-      applySnapshotAndUpdate(target, targetHpToShow);
-      _renderTurnOrderBar();
       _combatAnimDone();
-    }, 1063);
+    }, 1466);
   }
 
   /** Formate un multiplicateur de dégâts pour l'affichage (×2, ×0.5, ×2.25...) */
@@ -3714,7 +3758,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     el.style.setProperty('--stack', stack);
     el.textContent = text;
     card.appendChild(el);
-    setTimeout(() => el.remove(), 1200);
+    setTimeout(() => el.remove(), 1800); // +50% par rapport à l'ancienne durée (1200ms)
   }
 
   /**

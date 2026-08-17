@@ -1396,27 +1396,32 @@
     position:absolute; top:0; left:50%; transform:translate(-50%, 0);
     white-space:nowrap; pointer-events:none; z-index:10;
     font-family:var(--font-display); font-weight:800; letter-spacing:.02em;
-    text-shadow:0 2px 6px rgba(0,0,0,.6);
-    animation:floatUp 1.1s ease forwards;
-    top:calc(0px - (var(--stack, 0) * 20px));
+    /* Contour sombre (plusieurs ombres superposées) + halo, pour rester lisible
+       peu importe le fond derrière (portrait clair, sombre, coloré...) */
+    text-shadow:
+      -1.5px -1.5px 0 rgba(0,0,0,.85), 1.5px -1.5px 0 rgba(0,0,0,.85),
+      -1.5px  1.5px 0 rgba(0,0,0,.85), 1.5px  1.5px 0 rgba(0,0,0,.85),
+      0 3px 8px rgba(0,0,0,.7);
+    animation:floatUp 1.65s ease forwards; /* +50% par rapport à l'ancienne durée (1.1s) */
+    top:calc(0px - (var(--stack, 0) * 24px));
   }
   @keyframes floatUp{
     0%{ opacity:0; transform:translate(-50%, 6px) scale(.85); }
-    15%{ opacity:1; transform:translate(-50%, -8px) scale(1.05); }
-    75%{ opacity:1; transform:translate(-50%, -34px) scale(1); }
-    100%{ opacity:0; transform:translate(-50%, -46px) scale(.95); }
+    12%{ opacity:1; transform:translate(-50%, -8px) scale(1.1); }
+    80%{ opacity:1; transform:translate(-50%, -38px) scale(1); }
+    100%{ opacity:0; transform:translate(-50%, -52px) scale(.95); }
   }
-  .float-dmg{ font-size:1.05rem; color:#fff; }
-  .float-crit-dmg{ font-size:1.3rem; color:var(--accent); }
-  .float-crit-label{ font-size:.68rem; color:var(--accent); }
-  .float-evade{ font-size:.8rem; color:var(--text-dim); }
-  .float-levelup{ font-size:1.05rem; color:#ffd780; }
-  .float-evolved{ font-size:.85rem; color:#a78bfa; }
-  .float-mult{ font-size:.7rem; font-family:var(--font-mono); font-weight:700; }
+  .float-dmg{ font-size:1.4rem; color:#fff; }
+  .float-crit-dmg{ font-size:1.75rem; color:var(--accent); }
+  .float-crit-label{ font-size:.95rem; color:var(--accent); }
+  .float-evade{ font-size:1.05rem; color:#e2e2ea; }
+  .float-levelup{ font-size:1.35rem; color:#ffd780; }
+  .float-evolved{ font-size:1.1rem; color:#a78bfa; }
+  .float-mult{ font-size:.95rem; font-family:var(--font-mono); font-weight:800; }
   .float-mult-super{ color:#4ade80; }
   .float-mult-low{ color:#f87171; }
   .float-mult-immune{ color:#9ca3af; }
-  .float-passive{ font-size:.72rem; color:#c084fc; letter-spacing:.04em; }
+  .float-passive{ font-size:.95rem; color:#c084fc; letter-spacing:.04em; }
   /* Chiffres flottants colorés pour les PV modifiés par passif */
   .float-passive-heal  { font-size:.95rem; color:#4ade80; font-weight:900; } /* vert  — Régénération */
   .float-passive-dmg   { font-size:.95rem; color:#f87171; font-weight:900; } /* rouge — Fanatisme, Contre-Attaque */
