@@ -317,23 +317,62 @@ const CWCombatEngine = (() => {
    * @param {object} rarityWeights
    * @param {number} [stageFactor=1] - cfg.combat.evolvedFormWeightFactor (1 = pas de réduction)
    */
+  /**
+   * Tire un personnage ennemi EXACTEMENT comme le gacha, en 2 étapes :
+   * 1. Tire une rareté selon les pourcentages fournis (cf. cfg.enemyRarityWeights)
+   *    — un pourcentage exact, indépendant du nombre de personnages existant
+   *    dans chaque rareté (contrairement à un poids par personnage, qui
+   *    sur-représenterait les raretés ayant le plus de personnages).
+   * 2. Choisit un personnage au hasard parmi les éligibles de cette rareté,
+   *    pondéré par stageFactor selon le stade d'évolution (une forme évoluée
+   *    apparaît plus rarement que la forme de base de la même rareté).
+   * Repli en cascade sur la rareté non-vide la plus proche si la rareté tirée
+   * n'a encore aucun personnage éligible (ex: aucun Légendaire débloqué) —
+   * jamais un biais silencieux vers une autre rareté au hasard.
+   */
   function _pickWeightedRandomChar(chars, rarityWeights, stageFactor = 1) {
-    const weighted = chars.map(c => ({
-      c,
-      // Fallback à 0 (pas 1) si la rareté n'est pas dans les poids — évite les mythiques non prévus
-      w: Math.max(0, rarityWeights?.[c.rarity] ?? 0) * Math.pow(stageFactor, c.evolutionStage || 0),
-    }));
-    const total = weighted.reduce((s, x) => s + x.w, 0);
-    // Si total = 0 (aucun poids défini), fallback équitable sur toutes les raretés définies
-    if (total <= 0) {
-      const fallback = chars.filter(c => (CWGameDatabase.RARITIES[c.rarity]?.gachaWeight || 0) > 0);
-      const pool = fallback.length > 0 ? fallback : chars;
-      return pool[Math.floor(Math.random() * pool.length)];
+    const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+
+    // Regrouper les personnages éligibles par rareté
+    const byRarity = {};
+    chars.forEach(c => {
+      (byRarity[c.rarity] = byRarity[c.rarity] || []).push(c);
+    });
+
+    // 1. Tirer une rareté selon les pourcentages (comme _rollRarity du gacha)
+    const weights = rarityWeights || {};
+    const totalW  = RARITY_ORDER.reduce((s, r) => s + Math.max(0, weights[r] || 0), 0);
+    let rolledRarity = RARITY_ORDER[0];
+    if (totalW > 0) {
+      let roll = Math.random() * totalW;
+      for (const r of RARITY_ORDER) {
+        roll -= Math.max(0, weights[r] || 0);
+        if (roll <= 0) { rolledRarity = r; break; }
+      }
     }
-    let roll = Math.random() * total;
+
+    // 2. Repli en cascade si la rareté tirée n'a aucun personnage éligible
+    let pool = byRarity[rolledRarity];
+    if (!pool || pool.length === 0) {
+      const idx = RARITY_ORDER.indexOf(rolledRarity);
+      for (let d = 1; d < RARITY_ORDER.length && (!pool || pool.length === 0); d++) {
+        const below = RARITY_ORDER[idx - d];
+        const above = RARITY_ORDER[idx + d];
+        if (below && byRarity[below]?.length) pool = byRarity[below];
+        else if (above && byRarity[above]?.length) pool = byRarity[above];
+      }
+    }
+    if (!pool || pool.length === 0) pool = chars; // dernier repli : n'importe quel éligible
+    if (!pool.length) return null;
+
+    // 3. Choisir un personnage dans cette rareté, pondéré par stade d'évolution
+    const weighted = pool.map(c => ({ c, w: Math.pow(stageFactor, c.evolutionStage || 0) }));
+    const wTotal = weighted.reduce((s, x) => s + x.w, 0);
+    if (wTotal <= 0) return pool[Math.floor(Math.random() * pool.length)];
+    let roll2 = Math.random() * wTotal;
     for (const x of weighted) {
-      roll -= x.w;
-      if (roll <= 0) return x.c;
+      roll2 -= x.w;
+      if (roll2 <= 0) return x.c;
     }
     return weighted[weighted.length - 1].c;
   }

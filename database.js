@@ -61,7 +61,7 @@ const CWGameDatabase = (() => {
       // ── Fréquence d'apparition des ennemis par rareté (combat aléatoire) ────
       // Poids relatifs : plus la valeur est haute, plus cette rareté apparaît souvent.
       enemyRarityWeights: {
-        common: 50, uncommon: 30, rare: 12, epic: 5, legendary: 2, mythic: 0.5,
+        common: 50, uncommon: 30, rare: 12.5, epic: 5, legendary: 2, mythic: 0.5,
       },
       // ── Fréquence d'apparition réduite pour les formes évoluées ─────────────
       // Une forme évoluée n'intègre le pool d'ennemis qu'une fois débloquée par le
@@ -146,7 +146,7 @@ const CWGameDatabase = (() => {
       dropRates: {
         common:    50,
         uncommon:  30,
-        rare:      12,
+        rare:      12.5,
         epic:       5,
         legendary:  2,
         mythic:     0.5,
@@ -662,7 +662,7 @@ const CWGameDatabase = (() => {
   const RARITIES = {
     common:    { name: "Figurante",    color: "#9CA3AF", stars: 1, gachaWeight: 50 },
     uncommon:  { name: "Starlette",color: "#34D399", stars: 2, gachaWeight: 30 },
-    rare:      { name: "Vedette",       color: "#60A5FA", stars: 3, gachaWeight: 12 },
+    rare:      { name: "Vedette",       color: "#60A5FA", stars: 3, gachaWeight: 12.5 },
     epic:      { name: "Star",     color: "#A78BFA", stars: 4, gachaWeight: 5  },
     legendary: { name: "Icône", color: "#F59E0B", stars: 5, gachaWeight: 2  },
     mythic:    { name: "Divine",    color: "#F43F5E", stars: 6, gachaWeight: 0.5},
