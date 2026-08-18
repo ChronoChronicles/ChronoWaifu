@@ -3850,15 +3850,9 @@
         toggleBtn?.addEventListener('click', () => CWAdminPanel.toggle());
       }
 
-      // 7. Filet de sécurité : re-sauvegarde périodique (toutes les 30s), au cas
-      //    où une mutation aurait échappé au déclenchement automatique. Passe
-      //    par la MÊME fonction _persist (donc par la même garde de suspension
-      //    ci-dessus) — jamais un appel indépendant qui la contournerait.
-      setInterval(() => _persist(CWGameState.get()), 30000);
-
-      // 8. Sauvegarder aussi quand on quitte/rafraîchit la page (best effort :
+      // 7. Sauvegarder aussi quand on quitte/rafraîchit la page (best effort :
       //    une requête réseau au unload n'est jamais garantie d'aboutir, mais
-      //    l'autosave périodique + à chaque mutation couvre déjà l'essentiel)
+      //    la sauvegarde à chaque modification couvre déjà l'essentiel)
       window.addEventListener('beforeunload', () => {
         if (_autosaveSuspended) return; // édition d'un autre joueur en cours, cf. admin.js
         const state = CWGameState.get();
