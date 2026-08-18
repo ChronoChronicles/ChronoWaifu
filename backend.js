@@ -79,12 +79,19 @@ const CWBackend = (() => {
 
   /**
    * Charge les données structurelles du jeu (personnages, équipements, config...).
-   * @returns {object} objet vide {} si rien n'a encore été sauvegardé par l'admin
+   * @returns {object} objet vide {} UNIQUEMENT si l'admin n'a encore jamais
+   *          rien sauvegardé (cas légitime, pas une erreur). En cas d'échec
+   *          réel, lève une exception — jamais un objet vide silencieux, qui
+   *          risquerait sinon d'être réécrit par-dessus la vraie config lors
+   *          de la prochaine sauvegarde admin (cf. loadPlayerSave, même logique).
    */
   async function loadGameData() {
     const { data, error } = await _client
       .from('game_data').select('data').eq('id', 'main').maybeSingle();
-    if (error) { console.error('[CWBackend] loadGameData:', error); return {}; }
+    if (error) {
+      console.error('[CWBackend] loadGameData:', error);
+      throw new Error('Impossible de charger les données de jeu : ' + error.message);
+    }
     return data?.data || {};
   }
 
@@ -100,12 +107,21 @@ const CWBackend = (() => {
 
   /**
    * Charge la sauvegarde du joueur connecté.
-   * @returns {object|null} null si c'est un tout nouveau compte (jamais sauvegardé)
+   * @returns {object|null} null UNIQUEMENT si c'est un tout nouveau compte
+   *          (aucune ligne trouvée, ce qui n'est pas une erreur). En cas
+   *          d'échec réel (réseau, permissions...), lève une exception —
+   *          jamais un null silencieux, pour ne jamais confondre "nouveau
+   *          joueur" avec "erreur de chargement temporaire" (qui repartirait
+   *          sinon sur un état vierge, avec le risque d'écraser la vraie
+   *          progression à la sauvegarde automatique suivante).
    */
   async function loadPlayerSave(userId) {
     const { data, error } = await _client
       .from('player_saves').select('data').eq('user_id', userId).maybeSingle();
-    if (error) { console.error('[CWBackend] loadPlayerSave:', error); return null; }
+    if (error) {
+      console.error('[CWBackend] loadPlayerSave:', error);
+      throw new Error('Impossible de charger ta progression : ' + error.message);
+    }
     return data?.data || null;
   }
 

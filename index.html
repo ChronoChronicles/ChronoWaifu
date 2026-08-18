@@ -3738,12 +3738,31 @@
       CWBackend.setCurrentUserId(userId);
 
       // 2. Charger en parallèle : données de jeu partagées, sauvegarde du joueur,
-      //    et statut admin de ce compte
-      const [gameData, playerData, isAdmin] = await Promise.all([
-        CWBackend.loadGameData(),
-        CWBackend.loadPlayerSave(userId),
-        CWBackend.isCurrentUserAdmin(userId),
-      ]);
+      //    et statut admin de ce compte. En cas d'échec (réseau, Supabase
+      //    temporairement indisponible...), on ne DOIT SURTOUT PAS continuer
+      //    comme si de rien n'était : ça repartirait sur un état par défaut,
+      //    avec le risque bien réel d'écraser la vraie progression à la
+      //    prochaine sauvegarde automatique. On affiche donc une vraie erreur
+      //    avec un bouton pour réessayer, plutôt qu'un échec silencieux.
+      let gameData, playerData, isAdmin;
+      try {
+        [gameData, playerData, isAdmin] = await Promise.all([
+          CWBackend.loadGameData(),
+          CWBackend.loadPlayerSave(userId),
+          CWBackend.isCurrentUserAdmin(userId),
+        ]);
+      } catch (err) {
+        console.error('[Bootstrap] Échec du chargement initial :', err);
+        document.body.innerHTML = `
+          <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; font-family:sans-serif; color:#fff; background:#0d0818;">
+            <div>
+              <div style="font-size:2rem; margin-bottom:12px;">⚠️</div>
+              <p style="margin-bottom:16px; color:#fca5b5;">Impossible de charger ta progression.<br>Vérifie ta connexion internet, puis réessaie.</p>
+              <button onclick="window.location.reload()" style="background:#a78bfa; border:none; border-radius:999px; color:#1b1330; font-weight:800; padding:10px 24px; cursor:pointer;">🔄 Réessayer</button>
+            </div>
+          </div>`;
+        return; // on s'arrête là : jamais d'initialisation sur un état par défaut ici
+      }
 
       // 3. Initialiser l'état du jeu : on fusionne les deux moitiés dans la
       //    forme attendue par CWGameState.init(). Les clés manquantes (première

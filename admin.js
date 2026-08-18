@@ -6245,6 +6245,15 @@ const CWAdminPanel = (() => {
       _notify('❌ Échec de l\'enregistrement : ' + (e.message || e), 'error');
       return; // on ne quitte pas le mode édition si l'enregistrement a échoué
     }
+    // Cas particulier : si le joueur édité est TOI-MÊME (le compte connecté dans
+    // cette page), la session de jeu en cours a encore l'ancienne version en
+    // mémoire — sans rechargement, la prochaine sauvegarde automatique
+    // écraserait tes propres modifications qu'on vient d'enregistrer.
+    if (targetUserId === CWBackend.getCurrentUserId?.()) {
+      _notify('🔄 C\'était ton propre compte — rechargement de la page pour resynchroniser...');
+      setTimeout(() => window.location.reload(), 1200);
+      return;
+    }
     _exitPlayerImpersonation();
   }
 
@@ -6272,6 +6281,15 @@ const CWAdminPanel = (() => {
     try {
       await CWBackend.restorePlayerFromBackup(userId);
       _notify('✅ Sauvegarde de secours restaurée.');
+      // Cas particulier : si c'est TON PROPRE compte que tu viens de restaurer,
+      // ta session de jeu en cours tourne toujours avec l'ancienne version en
+      // mémoire dans cette même page — sans rechargement, la prochaine
+      // sauvegarde automatique écraserait la restauration qu'on vient de faire.
+      if (userId === CWBackend.getCurrentUserId?.()) {
+        _notify('🔄 C\'était ton propre compte — rechargement de la page pour resynchroniser...');
+        setTimeout(() => window.location.reload(), 1200);
+        return;
+      }
       _loadPlayerAccountsData();
     } catch (e) {
       _notify('❌ Échec de la restauration : ' + (e.message || e), 'error');
