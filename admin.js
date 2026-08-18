@@ -4553,6 +4553,73 @@ const CWAdminPanel = (() => {
       </div>
       <hr class="admin-sep" />
       <div class="admin-section">
+        <div class="admin-section-title">📊 Mode Performance</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Combat où le joueur inflige un maximum de dégâts à une vague d'ennemis
+          passifs (ils n'attaquent jamais) pendant un nombre de tours limité.
+          Chaque ennemi vaincu est immédiatement remplacé. Les récompenses ne
+          sont plus distribuées automatiquement — le joueur les réclame
+          manuellement depuis le totem, palier par palier.
+        </p>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>Nombre de tours</label>
+            <input type="number" id="record-max-turns" value="${cCfg.recordMaxTurns ?? 15}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Taille de la vague d'ennemis</label>
+            <input type="number" id="record-enemy-count" value="${cCfg.recordEnemyCount ?? 3}" min="1" max="6" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Points bonus par ennemi vaincu</label>
+            <input type="number" id="record-kill-bonus" value="${cCfg.recordKillBonus ?? 100}" min="0" step="10" />
+          </div>
+        </div>
+        <div style="font-size:.76rem;color:#7dd3fc;margin:14px 0 6px;">Paliers de score (3 segments à pas croissant)</div>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>Palier 1 — pas</label>
+            <input type="number" id="record-tier1-step" value="${cCfg.recordTier1Step ?? 1000}" min="1" step="100" />
+          </div>
+          <div class="admin-field">
+            <label>Palier 1 — jusqu'à</label>
+            <input type="number" id="record-tier1-cap" value="${cCfg.recordTier1Cap ?? 20000}" min="1" step="1000" />
+          </div>
+          <div class="admin-field">
+            <label>Palier 2 — pas</label>
+            <input type="number" id="record-tier2-step" value="${cCfg.recordTier2Step ?? 2000}" min="1" step="100" />
+          </div>
+          <div class="admin-field">
+            <label>Palier 2 — jusqu'à</label>
+            <input type="number" id="record-tier2-cap" value="${cCfg.recordTier2Cap ?? 40000}" min="1" step="1000" />
+          </div>
+          <div class="admin-field">
+            <label>Palier 3 — pas (au-delà, indéfiniment)</label>
+            <input type="number" id="record-tier3-step" value="${cCfg.recordTier3Step ?? 5000}" min="1" step="500" />
+          </div>
+          <div class="admin-field">
+            <label>Score max affiché sur le totem</label>
+            <input type="number" id="record-totem-max" value="${cCfg.recordTotemMaxScore ?? 100000}" min="1000" step="5000" />
+          </div>
+        </div>
+        <div style="font-size:.76rem;color:#7dd3fc;margin:14px 0 6px;">Récompense par palier réclamé</div>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>💵 Dollars par palier</label>
+            <input type="number" id="record-gold-per-tier" value="${cCfg.recordGoldPerTier ?? 50}" min="0" step="5" />
+          </div>
+          <div class="admin-field">
+            <label>💎 Diamants par palier</label>
+            <input type="number" id="record-crystals-per-tier" value="${cCfg.recordCrystalsPerTier ?? 2}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Croissance (1 = plat, &gt;1 = progressif)</label>
+            <input type="number" id="record-reward-growth" value="${cCfg.recordRewardGrowth ?? 1}" min="1" max="2" step="0.01" />
+          </div>
+        </div>
+      </div>
+      <hr class="admin-sep" />
+      <div class="admin-section">
         <div class="admin-section-title">⚖️ Équilibrage joueur / ennemi</div>
         <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
           Ces multiplicateurs s'appliquent après le calcul de dégâts pour favoriser le joueur structurellement.
@@ -6503,6 +6570,18 @@ const CWAdminPanel = (() => {
         critDivisor:             parseFloat(document.getElementById('combat-crit-divisor')?.value || '200'),
         critMultiplier:          parseFloat(document.getElementById('combat-crit-mult')?.value || '1.5'),
         scoreDefReference:       parseFloat(document.getElementById('combat-score-def-ref')?.value || '10'),
+        recordMaxTurns:          parseInt(document.getElementById('record-max-turns')?.value || '15'),
+        recordEnemyCount:        parseInt(document.getElementById('record-enemy-count')?.value || '3'),
+        recordKillBonus:         parseInt(document.getElementById('record-kill-bonus')?.value || '100'),
+        recordTier1Step:         parseInt(document.getElementById('record-tier1-step')?.value || '1000'),
+        recordTier1Cap:          parseInt(document.getElementById('record-tier1-cap')?.value || '20000'),
+        recordTier2Step:         parseInt(document.getElementById('record-tier2-step')?.value || '2000'),
+        recordTier2Cap:          parseInt(document.getElementById('record-tier2-cap')?.value || '40000'),
+        recordTier3Step:         parseInt(document.getElementById('record-tier3-step')?.value || '5000'),
+        recordTotemMaxScore:     parseInt(document.getElementById('record-totem-max')?.value || '100000'),
+        recordGoldPerTier:       parseInt(document.getElementById('record-gold-per-tier')?.value || '50'),
+        recordCrystalsPerTier:   parseInt(document.getElementById('record-crystals-per-tier')?.value || '2'),
+        recordRewardGrowth:      parseFloat(document.getElementById('record-reward-growth')?.value || '1'),
         playerDmgBonus:          parseFloat(document.getElementById('combat-player-bonus')?.value || '1.15'),
         enemyDmgPenalty:         parseFloat(document.getElementById('combat-enemy-penalty')?.value || '0.80'),
         enemyStatRatio:          parseFloat(document.getElementById('combat-enemy-stat-ratio')?.value || '0.85'),

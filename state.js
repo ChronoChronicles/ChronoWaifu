@@ -1078,6 +1078,7 @@ const CWGameState = (() => {
       case 'saga':     return chapterDone(3);            // Fin Chap.4
       case 'tournee':  return chapterDone(2);            // Fin Chap.3
       case 'grandgala':return chapterDone(4);            // Fin Chap.5
+      case 'record':   return chapterDone(5);            // Fin Chap.6
       default:         return true;
     }
   }
@@ -1188,6 +1189,120 @@ const CWGameState = (() => {
   /** Score Aura d'équipe : somme des 3 meilleurs scores individuels de la collection */
   function getPlayerAuraScoreTeam()  { return _computeAuraTotals().team; }
 
+  // ─── MODE PERFORMANCE ───────────────────────────────────────────────────────
+
+  /** Lit la config des paliers du mode Performance (avec valeurs de repli) */
+  function _recordTierConfig() {
+    const cfg = _state.config.combat || {};
+    return {
+      tier1Step: cfg.recordTier1Step ?? 1000,  tier1Cap: cfg.recordTier1Cap ?? 20000,
+      tier2Step: cfg.recordTier2Step ?? 2000,  tier2Cap: cfg.recordTier2Cap ?? 40000,
+      tier3Step: cfg.recordTier3Step ?? 5000,
+      totemMaxScore: cfg.recordTotemMaxScore ?? 100000,
+      goldPerTier: cfg.recordGoldPerTier ?? 50,
+      crystalsPerTier: cfg.recordCrystalsPerTier ?? 2,
+      rewardGrowth: cfg.recordRewardGrowth ?? 1,
+    };
+  }
+
+  /**
+   * Convertit un score en nombre de paliers franchis, selon la structure
+   * configurée (3 segments à pas croissant — cf. _recordTierConfig).
+   */
+  function _recordTierCount(score) {
+    if (score <= 0) return 0;
+    const { tier1Step, tier1Cap, tier2Step, tier2Cap, tier3Step } = _recordTierConfig();
+
+    if (score <= tier1Cap) return Math.floor(score / tier1Step);
+    let tiers = tier1Cap / tier1Step;
+
+    if (score <= tier2Cap) return tiers + Math.floor((score - tier1Cap) / tier2Step);
+    tiers += (tier2Cap - tier1Cap) / tier2Step;
+
+    return tiers + Math.floor((score - tier2Cap) / tier3Step);
+  }
+
+  /**
+   * Génère la liste complète des seuils de score du totem, jusqu'à
+   * totemMaxScore, avec la récompense associée à chaque palier.
+   * @returns {Array<{index:number, threshold:number, gold:number, crystals:number}>}
+   */
+  function _recordTierThresholds() {
+    const { tier1Step, tier1Cap, tier2Step, tier2Cap, tier3Step, totemMaxScore, goldPerTier, crystalsPerTier, rewardGrowth } = _recordTierConfig();
+    const thresholds = [];
+    let score = 0, index = 0;
+    while (score < totemMaxScore) {
+      score += score < tier1Cap ? tier1Step : score < tier2Cap ? tier2Step : tier3Step;
+      index++;
+      const growth = Math.pow(rewardGrowth || 1, index - 1);
+      thresholds.push({
+        index,
+        threshold: score,
+        gold:     Math.round(goldPerTier * growth),
+        crystals: Math.round(crystalsPerTier * growth),
+      });
+      if (thresholds.length > 500) break; // garde-fou anti-boucle infinie sur une config aberrante
+    }
+    return thresholds;
+  }
+
+  /**
+   * Enregistre le score obtenu à la fin d'un run du mode Performance : met à
+   * jour le record personnel si dépassé. Les récompenses ne sont PLUS
+   * accordées automatiquement ici — elles se réclament manuellement depuis le
+   * totem (cf. getRecordTotemState / claimNextRecordTier).
+   * @param {number} score
+   * @returns {{isNewBest:boolean, previousBest:number}}
+   */
+  function registerRecordScore(score) {
+    const player = _state.player;
+    const previousBest = player.recordBest || 0;
+    const isNewBest = score > previousBest;
+    if (isNewBest) updatePlayer({ recordBest: score });
+    return { isNewBest, previousBest };
+  }
+
+  /**
+   * État complet du totem de récompenses du mode Performance : pour chaque
+   * palier, son seuil, sa récompense, s'il est atteint (record personnel) et
+   * s'il a déjà été réclamé.
+   */
+  function getRecordTotemState() {
+    const best    = _state.player.recordBest || 0;
+    const claimed = _state.player.recordClaimedTierCount || 0;
+    const tiers = _recordTierThresholds().map(t => ({
+      ...t,
+      reached: best >= t.threshold,
+      claimed: t.index <= claimed,
+    }));
+    const nextClaimable = tiers.find(t => t.reached && !t.claimed) || null;
+    const claimableCount = tiers.filter(t => t.reached && !t.claimed).length;
+    return { tiers, best, claimedTierCount: claimed, nextClaimable, claimableCount };
+  }
+
+  /** Réclame le prochain palier atteint et pas encore réclamé (un seul). */
+  function claimNextRecordTier() {
+    const state = getRecordTotemState();
+    const tier = state.nextClaimable;
+    if (!tier) return null;
+    updatePlayer({ recordClaimedTierCount: tier.index });
+    if (tier.gold || tier.crystals) modifyResources({ gold: tier.gold, crystals: tier.crystals });
+    return tier;
+  }
+
+  /** Réclame TOUS les paliers atteints et pas encore réclamés d'un coup. */
+  function claimAllRecordTiers() {
+    const state = getRecordTotemState();
+    const claimable = state.tiers.filter(t => t.reached && !t.claimed);
+    if (claimable.length === 0) return { count: 0, gold: 0, crystals: 0 };
+    const totalGold     = claimable.reduce((s, t) => s + t.gold, 0);
+    const totalCrystals = claimable.reduce((s, t) => s + t.crystals, 0);
+    const lastIndex = claimable[claimable.length - 1].index;
+    updatePlayer({ recordClaimedTierCount: lastIndex });
+    modifyResources({ gold: totalGold, crystals: totalCrystals });
+    return { count: claimable.length, gold: totalGold, crystals: totalCrystals };
+  }
+
   // ─── CLASSEMENTS ────────────────────────────────────────────────────────────
 
   /**
@@ -1210,6 +1325,7 @@ const CWGameState = (() => {
       auraTotal:       getPlayerAuraScoreTotal(),
       tourneeProgress: getTourneeProgress(),
       galleryEntries:  Object.keys(_state.player.catalogue || {}).length,
+      recordBest:      _state.player.recordBest || 0,
     };
   }
 
@@ -1893,7 +2009,8 @@ const CWGameState = (() => {
     checkEvent, getActiveEvent, setEventConfig, setNextEventConfig, setNextEventTag, setCurrentEventTag,
     trackEventQuestProgress, claimEventQuest, planifyNextEvent, cancelNextEvent, getPlayerStatBonus,
     getCharacterAuraScore, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
-    getTourneeProgress, getLeaderboardSnapshot,
+    getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
+    getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
     getStoryChapterProgress, completeStoryStage, isFeatureUnlocked,
     addDailyLoginCycle, updateDailyLoginCycle, removeDailyLoginCycle, getDailyLoginClaimable, claimDailyLoginReward,
     addDailyQuest, updateDailyQuest, removeDailyQuest, checkDailyQuests, trackQuestProgress, claimDailyQuest,

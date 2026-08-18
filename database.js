@@ -38,6 +38,23 @@ const CWGameDatabase = (() => {
       // CWGameDatabase.computeAuraScore). Valeur volontairement basse et fixe
       // (indépendante du niveau) pour bien récompenser la progression.
       scoreDefReference: 10,
+      // ── Mode Performance ─────────────────────────────────────────────────
+      recordMaxTurns: 15,      // Nombre de tours du combat
+      recordEnemyCount: 3,     // Taille de la vague d'ennemis (remplacés instantanément)
+      recordKillBonus: 100,    // Points bonus accordés par ennemi vaincu
+      // Paliers de score (structure à 3 segments, chacun réglable) — utilisés
+      // à la fois pour le calcul du nombre de paliers franchis et pour générer
+      // l'échelle de récompenses du totem.
+      recordTier1Step: 1000,   recordTier1Cap: 20000,
+      recordTier2Step: 2000,   recordTier2Cap: 40000,
+      recordTier3Step: 5000,   // au-delà de recordTier2Cap, continue à ce rythme
+      recordTotemMaxScore: 100000, // plafond d'affichage du totem de récompenses
+      // Récompense accordée par palier réclamé (multipliée par recordRewardGrowth
+      // à la puissance de l'index du palier, pour une progression plate (1) ou
+      // croissante (>1) selon le goût de l'admin)
+      recordGoldPerTier: 50,
+      recordCrystalsPerTier: 2,
+      recordRewardGrowth: 1,
       // ── Équilibrage joueur / ennemi ────────────────────────────────────────
       playerDmgBonus:  1.15, // Multiplicateur de dégâts joueur → ennemi (+15%)
       enemyDmgPenalty: 0.80, // Multiplicateur de dégâts ennemi → joueur (−20%)
@@ -727,6 +744,8 @@ const CWGameDatabase = (() => {
       world: 1,            // Monde courant (1-indexé)
       subLevel: 0,         // Dernier sous-niveau COMPLÉTÉ (0 = aucun)
     },
+    recordBest: 0,          // Meilleur score jamais atteint en mode Performance
+    recordClaimedTierCount: 0, // Nombre de paliers du totem déjà réclamés
     storyMode: {           // Progression Mode Histoire
       // { [chapterIdx]: { completedStages: [1,2,...], highestStage: 3 } }
     },

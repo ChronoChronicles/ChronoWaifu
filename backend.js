@@ -195,6 +195,7 @@ const CWBackend = (() => {
       aura_total: stats.auraTotal,
       tournee_progress: stats.tourneeProgress,
       gallery_entries: stats.galleryEntries,
+      record_best: stats.recordBest,
       updated_at: new Date().toISOString(),
     });
     if (error) console.error('[CWBackend] saveLeaderboardStats:', error);

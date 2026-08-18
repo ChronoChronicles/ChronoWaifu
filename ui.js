@@ -839,7 +839,7 @@ const CWGameUI = (() => {
       { id:'story',        icon:'🌍', name:'Tournée',          desc:'Progressez monde par monde',                          featured:false, unlocked:CWGameState.isFeatureUnlocked?.('tournee')   ?? true, lockedDesc:'🔒 Disponible à la fin du Chapitre 3' },
       { id:'byLine',       icon:'🎬', name:'Saga',             desc:'Affrontez toute une lignée',                          featured:false, unlocked:CWGameState.isFeatureUnlocked?.('saga')      ?? true, lockedDesc:'🔒 Disponible au Chapitre 3, Stage 5' },
       { id:'arena',        icon:'🏆', name:'Grand Gala',       desc:'Mode compétitif',                                     featured:false, unlocked:CWGameState.isFeatureUnlocked?.('grandgala') ?? true, lockedDesc:'🔒 Disponible à la fin du Chapitre 5' },
-      { id:'record',       icon:'📊', name:'Record',           desc:'Battez vos propres records',                          featured:false, unlocked:false, lockedDesc:'🔒 Bientôt disponible' },
+      { id:'record',       icon:'📊', name:'Performance',      desc:'Battez vos propres records',                          featured:false, unlocked:CWGameState.isFeatureUnlocked?.('record') ?? true, lockedDesc:'🔒 Disponible à la fin du Chapitre 6' },
       { id:'challenge',    icon:'🌀', name:'???',              desc:'Un nouveau défi vous attend...',                      featured:false, unlocked:false, lockedDesc:'🔒 Bientôt disponible' },
       // Événement — blingbling, pleine largeur
       { id:'event',        icon:'⭐', name:'Événement',        desc:'Des histoires exclusives aux actrices de l\'Event',   featured:false, unlocked:false, lockedDesc:'🔒 Bientôt disponible', eventFeatured:true },
@@ -870,6 +870,7 @@ const CWGameUI = (() => {
         el.classList.remove('active');
         if (mode === 'storyMode') { showScreen('story-chapters'); return; }
         if (mode === 'story' || mode === 'byLine') { showScreen('combat'); return; }
+        if (mode === 'record') { showScreen('record'); return; }
         showScreen('combat');
         setTimeout(() => _launchCombat({ mode: mode === 'fullRandom' ? 'fullRandom' : mode }), 100);
       });
@@ -935,6 +936,8 @@ const CWGameUI = (() => {
       'story-chapters': renderStoryChapters,
       'story-chapter':  () => renderStoryChapter(_storyCurrentChapter),
       leaderboard:      renderLeaderboard,
+      record:           renderRecordHome,
+      'record-rewards': renderRecordRewards,
     };
     renderers[screenId]?.();
     _setNavActive(screenId);
@@ -1314,6 +1317,7 @@ const CWGameUI = (() => {
       { label: '💫 Aura totale',        value: (CWGameState.getPlayerAuraScoreTotal?.()||0).toLocaleString('fr-FR'), highlight: true, progress: _progressBarHtml('scoreTotal') },
       { label: '👑 Aura d\'équipe',     value: (CWGameState.getPlayerAuraScoreTeam?.()||0).toLocaleString('fr-FR'),  highlight: true, progress: _progressBarHtml('scoreTeam') },
       { label: '🌍 Tournée',            value: `Monde ${tourneeWorld} — ${tourneeSubLevel}/${tourneePerWorld}`, highlight: true, progress: _progressBarHtml('tourneeProgress') },
+      { label: '📊 Performance',        value: `${(player.recordBest||0).toLocaleString('fr-FR')} pts`, highlight: true },
     ];
     const statsEl = document.getElementById('pm-stats-grid');
     if (statsEl) statsEl.innerHTML = statCards.map(s => `
@@ -2971,6 +2975,46 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     return icons.join('');
   }
 
+  /**
+   * Mode Performance : transition de remplacement d'un ennemi vaincu — simple
+   * fondu (disparition de l'ancien, apparition du nouveau), sans le moindre
+   * déplacement de portrait à l'écran. Le nœud DOM entier est remplacé (le
+   * nouvel ennemi a un instanceId différent), pas seulement son contenu.
+   */
+  function _playRecordEnemyReplace(index, newEnemy, oldInstanceId) {
+    const oldCard = document.getElementById(`fighter-${oldInstanceId}`);
+    if (!oldCard || !newEnemy) { _combatAnimDone(); return; }
+
+    // Phase 1 — fondu de disparition sur l'ancien ennemi vaincu (320ms)
+    oldCard.style.transition = 'opacity 300ms ease, transform 300ms ease';
+    oldCard.style.opacity = '0';
+    oldCard.style.transform = 'scale(.85)';
+
+    setTimeout(() => {
+      // Remplace le nœud DOM entier : le nouvel ennemi a un id différent
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = _renderFighter(newEnemy, index).trim();
+      const newCard = wrapper.firstElementChild;
+      if (!newCard) { _combatAnimDone(); return; }
+      newCard.style.opacity = '0';
+      newCard.style.transform = 'scale(.85)';
+      oldCard.replaceWith(newCard);
+
+      // Phase 2 — fondu d'apparition du nouvel ennemi (300ms)
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        newCard.style.transition = 'opacity 300ms ease, transform 300ms cubic-bezier(.22,.68,0,1.2)';
+        newCard.style.opacity = '1';
+        newCard.style.transform = 'scale(1)';
+      }));
+
+      setTimeout(() => {
+        newCard.style.transition = '';
+        _renderTurnOrderBar();
+        _combatAnimDone();
+      }, 350);
+    }, 320);
+  }
+
   function _renderBattleControls() {
     const actionsEl = document.getElementById('battle-actions');
     if (!actionsEl || !_battle) return;
@@ -3059,6 +3103,16 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       _queueCombatAnim(() => _playAttackAnimation(data.attacker, data.target, data.result, attackerHpSnapshot, targetHpSnapshot));
     }
 
+    // Mode Performance : un ennemi vaincu est immédiatement remplacé. Cette
+    // transition est un simple fondu (disparition → nouvel ennemi qui apparaît),
+    // JAMAIS une animation de portrait qui se déplace — donc aucun risque de
+    // sortir de l'écran, contrairement à l'animation d'attaque classique.
+    // Mise en file comme les attaques, pour ne jamais jouer en même temps
+    // qu'une autre animation sur la même carte.
+    if (event === 'recordEnemyReplaced') {
+      _queueCombatAnim(() => _playRecordEnemyReplace(data.index, data.newEnemy, data.oldInstanceId));
+    }
+
     if (event === 'playerTurn') {
       _renderTurnOrderBar();
       _renderBattleControls();
@@ -3105,6 +3159,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       } else {
         _showBattleResult('defeat', data);
       }
+    }
+    if (event === 'record') {
+      _resetCombatAnimQueue();
+      _showBattleResult('record', data);
     }
 
     if (event === 'error') {
@@ -3997,6 +4055,33 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         ${captureHtml}
         <button class="btn-primary bro-back-btn" id="btn-back-lobby">Retour au lobby</button>
       `;
+    } else if (result === 'record') {
+      const r = data.rewards || {};
+      overlay.innerHTML = `
+        <div class="bro-victory-top">
+          <div class="bro-particles" id="victory-particles"></div>
+          <div class="bro-glow-ring"></div>
+          <div class="bro-title">📊 RUN TERMINÉ</div>
+          <div class="bro-subtitle">${(battle?.recordMaxTurns ?? 15)} tours écoulés</div>
+        </div>
+        <div class="bro-rewards" style="font-size:1.3rem;font-weight:800;">
+          <span>${(r.recordScore||0).toLocaleString('fr-FR')} points</span>
+        </div>
+        <div style="text-align:center;font-size:.85rem;color:#94a3b8;margin:4px 0 12px;">
+          💀 ${r.recordKills||0} ennemi${(r.recordKills||0)>1?'s':''} vaincu${(r.recordKills||0)>1?'s':''}
+        </div>
+        ${r.isNewBest ? `
+          <div class="bro-bonus-badge bro-bonus-boss">🏆 Nouveau record personnel !</div>
+        ` : `
+          <div style="text-align:center;font-size:.8rem;color:#94a3b8;margin-bottom:8px;">
+            Ton record : ${(r.previousBest||0).toLocaleString('fr-FR')} points
+          </div>
+        `}
+        <div style="text-align:center;font-size:.8rem;color:#c4b5fd;margin-bottom:12px;">
+          🎁 Va réclamer tes récompenses depuis le totem de Performance !
+        </div>
+        <button class="btn-primary bro-back-btn" id="btn-back-lobby">Retour au lobby</button>
+      `;
     } else {
       overlay.innerHTML = `
         <div class="bro-defeat-top">
@@ -4087,6 +4172,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           renderStoryChapter(battleChapter);
         } else if (battleMode === 'tutorial') {
           showScreen('hub');
+        } else if (battleMode === 'record') {
+          // Mode Performance → retour à son écran d'accueil dédié
+          showScreen('record');
         } else {
           // Tous les autres modes → écran de sélection des combats
           _showCombatSelect();
@@ -5647,6 +5735,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     { col: 'aura_total',       label: '💫 Aura',    unit: '💫' },
     { col: 'tournee_progress', label: '🌍 Tournée', unit: '🌍 Niv.' },
     { col: 'gallery_entries',  label: '📖 Galerie', unit: '📖' },
+    { col: 'record_best',      label: '📊 Performance', unit: 'pts' },
   ];
 
   function renderLeaderboard() {
@@ -5695,6 +5784,108 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           <span class="lb-value">${Number(value).toLocaleString('fr-FR')} ${tabConfig?.unit || ''}</span>
         </div>`;
     }).join('') + `</div>`;
+  }
+
+  // ─── MODE PERFORMANCE ─────────────────────────────────────────────────────────
+
+  /** Écran d'accueil du mode Performance : lancer un run, ou consulter le totem de récompenses */
+  function renderRecordHome() {
+    const el = document.getElementById('screen-record');
+    if (!el) return;
+    const state = CWGameState.get();
+    const cfg   = state.config.combat || {};
+    const best  = state.player.recordBest || 0;
+    const totem = CWGameState.getRecordTotemState?.();
+    const claimableCount = totem?.claimableCount || 0;
+
+    el.innerHTML = `
+      <div class="screen-header">
+        <h2>📊 Performance</h2>
+      </div>
+      <div class="record-home-card">
+        <div class="record-home-best">
+          <div class="record-home-best-label">Ton record personnel</div>
+          <div class="record-home-best-value">${best.toLocaleString('fr-FR')} <small>pts</small></div>
+        </div>
+        <p class="record-home-desc">
+          Inflige un maximum de dégâts en <strong>${cfg.recordMaxTurns ?? 15} tours</strong> à une vague
+          d'ennemis qui n'attaquent jamais — chaque ennemi vaincu est immédiatement
+          remplacé, et rapporte <strong>+${cfg.recordKillBonus ?? 100} points</strong> bonus.
+        </p>
+        <button class="btn-primary record-home-btn" id="btn-record-launch">⚔️ Lancer le combat</button>
+        <button class="btn-primary record-home-btn record-home-btn-secondary" id="btn-record-rewards">
+          🎁 Récompenses${claimableCount > 0 ? `<span class="record-claim-badge">${claimableCount}</span>` : ''}
+        </button>
+      </div>
+    `;
+
+    document.getElementById('btn-record-launch')?.addEventListener('click', () => {
+      showScreen('combat');
+      setTimeout(() => _launchCombat({ mode: 'record' }), 100);
+    });
+    document.getElementById('btn-record-rewards')?.addEventListener('click', () => {
+      showScreen('record-rewards');
+    });
+  }
+
+  /** Totem de récompenses du mode Performance : paliers de score à réclamer manuellement */
+  function renderRecordRewards() {
+    const el = document.getElementById('screen-record-rewards');
+    if (!el) return;
+    const totem = CWGameState.getRecordTotemState?.();
+    if (!totem) return;
+
+    el.innerHTML = `
+      <div class="screen-header">
+        <button class="cs-back" id="btn-record-rewards-back">‹</button>
+        <h2>🎁 Totem de Performance</h2>
+      </div>
+      <div class="record-totem-summary">
+        Record actuel : <strong>${totem.best.toLocaleString('fr-FR')} pts</strong>
+        ${totem.claimableCount > 0 ? `
+          <button class="btn-primary record-claim-all-btn" id="btn-record-claim-all">
+            🎁 Tout réclamer (${totem.claimableCount})
+          </button>` : ''}
+      </div>
+      <div class="record-totem" id="record-totem-list">
+        ${[...totem.tiers].reverse().map(t => `
+          <div class="record-totem-tier ${t.claimed ? 'is-claimed' : t.reached ? 'is-claimable' : 'is-locked'}">
+            <div class="record-totem-tier-threshold">${t.threshold.toLocaleString('fr-FR')} pts</div>
+            <div class="record-totem-tier-rewards">
+              ${t.gold ? `<span>+${t.gold} 💵</span>` : ''}
+              ${t.crystals ? `<span>+${t.crystals} 💎</span>` : ''}
+            </div>
+            <div class="record-totem-tier-status">
+              ${t.claimed
+                ? '<span class="record-tier-check">✓ Réclamé</span>'
+                : t.reached
+                  ? `<button class="btn-primary admin-btn-sm record-claim-btn" data-tier="${t.index}">Réclamer</button>`
+                  : '<span class="record-tier-lock">🔒</span>'}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    document.getElementById('btn-record-rewards-back')?.addEventListener('click', () => showScreen('record'));
+    document.getElementById('btn-record-claim-all')?.addEventListener('click', () => {
+      const res = CWGameState.claimAllRecordTiers?.();
+      if (res?.count) {
+        _showToast(`🎁 ${res.count} palier(s) réclamé(s) : +${res.gold} 💵 +${res.crystals} 💎`, 'success');
+        _updateHUD();
+      }
+      renderRecordRewards();
+    });
+    el.querySelectorAll('.record-claim-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tier = CWGameState.claimNextRecordTier?.();
+        if (tier) {
+          _showToast(`🎁 Palier ${tier.threshold.toLocaleString('fr-FR')} pts réclamé : +${tier.gold} 💵 +${tier.crystals} 💎`, 'success');
+          _updateHUD();
+        }
+        renderRecordRewards();
+      });
+    });
   }
 
 

@@ -164,6 +164,9 @@ const CWCombatEngine = (() => {
 
   /** Contre-Attaque (Amazone) : déclenchée juste après que la cible ait pris des dégâts */
   function _processPostDamageCounter(target, originalAttacker) {
+    // Mode Record : les ennemis ne doivent jamais agir de façon agressive,
+    // même via une contre-attaque déclenchée par un de leurs passifs.
+    if (_battle.mode === 'record' && target.isEnemy) return;
     const counter = _findPassive(target, 'on_damaged_counter');
     if (!counter) return;
     if (!originalAttacker.alive) return; // rien à contre-attaquer
@@ -193,11 +196,17 @@ const CWCombatEngine = (() => {
     if (fanatisme && _rollChance(fanatisme.params.chance)) {
       const opponents = (actor.isEnemy ? _battle.playerTeam : _battle.enemyTeam).filter(c => c.alive);
       if (opponents.length > 0) {
+        let totalDmgDealt = 0;
         opponents.forEach(o => {
           const dmg = Math.max(1, Math.round(o.maxHp * (fanatisme.params.damagePercentMaxHp / 100)));
           o.currentHp = Math.max(0, o.currentHp - dmg);
           if (o.currentHp <= 0) { o.alive = false; o.currentHp = 0; }
+          totalDmgDealt += dmg;
         });
+        // Mode Record : les dégâts de zone infligés par un allié comptent aussi au score
+        if (_battle.mode === 'record' && !actor.isEnemy) {
+          _battle.recordScore = (_battle.recordScore || 0) + totalDmgDealt;
+        }
         _battle.log.push(`💥 ${actor.name} utilise Fanatisme sur tous les adversaires (${fanatisme.params.damagePercentMaxHp}% Endurance max) !`);
         // Calcul des dégâts par cible (déjà appliqués ci-dessus, recalculés ici pour l'UI)
         const damageMap = {};
@@ -265,6 +274,11 @@ const CWCombatEngine = (() => {
     const poisonHpAfter  = combatant.currentHp;
     if (combatant.currentHp <= 0) { combatant.alive = false; combatant.currentHp = 0; }
     poison.turnsLeft--;
+    // Mode Record : le poison ne peut avoir été infligé que par un allié à un
+    // ennemi (les ennemis n'attaquent jamais dans ce mode) — compte au score
+    if (_battle.mode === 'record' && combatant.isEnemy) {
+      _battle.recordScore = (_battle.recordScore || 0) + dmg;
+    }
     _battle.log.push(`☠️ ${combatant.name} subit ${dmg} dégâts de poison (${Math.max(0, poison.turnsLeft)} tour(s) restant(s)).`);
     _emit('statusTriggered', { combatantId: combatant.instanceId, isEnemy: combatant.isEnemy, statusType: 'poison', amount: dmg, hpBefore: poisonHpBefore, hpAfter: poisonHpAfter });
     if (poison.turnsLeft <= 0) _removeStatus(combatant, 'poison');
@@ -948,6 +962,10 @@ const CWCombatEngine = (() => {
           _emit('error', { message: "Aucune adversaire disponible pour cet Event !" });
           return null;
         }
+      } else if (mode === 'record') {
+        // Mode Performance : vague d'ennemis générés dans les mêmes conditions
+        // d'apparition qu'un combat classique (même tirage de rareté).
+        enemyTeam = _generateEnemyTeam(cfg.combat?.recordEnemyCount ?? 3);
       } else {
         enemyTeam = _generateEnemyTeam(enemySize);
       }
@@ -979,6 +997,10 @@ const CWCombatEngine = (() => {
       result:       null,
       capturable:   [],
       rewards:      null,
+      // Mode Record uniquement : score cumulé, ennemis vaincus, limite de tours
+      recordScore:    mode === 'record' ? 0 : null,
+      recordKills:    mode === 'record' ? 0 : null,
+      recordMaxTurns: mode === 'record' ? (cfg.combat?.recordMaxTurns ?? 15) : null,
     };
 
     // Mettre à jour les stats de combat
@@ -1085,6 +1107,14 @@ const CWCombatEngine = (() => {
       _battle.phase        = 'enemy';
       _battle.currentActor = combatant.instanceId;
 
+      // Mode Record : les ennemis n'attaquent jamais, leur tour passe sans rien faire
+      if (_battle.mode === 'record') {
+        _battle.turnIndex++;
+        if (_checkBattleEnd()) return;
+        setTimeout(_advanceTurn, 150);
+        return;
+      }
+
       const players = _battle.playerTeam.filter(p => p.alive);
       if (players.length === 0) { _checkBattleEnd(); return; }
 
@@ -1136,6 +1166,11 @@ const CWCombatEngine = (() => {
     _emit('playerAttack', { attacker, target, result });
     if (!result.evaded && target.alive && result.damage > 0) {
       _processPostDamageCounter(target, attacker);
+    }
+
+    // Mode Record : chaque point de dégât infligé par le joueur = 1 point de score
+    if (_battle.mode === 'record' && result.damage > 0) {
+      _battle.recordScore = (_battle.recordScore || 0) + result.damage;
     }
 
     _processEndOfTurn(attacker);
@@ -1322,6 +1357,18 @@ const CWCombatEngine = (() => {
   function _checkBattleEnd() {
     if (!_battle) return true;
 
+    // Mode Record : pas de victoire/défaite classique — les ennemis vaincus
+    // sont immédiatement remplacés, le combat se termine uniquement après le
+    // nombre de tours prévu.
+    if (_battle.mode === 'record') {
+      _recordReplaceDeadEnemies();
+      if (_battle.turn > (_battle.recordMaxTurns || 15)) {
+        _endRecordBattle();
+        return true;
+      }
+      return false;
+    }
+
     const playerAlive = _battle.playerTeam.some(c => c.alive);
     const enemyAlive  = _battle.enemyTeam.some(c => c.alive);
 
@@ -1334,6 +1381,54 @@ const CWCombatEngine = (() => {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Mode Record uniquement : remplace immédiatement tout ennemi vaincu par un
+   * nouvel ennemi généré dans les mêmes conditions d'apparition qu'un combat
+   * classique, et accorde le bonus de score par ennemi vaincu.
+   */
+  function _recordReplaceDeadEnemies() {
+    if (!_battle || _battle.mode !== 'record') return;
+    const cfg = CWGameState.get().config.combat;
+    const killBonus = cfg.recordKillBonus ?? 100;
+
+    _battle.enemyTeam.forEach((e, idx) => {
+      if (e.alive) return;
+      _battle.recordScore = (_battle.recordScore || 0) + killBonus;
+      _battle.recordKills = (_battle.recordKills || 0) + 1;
+      const replacement = _generateEnemyTeam(1)[0];
+      if (!replacement) return;
+      replacement.instanceId = `enemy_${Date.now()}_${idx}_${Math.floor(Math.random() * 100000)}`;
+      _battle.enemyTeam[idx] = replacement;
+      _emit('recordEnemyReplaced', { index: idx, oldInstanceId: e.instanceId, newEnemy: replacement, score: _battle.recordScore, kills: _battle.recordKills });
+    });
+  }
+
+  /**
+   * Conclut un combat en mode Record : calcule le score final, met à jour le
+   * record personnel du joueur si dépassé, et distribue les récompenses selon
+   * les paliers de score (indépendant des récompenses de combat classiques).
+   */
+  function _endRecordBattle() {
+    if (!_battle) return;
+    _battle.phase  = 'end';
+    _battle.result = 'record';
+
+    if (_battle.restoreTeam) CWGameState.setTeam(_battle.restoreTeam);
+
+    const finalScore = _battle.recordScore || 0;
+    const finalKills = _battle.recordKills || 0;
+    const recordInfo = CWGameState.registerRecordScore(finalScore);
+
+    _battle.rewards = {
+      recordScore:  finalScore,
+      recordKills:  finalKills,
+      isNewBest:    recordInfo.isNewBest,
+      previousBest: recordInfo.previousBest,
+    };
+
+    _emit('record', { battle: _battle, rewards: _battle.rewards });
   }
 
   /**
