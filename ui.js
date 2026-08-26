@@ -1833,7 +1833,6 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const state = CWGameState.get();
     const _fs   = _computeFullStats(inst, def);
     const stats  = _fs.total;
-    const eqBonus = _fs.eqBonus;  // conservé pour compatibilité
 
     const modal = document.getElementById('modal');
     if (!modal) return;
@@ -1844,54 +1843,118 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const t2 = def.type2 ? types.find(t => t.id === def.type2) : null;
     const xpNeeded = CWGameDatabase.xpForLevel(inst.level + 1, state.config.level);
     const passives = CWGameState.getPassivesForCharacter(def);
+    const auraScore = CWGameDatabase.computeAuraScore(_fs.total, state.config.combat);
+
+    // Barres de progression de stats — plafonnées visuellement à 100%, mais le
+    // chiffre affiché reste la vraie valeur même au-delà du plafond.
+    const STAT_BAR_DEFS = [
+      { key: 'hp',  icon: '💗', label: 'Endurance', cap: 20000, color: 'linear-gradient(90deg,#d4547e,#ec4899)' },
+      { key: 'atk', icon: '✨', label: 'Charisme',  cap: 2500,  color: 'linear-gradient(90deg,#d4a574,#fbbf24)' },
+      { key: 'def', icon: '🌹', label: 'Prestance', cap: 2500,  color: 'linear-gradient(90deg,#5b8ac2,#60a5fa)' },
+      { key: 'spd', icon: '🕊️', label: 'Grace',     cap: 1000,  color: 'linear-gradient(90deg,#1fa090,#2dd4bf)' },
+    ];
+    const statBarsHtml = STAT_BAR_DEFS.map(s => {
+      const value = stats[s.key];
+      const pct = Math.max(0, Math.min(100, (value / s.cap) * 100));
+      return `
+        <div class="detail-stat-bar-row" onclick="CWGameUI._showStatDetail('${instanceId}','${s.key}',event)">
+          <div class="detail-stat-bar-label-row">
+            <span>${s.icon} ${s.label}</span>
+            <strong>${value.toLocaleString('fr-FR')} <span class="stat-detail-hint">ℹ</span></strong>
+          </div>
+          <div class="detail-stat-bar-track">
+            <div class="detail-stat-bar-fill" style="width:${pct}%;background:${s.color}"></div>
+          </div>
+        </div>`;
+    }).join('');
+
+    // Onglet Galerie : réutilise la même présentation que le Catalogue (toutes
+    // les formes de la lignée évolutive, découvertes ou non).
+    const lineChars = state.characters
+      .filter(c => c.evolutionLine === def.evolutionLine)
+      .sort((a, b) => a.evolutionStage - b.evolutionStage);
+    const catalogue = state.player.catalogue;
+    const galerieHtml = `
+      <div class="catalogue-line-forms">
+        ${lineChars.map((char, i) => {
+          const entry = catalogue[char.id];
+          const rd    = CWGameDatabase.RARITIES[char.rarity] || {};
+          const ct1 = types.find(t => t.id === char.type1);
+          const ct2 = char.type2 ? types.find(t => t.id === char.type2) : null;
+          return `
+          ${i > 0 ? '<div class="catalogue-line-arrow">→</div>' : ''}
+          <div class="catalogue-line-form ${entry ? 'discovered' : 'unknown'}">
+            <div class="catalogue-line-portrait">
+              ${entry && char.portrait
+                ? `<img src="${char.portrait}" alt="${char.name}" style="width:100%;height:100%;object-fit:cover;object-position:center 20%;display:block;">`
+                : entry
+                  ? `<div class="portrait-ph large">${char.name.charAt(0)}</div>`
+                  : `<div class="unknown-silhouette large">?</div>`}
+            </div>
+            <div class="catalogue-line-info">
+              <div class="catalogue-line-name">${entry ? char.name : '???'}</div>
+              <div class="catalogue-line-rarity" style="color:${rd.color}">${entry ? rd.name : ''}</div>
+              <div class="catalogue-line-types">
+                ${entry && ct1 ? `<span class="type-badge" style="background:${ct1.color}">${ct1.icon} ${ct1.name}</span>` : ''}
+                ${entry && ct2 ? `<span class="type-badge" style="background:${ct2.color}">${ct2.icon} ${ct2.name}</span>` : ''}
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
 
     modal.innerHTML = `
       <div class="modal-backdrop" id="modal-backdrop">
-        <div class="modal-box">
-          <button class="modal-close" id="modal-close">✕</button>
-          <div class="detail-layout">
-            <div class="detail-portrait ${(inst.awakening || 0) >= state.config.awakening.maxLevel ? 'awakening-max' : ''}">
-              ${_detailPortraitImgHtml(def)}
-              <div class="detail-rarity" style="background:${rarityDef.color}">${rarityDef.name}</div>
+        <div class="modal-box modal-char-detail">
+          <div class="char-detail-layout">
+            <div class="char-detail-portrait-col">
+              <div class="char-detail-portrait ${(inst.awakening || 0) >= state.config.awakening.maxLevel ? 'awakening-max' : ''}">
+                ${_detailPortraitImgHtml(def)}
+                <div class="char-detail-rarity-ribbon" style="background:${rarityDef.color}">${rarityDef.name}</div>
+              </div>
             </div>
-            <div class="detail-info">
-              <h3>${def.name}</h3>
-              <div class="detail-types">
-                ${t1 ? `<span class="type-badge" style="background:${t1.color}">${t1.icon} ${t1.name}</span>` : ''}
-                ${t2 ? `<span class="type-badge" style="background:${t2.color}">${t2.icon} ${t2.name}</span>` : ''}
-              </div>
-              ${passives.length > 0 ? `
-                <div class="detail-passives">
-                  ${passives.map(p => `
-                    <div class="detail-passive-item">
-                      <span class="detail-passive-name">✨ ${p.name}</span>
-                      <span class="detail-passive-desc">${p.description}</span>
-                    </div>
-                  `).join('')}
+            <div class="char-detail-right">
+              <div class="char-detail-header">
+                <button class="modal-close" id="modal-close">✕</button>
+                <div class="char-detail-name-row">
+                  <h3 class="char-detail-name">${def.name}</h3>
                 </div>
-              ` : ''}
-              ${_buildTypeAffinitiesHtml(def.type1, def.type2)}
-              <div class="detail-level">Niveau <strong>${inst.level}</strong> — XP : ${inst.xp} / ${xpNeeded}</div>
-              <div class="detail-awakening">Sublimation : ${'★'.repeat(inst.awakening || 0)}</div>
-              <div class="stat-grid">
-                <div class="stat-row stat-aura-row">
-                  <span>💫 Aura</span><strong>${CWGameDatabase.computeAuraScore(_fs.total, state.config.combat).toLocaleString('fr-FR')}</strong>
+                <div class="char-detail-name-underline"></div>
+                <div class="char-detail-types">
+                  ${t1 ? `<span class="type-badge" style="background:${t1.color}">${t1.icon} ${t1.name}</span>` : ''}
+                  ${t2 ? `<span class="type-badge" style="background:${t2.color}">${t2.icon} ${t2.name}</span>` : ''}
                 </div>
-                <div class="stat-row stat-clickable" onclick="CWGameUI._showStatDetail('${instanceId}','hp',event)">
-                  <span>💗 Endurance</span><strong>${_fs.total.hp}</strong><span class="stat-detail-hint">ℹ</span>
-                </div>
-                <div class="stat-row stat-clickable" onclick="CWGameUI._showStatDetail('${instanceId}','atk',event)">
-                  <span>✨ Charisme</span><strong>${_fs.total.atk}</strong><span class="stat-detail-hint">ℹ</span>
-                </div>
-                <div class="stat-row stat-clickable" onclick="CWGameUI._showStatDetail('${instanceId}','def',event)">
-                  <span>🌹 Prestance</span><strong>${_fs.total.def}</strong><span class="stat-detail-hint">ℹ</span>
-                </div>
-                <div class="stat-row stat-clickable" onclick="CWGameUI._showStatDetail('${instanceId}','spd',event)">
-                  <span>🕊️ Grace</span><strong>${_fs.total.spd}</strong><span class="stat-detail-hint">ℹ</span>
+                <div class="char-detail-aura-row">
+                  <span>Aura</span>
+                  <strong>${auraScore.toLocaleString('fr-FR')}</strong>
                 </div>
               </div>
-              <div class="detail-equip">
-                <h4>Parures</h4>
+              <div class="char-detail-tabs">
+                <button class="char-detail-tab active" data-tab="stats">Stats</button>
+                <button class="char-detail-tab" data-tab="parures">Parures</button>
+                <button class="char-detail-tab" data-tab="galerie">Galerie</button>
+                <button class="char-detail-tab" data-tab="historique">Historique</button>
+              </div>
+
+              <div class="char-detail-tab-panel active" data-panel="stats">
+                <div class="detail-level">Niveau <strong>${inst.level}</strong> — XP : ${inst.xp} / ${xpNeeded}</div>
+                <div class="detail-awakening" style="margin-bottom:12px;">Sublimation : ${'★'.repeat(inst.awakening || 0)}</div>
+                ${statBarsHtml}
+                ${passives.length > 0 ? `
+                  <div class="detail-passives" style="margin-top:14px;">
+                    ${passives.map(p => `
+                      <div class="detail-passive-item">
+                        <span class="detail-passive-name">✨ ${p.name}</span>
+                        <span class="detail-passive-desc">${p.description}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : ''}
+                ${_buildTypeAffinitiesHtml(def.type1, def.type2)}
+              </div>
+
+              <div class="char-detail-tab-panel" data-panel="parures">
                 <div class="equip-slots">
                   ${EQUIP_SLOT_ORDER.map((slotKey, slot) => {
                     const invId = inst.equipment[slot];
@@ -1902,20 +1965,27 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                     </div>`;
                   }).join('')}
                 </div>
+                ${def.evolvesTo ? `<div class="detail-evo" style="margin-top:12px;">Évolue au niveau <strong>${def.evolutionCondition?.value || '?'}</strong></div>` : ''}
               </div>
-              ${def.evolvesTo ? `<div class="detail-evo">Évolue au niveau <strong>${def.evolutionCondition?.value || '?'}</strong></div>` : ''}
-              <div class="detail-char-history">
-                <div class="detail-history-row">
-                  <span>📅 Obtenue le</span>
-                  <strong>${inst.obtainedAt ? new Date(inst.obtainedAt).toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' }) : '—'}</strong>
-                </div>
-                <div class="detail-history-row">
-                  <span>🏆 Combats gagnés</span>
-                  <strong>${(inst.battlesWon || 0).toLocaleString('fr-FR')}</strong>
-                </div>
-                <div class="detail-history-row">
-                  <span>⚔️ Ennemies vaincues</span>
-                  <strong>${(inst.enemiesDefeated || 0).toLocaleString('fr-FR')}</strong>
+
+              <div class="char-detail-tab-panel" data-panel="galerie">
+                ${galerieHtml}
+              </div>
+
+              <div class="char-detail-tab-panel" data-panel="historique">
+                <div class="detail-char-history">
+                  <div class="detail-history-row">
+                    <span>📅 Obtenue le</span>
+                    <strong>${inst.obtainedAt ? new Date(inst.obtainedAt).toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' }) : '—'}</strong>
+                  </div>
+                  <div class="detail-history-row">
+                    <span>🏆 Combats gagnés</span>
+                    <strong>${(inst.battlesWon || 0).toLocaleString('fr-FR')}</strong>
+                  </div>
+                  <div class="detail-history-row">
+                    <span>⚔️ Ennemies vaincues</span>
+                    <strong>${(inst.enemiesDefeated || 0).toLocaleString('fr-FR')}</strong>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1927,6 +1997,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     document.getElementById('modal-close')?.addEventListener('click', _closeModal);
     document.getElementById('modal-backdrop')?.addEventListener('click', e => {
       if (e.target === e.currentTarget) _closeModal();
+    });
+    modal.querySelectorAll('.char-detail-tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', () => {
+        modal.querySelectorAll('.char-detail-tab').forEach(b => b.classList.remove('active'));
+        modal.querySelectorAll('.char-detail-tab-panel').forEach(p => p.classList.remove('active'));
+        tabBtn.classList.add('active');
+        modal.querySelector(`.char-detail-tab-panel[data-panel="${tabBtn.dataset.tab}"]`)?.classList.add('active');
+      });
     });
   }
 
@@ -1954,47 +2032,83 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const t2 = combatant.type2 ? types.find(t => t.id === combatant.type2) : null;
     const passives = _getCombatantAllPassives(combatant, state);
     const statusEntries = combatant.statusEffects || [];
+    const auraScore = CWGameDatabase.computeAuraScore(
+      { hp: combatant.maxHp, atk: combatant.atk, def: combatant.def, spd: combatant.spd },
+      state.config.combat
+    );
 
     const STATUS_LABELS = { poison: '☠ Empoisonné(e)', paralysis: '⚡ Paralysé(e)', charm: '💞 Charmé(e)' };
 
+    // Mêmes barres que la fiche Collection, sauf les PV : ici on affiche les PV
+    // ACTUELS restants (information vitale en plein combat), pas seulement le
+    // total théorique — le reste (ATK/DEF/VIT) garde les mêmes plafonds.
+    const STAT_BAR_DEFS = [
+      { key: 'hp',  icon: '💗', label: 'Endurance', value: combatant.currentHp, cap: combatant.maxHp, text: `${combatant.currentHp} / ${combatant.maxHp}`, color: 'linear-gradient(90deg,#d4547e,#ec4899)' },
+      { key: 'atk', icon: '✨', label: 'Charisme',  value: combatant.atk, cap: 2500, color: 'linear-gradient(90deg,#d4a574,#fbbf24)' },
+      { key: 'def', icon: '🌹', label: 'Prestance', value: combatant.def, cap: 2500, color: 'linear-gradient(90deg,#5b8ac2,#60a5fa)' },
+      { key: 'spd', icon: '🕊️', label: 'Grace',     value: combatant.spd, cap: 1000, color: 'linear-gradient(90deg,#1fa090,#2dd4bf)' },
+    ];
+    const statBarsHtml = STAT_BAR_DEFS.map(s => {
+      const pct = Math.max(0, Math.min(100, (s.value / s.cap) * 100));
+      return `
+        <div class="detail-stat-bar-row" style="cursor:default;">
+          <div class="detail-stat-bar-label-row">
+            <span>${s.icon} ${s.label}</span>
+            <strong>${s.text || s.value.toLocaleString('fr-FR')}</strong>
+          </div>
+          <div class="detail-stat-bar-track">
+            <div class="detail-stat-bar-fill" style="width:${pct}%;background:${s.color}"></div>
+          </div>
+        </div>`;
+    }).join('');
+
     modal.innerHTML = `
       <div class="modal-backdrop" id="modal-backdrop">
-        <div class="modal-box">
-          <button class="modal-close" id="modal-close">✕</button>
-          <div class="detail-layout">
-            <div class="detail-portrait ${(combatant.awakening || 0) >= state.config.awakening.maxLevel ? 'awakening-max' : ''} ${!combatant.alive ? 'defeated' : ''}">
-              ${_detailPortraitImgHtml(CWGameState.getCharDef(combatant.charId) || combatant)}
-              <div class="detail-rarity" style="background:${rarityDef.color}">${rarityDef.name}</div>
-            </div>
-            <div class="detail-info">
-              <h3>${combatant.name} ${combatant.isEnemy ? '<span class="detail-side-tag detail-side-enemy">Ennemi</span>' : '<span class="detail-side-tag detail-side-ally">Allié</span>'}</h3>
-              <div class="detail-types">
-                ${t1 ? `<span class="type-badge" style="background:${t1.color}">${t1.icon} ${t1.name}</span>` : ''}
-                ${t2 ? `<span class="type-badge" style="background:${t2.color}">${t2.icon} ${t2.name}</span>` : ''}
+        <div class="modal-box modal-char-detail">
+          <div class="char-detail-layout">
+            <div class="char-detail-portrait-col">
+              <div class="char-detail-portrait ${(combatant.awakening || 0) >= state.config.awakening.maxLevel ? 'awakening-max' : ''} ${!combatant.alive ? 'defeated' : ''}">
+                ${_detailPortraitImgHtml(CWGameState.getCharDef(combatant.charId) || combatant)}
+                <div class="char-detail-rarity-ribbon" style="background:${rarityDef.color}">${rarityDef.name}</div>
               </div>
-              ${passives.length > 0 ? `
-                <div class="detail-passives">
-                  ${passives.map(p => `
-                    <div class="detail-passive-item">
-                      <span class="detail-passive-name">✨ ${p.name}</span>
-                      <span class="detail-passive-desc">${p.description}</span>
-                    </div>
-                  `).join('')}
+            </div>
+            <div class="char-detail-right">
+              <div class="char-detail-header">
+                <button class="modal-close" id="modal-close">✕</button>
+                <div class="char-detail-name-row">
+                  <h3 class="char-detail-name">${combatant.name}</h3>
+                  <span class="detail-side-tag ${combatant.isEnemy ? 'detail-side-enemy' : 'detail-side-ally'}">${combatant.isEnemy ? 'Ennemi' : 'Allié'}</span>
                 </div>
-              ` : ''}
-              ${_buildTypeAffinitiesHtml(combatant.type1, combatant.type2)}
-              <div class="detail-level">Niveau <strong>${combatant.level}</strong>${!combatant.alive ? ' — <strong style="color:var(--danger)">K.O.</strong>' : ''}</div>
-              <div class="detail-awakening">Sublimation : ${'★'.repeat(combatant.awakening || 0)}</div>
-              ${statusEntries.length > 0 ? `
-                <div class="detail-status-effects">
-                  ${statusEntries.map(s => `<span class="status-badge-detail">${STATUS_LABELS[s.type] || s.type}</span>`).join('')}
+                <div class="char-detail-name-underline"></div>
+                <div class="char-detail-types">
+                  ${t1 ? `<span class="type-badge" style="background:${t1.color}">${t1.icon} ${t1.name}</span>` : ''}
+                  ${t2 ? `<span class="type-badge" style="background:${t2.color}">${t2.icon} ${t2.name}</span>` : ''}
                 </div>
-              ` : ''}
-              <div class="stat-grid">
-                <div class="stat-row"><span>💗 Endurance</span><strong>${combatant.currentHp} / ${combatant.maxHp}</strong></div>
-                <div class="stat-row"><span>✨ Charisme</span><strong>${combatant.atk}</strong></div>
-                <div class="stat-row"><span>🌹 Prestance</span><strong>${combatant.def}</strong></div>
-                <div class="stat-row"><span>🕊️ Grace</span><strong>${combatant.spd}</strong></div>
+                <div class="char-detail-aura-row">
+                  <span>Aura</span>
+                  <strong>${auraScore.toLocaleString('fr-FR')}</strong>
+                </div>
+              </div>
+              <div class="char-detail-tab-panel active" style="padding:14px;">
+                <div class="detail-level">Niveau <strong>${combatant.level}</strong>${!combatant.alive ? ' — <strong style="color:var(--danger)">K.O.</strong>' : ''}</div>
+                <div class="detail-awakening" style="margin-bottom:8px;">Sublimation : ${'★'.repeat(combatant.awakening || 0)}</div>
+                ${statusEntries.length > 0 ? `
+                  <div class="detail-status-effects" style="margin-bottom:10px;">
+                    ${statusEntries.map(s => `<span class="status-badge-detail">${STATUS_LABELS[s.type] || s.type}</span>`).join('')}
+                  </div>
+                ` : ''}
+                ${statBarsHtml}
+                ${passives.length > 0 ? `
+                  <div class="detail-passives" style="margin-top:14px;">
+                    ${passives.map(p => `
+                      <div class="detail-passive-item">
+                        <span class="detail-passive-name">✨ ${p.name}</span>
+                        <span class="detail-passive-desc">${p.description}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : ''}
+                ${_buildTypeAffinitiesHtml(combatant.type1, combatant.type2)}
               </div>
             </div>
           </div>
