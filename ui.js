@@ -1868,36 +1868,32 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         </div>`;
     }).join('');
 
-    // Onglet Galerie : réutilise la même présentation que le Catalogue (toutes
-    // les formes de la lignée évolutive, découvertes ou non).
+    // Onglet Galerie : grille de cartes (une par forme d'évolution de la
+    // lignée), plus raffinée que l'ancienne bande à flèches. Le stade actuel
+    // du personnage est mis en valeur, les formes débloquées s'agrandissent
+    // au clic, les non débloquées restent de simples cartes verrouillées.
     const lineChars = state.characters
       .filter(c => c.evolutionLine === def.evolutionLine)
       .sort((a, b) => a.evolutionStage - b.evolutionStage);
     const catalogue = state.player.catalogue;
     const galerieHtml = `
-      <div class="catalogue-line-forms">
-        ${lineChars.map((char, i) => {
+      <div class="char-gallery-grid">
+        ${lineChars.map(char => {
           const entry = catalogue[char.id];
-          const rd    = CWGameDatabase.RARITIES[char.rarity] || {};
-          const ct1 = types.find(t => t.id === char.type1);
-          const ct2 = char.type2 ? types.find(t => t.id === char.type2) : null;
+          const isCurrent = char.id === def.id;
+          const unlocked  = !!entry;
           return `
-          ${i > 0 ? '<div class="catalogue-line-arrow">→</div>' : ''}
-          <div class="catalogue-line-form ${entry ? 'discovered' : 'unknown'}">
-            <div class="catalogue-line-portrait">
-              ${entry && char.portrait
-                ? `<img src="${char.portrait}" alt="${char.name}" style="width:100%;height:100%;object-fit:cover;object-position:center 20%;display:block;">`
-                : entry
-                  ? `<div class="portrait-ph large">${char.name.charAt(0)}</div>`
-                  : `<div class="unknown-silhouette large">?</div>`}
+          <div class="char-gallery-card ${unlocked ? 'is-unlocked' : ''}"
+               ${unlocked && char.portrait ? `data-portrait="${char.portrait}" data-name="${char.name}"` : ''}>
+            <div class="char-gallery-thumb ${isCurrent ? 'is-current' : ''}">
+              ${unlocked && char.portrait
+                ? `<img src="${char.portrait}" alt="${char.name}">`
+                : unlocked
+                  ? `<span style="font-family:'Playfair Display',serif;font-size:1.1rem;opacity:.4">${char.name.charAt(0)}</span>`
+                  : `<span class="char-gallery-lock">🔒</span>`}
             </div>
-            <div class="catalogue-line-info">
-              <div class="catalogue-line-name">${entry ? char.name : '???'}</div>
-              <div class="catalogue-line-rarity" style="color:${rd.color}">${entry ? rd.name : ''}</div>
-              <div class="catalogue-line-types">
-                ${entry && ct1 ? `<span class="type-badge" style="background:${ct1.color}">${ct1.icon} ${ct1.name}</span>` : ''}
-                ${entry && ct2 ? `<span class="type-badge" style="background:${ct2.color}">${ct2.icon} ${ct2.name}</span>` : ''}
-              </div>
+            <div class="char-gallery-label ${unlocked ? 'is-unlocked' : 'is-locked'}">
+              ${unlocked ? `Stade ${char.evolutionStage + 1}` : '???'}
             </div>
           </div>`;
         }).join('')}
@@ -2006,6 +2002,25 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         modal.querySelector(`.char-detail-tab-panel[data-panel="${tabBtn.dataset.tab}"]`)?.classList.add('active');
       });
     });
+    modal.querySelectorAll('.char-gallery-card.is-unlocked').forEach(card => {
+      card.addEventListener('click', () => {
+        if (card.dataset.portrait) _openImageLightbox(card.dataset.portrait, card.dataset.name);
+      });
+    });
+  }
+
+  /** Affiche une image en plein écran, par-dessus la fiche personnage (galerie) */
+  function _openImageLightbox(src, name) {
+    const box = document.createElement('div');
+    box.className = 'char-gallery-lightbox';
+    box.innerHTML = `
+      <button class="char-gallery-lightbox-close">✕</button>
+      <img src="${src}" alt="${name || ''}">
+    `;
+    document.body.appendChild(box);
+    const close = () => box.remove();
+    box.querySelector('.char-gallery-lightbox-close').addEventListener('click', close);
+    box.addEventListener('click', e => { if (e.target === box) close(); });
   }
 
   /**
