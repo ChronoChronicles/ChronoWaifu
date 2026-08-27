@@ -55,6 +55,22 @@ const CWGameDatabase = (() => {
       recordGoldPerTier: 50,
       recordCrystalsPerTier: 2,
       recordRewardGrowth: 1,
+      // ── Mode Défilé ───────────────────────────────────────────────────────
+      defilePassageCount: 9,          // Nombre d'épreuves du programme
+      defileUsesPerChar: 3,           // Nombre de fois où chaque personnage doit défiler
+      defileTalentsCount: 3,          // Nombre de Talents à placer (1 par personnage max, généralement 3)
+      // Endurance en cours de défilé (distincte des PV de combat classique)
+      defileStartEndurancePct: 50,    // Endurance de départ (% de l'Endurance max)
+      defileEnduranceLossPct: 15,     // Perdue quand la personnage défile
+      defileEnduranceGainPct: 15,     // Regagnée quand elle est au repos ce passage
+      defileEnduranceScoreFactor: 0.4,// Score final ×(1 + Endurance/100 × ce facteur)
+      // Ampleur de chaque Talent (tous exprimés en %)
+      defileTalentCharmeBonus: 15,       // Grand Sourire : + points garantis
+      defileTalentRebelleMalus: 20,      // Sale Rumeur : − points prochain passage adverse
+      defileTalentNatureRegen: 10,       // Second Souffle : + Endurance à toute l'équipe
+      defileTalentPassionBoost: 20,      // Montée en Puissance : + stats sur soi ce passage
+      defileTalentIdoleTransfer: 10,     // Sous les Projecteurs : % de la stat la + haute transférée
+      defileTalentEnchantSteal: 10,      // Vol de Vedette : % de stat volée à l'adversaire
       // ── Équilibrage joueur / ennemi ────────────────────────────────────────
       playerDmgBonus:  1.15, // Multiplicateur de dégâts joueur → ennemi (+15%)
       enemyDmgPenalty: 0.80, // Multiplicateur de dégâts ennemi → joueur (−20%)
@@ -271,6 +287,69 @@ const CWGameDatabase = (() => {
     { id: "Enchant",      name: "Enchanteresse", color: "#f948a1", icon: "🧚‍♀", passiveId: "passive_fanatisme" },
     { id: "Legende",      name: "Légende",       color: "#8c00ff", icon: "👑",   passiveId: "passive_mystere" },
   ];
+
+  // ─── TALENTS DU MODE DÉFILÉ ─────────────────────────────────────────────────
+  // Un Talent par type, activable UNE SEULE FOIS par duel, sur le passage où
+  // la personnage de ce type est programmée. "effect" identifie la logique à
+  // appliquer côté moteur (cf. CWDefileEngine) ; les montants exacts (%) sont
+  // lus dans config.combat (defileTalent*), réglables depuis l'admin.
+  const DEFILE_TALENTS = {
+    Charme: {
+      name: 'Grand Sourire',
+      description: "Points garantis en plus sur ce passage.",
+      effect: 'self_score_bonus_flat',
+    },
+    Elegance: {
+      name: 'Rectification',
+      description: "Annule le Talent adverse programmé sur ce même passage.",
+      effect: 'cancel_enemy_talent_same_round',
+    },
+    naturerelle: {
+      name: 'Second Souffle',
+      description: "Restaure de l'Endurance à toute l'équipe.",
+      effect: 'team_endurance_restore',
+    },
+    Rebelle: {
+      name: 'Sale Rumeur',
+      description: "Réduit les points du prochain passage adverse.",
+      effect: 'enemy_next_round_malus',
+    },
+    Diva: {
+      name: 'Chaos de Casting',
+      description: "Change aléatoirement la catégorie du passage adverse du même numéro.",
+      effect: 'enemy_same_round_random_category',
+    },
+    Passion: {
+      name: 'Montée en Puissance',
+      description: "Augmente ses propres stats pour ce passage.",
+      effect: 'self_stats_boost',
+    },
+    Idole: {
+      name: 'Sous les Projecteurs',
+      description: "Transfère une partie de sa stat la plus haute dans le score de la stat demandée.",
+      effect: 'self_stat_transfer',
+    },
+    Amazone: {
+      name: 'Retournement',
+      description: "Le prochain Talent activé ce duel (n'importe lequel) voit sa cible inversée.",
+      effect: 'next_talent_reversal',
+    },
+    Mystique: {
+      name: 'Substitution',
+      description: "Échange les personnages de 2 passages adverses ultérieurs (choisis au déclenchement).",
+      effect: 'swap_enemy_future_rounds',
+    },
+    Enchant: {
+      name: 'Vol de Vedette',
+      description: "Vole une partie de la stat jugée du passage adverse du même numéro.",
+      effect: 'steal_enemy_same_round_stat',
+    },
+    Legende: {
+      name: 'Polyvalence',
+      description: "Copie un Talent adverse au choix, avant toute planification.",
+      effect: 'copy_enemy_talent_pre_planning',
+    },
+  };
 
   // ─── MATRICE DES TYPES ────────────────────────────────────────────────────────
   // Format : typeMatrix[attacker][defender] = multiplicateur
@@ -950,6 +1029,7 @@ const CWGameDatabase = (() => {
   return {
     DEFAULT_CONFIG,
     DEFAULT_TYPES,
+    DEFILE_TALENTS,
     DEFAULT_TYPE_MATRIX,
     DEFAULT_CHARACTERS,
     RARITIES,

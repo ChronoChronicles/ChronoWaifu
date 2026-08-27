@@ -313,6 +313,73 @@
   .lb-name{ flex:1; font-size:.85rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .lb-value{ font-family:var(--font-mono); font-size:.85rem; color:var(--accent, #a78bfa); font-weight:700; white-space:nowrap; }
 
+  /* ── MODE DÉFILÉ ── */
+  .defile-help{ font-size:.8rem; color:var(--text-dim); margin:8px 0 12px; line-height:1.5; }
+  .defile-programme{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px;
+  }
+  .defile-slot{
+    background:rgba(255,255,255,.04); border:1.5px dashed rgba(255,255,255,.15);
+    border-radius:10px; padding:8px; min-height:110px; position:relative;
+    display:flex; flex-direction:column; transition:border-color .15s, background .15s;
+  }
+  .defile-slot.filled{ border-style:solid; border-color:rgba(167,139,250,.4); background:rgba(167,139,250,.06); }
+  .defile-slot-num{
+    position:absolute; top:4px; right:7px; font-family:var(--font-mono);
+    font-size:.65rem; color:var(--text-faint); font-weight:700;
+  }
+  .defile-slot-theme{ display:flex; flex-direction:column; gap:3px; margin-bottom:6px; }
+  .defile-slot-theme > span:first-child{ font-size:.72rem; font-weight:700; color:#e2d9f3; }
+  .defile-slot-type{
+    font-size:.6rem; font-weight:700; color:#1b1330; padding:2px 6px;
+    border-radius:8px; display:inline-block; width:fit-content;
+  }
+  .defile-slot-content{ flex:1; display:flex; flex-direction:column; justify-content:flex-end; gap:4px; }
+  .defile-slot-empty{ font-size:.66rem; color:var(--text-faint); text-align:center; margin:auto 0; }
+  .defile-slot-fighter{ display:flex; align-items:center; justify-content:space-between; gap:4px; }
+  .defile-slot-fighter-name{ font-size:.7rem; font-weight:700; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .defile-slot-remove{
+    background:rgba(244,63,94,.15); border:1px solid rgba(244,63,94,.4); color:#f87171;
+    border-radius:6px; width:18px; height:18px; font-size:.6rem; flex-shrink:0; cursor:pointer; line-height:1;
+  }
+  .defile-slot-talent-btn{
+    background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.3);
+    border-radius:6px; font-size:.7rem; padding:2px 0; cursor:pointer; color:#fbbf24;
+  }
+  .defile-slot-talent-btn.active{ background:rgba(251,191,36,.3); border-color:#fbbf24; }
+  .defile-roster{ display:flex; flex-direction:column; gap:8px; }
+  .defile-chip{
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12);
+    border-radius:10px; padding:10px 12px; cursor:grab; touch-action:none;
+    user-select:none; -webkit-user-select:none;
+  }
+  .defile-chip.exhausted{ opacity:.4; cursor:default; }
+  .defile-chip-name{ font-size:.85rem; font-weight:700; color:#fff; }
+  .defile-chip-uses{ font-size:.68rem; color:var(--text-dim); margin-top:2px; }
+  .defile-chip-talent{ font-size:.68rem; color:#c4b5fd; margin-top:4px; }
+  .defile-drag-ghost{
+    position:fixed; z-index:9999; pointer-events:none; transform:translate(-50%,-140%);
+    background:rgba(167,139,250,.95); color:#1b1330; font-size:.75rem; font-weight:700;
+    padding:6px 14px; border-radius:999px; box-shadow:0 8px 20px rgba(0,0,0,.4);
+  }
+  .defile-result-score{ display:flex; align-items:center; justify-content:center; gap:16px; margin:14px 0; }
+  .defile-result-score-block{
+    flex:1; text-align:center; background:rgba(255,255,255,.04); border-radius:12px;
+    padding:14px 8px; border:1px solid rgba(255,255,255,.08);
+  }
+  .defile-result-score-block.is-winner{ border-color:rgba(251,191,36,.6); background:rgba(251,191,36,.08); }
+  .defile-result-score-label{ font-size:.72rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; }
+  .defile-result-score-value{ font-family:var(--font-mono); font-size:1.6rem; font-weight:800; margin-top:4px; }
+  .defile-result-score-vs{ font-size:.75rem; color:var(--text-faint); font-weight:700; }
+  .defile-result-log{ display:flex; flex-direction:column; gap:8px; }
+  .defile-result-round{
+    background:rgba(255,255,255,.03); border-radius:10px; padding:8px 12px;
+    border:1px solid rgba(255,255,255,.06);
+  }
+  .defile-result-round-num{ font-size:.7rem; font-weight:700; color:#c4b5fd; margin-bottom:4px; }
+  .defile-result-round-scores{ display:flex; justify-content:space-between; font-size:.78rem; }
+  .defile-result-round-events{ font-size:.66rem; color:var(--text-dim); margin-top:5px; line-height:1.5; }
+
   /* ── MODE PERFORMANCE ── */
   .record-home-card{
     background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1);
@@ -1528,17 +1595,6 @@
   .fighter-portrait.shake-hit{ animation:shakeHit .35s ease; }
   .fighter-portrait.shake-big{ animation:shakeBig .48s ease; }
 
-  /* ── Flash (coup critique) — façon flash de photographe ── */
-  @keyframes cameraFlashPulse{
-    0%{ opacity:0; }
-    12%{ opacity:1; }
-    100%{ opacity:0; }
-  }
-  .camera-flash-overlay{
-    position:absolute; inset:0; background:#fff; z-index:8;
-    animation:cameraFlashPulse .4s ease-out forwards; pointer-events:none;
-  }
-
   /* ── Montée de niveau ── */
   @keyframes levelUpFlash{
     0%{ filter:brightness(1) saturate(1); box-shadow:0 0 0 0 rgba(255,221,128,0); }
@@ -2753,20 +2809,6 @@
     border:1px solid rgba(167,139,250,.7); color:#c4b5fd;
     text-shadow:0 0 12px rgba(167,139,250,.8);
   }
-  .bro-jury{
-    background:rgba(255,255,255,.04); border:1px solid rgba(251,191,36,.25);
-    border-radius:12px; padding:12px 14px; margin:10px auto; max-width:340px;
-    animation:broFadeIn 500ms 1300ms ease both; opacity:0;
-  }
-  .bro-jury-title{
-    font-family:'Playfair Display', serif; font-style:italic; font-weight:600;
-    font-size:.95rem; color:#f3d9a8; text-align:center; margin-bottom:8px;
-  }
-  .bro-jury-line{
-    font-size:.74rem; color:#c7c2d9; line-height:1.5; margin-bottom:4px;
-  }
-  .bro-jury-line:last-child{ margin-bottom:0; }
-  .bro-jury-line strong{ color:#e2d9f3; }
 
   /* Contexte story */
   .bro-story-label{
@@ -3672,6 +3714,8 @@
       <section id="screen-leaderboard" class="screen"></section>
       <section id="screen-record" class="screen"></section>
       <section id="screen-record-rewards" class="screen"></section>
+      <section id="screen-defile-planning" class="screen"></section>
+      <section id="screen-defile-result" class="screen"></section>
     </main>
 
     <nav id="main-nav"></nav>
@@ -3821,6 +3865,7 @@
   <script src="state.js"></script>
   <script src="gacha.js"></script>
   <script src="engine.js"></script>
+  <script src="defile.js"></script>
   <script src="evolution.js"></script>
   <script src="audio.js"></script>
   <script src="ui.js"></script>

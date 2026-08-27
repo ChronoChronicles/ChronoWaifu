@@ -1079,6 +1079,7 @@ const CWGameState = (() => {
       case 'tournee':  return chapterDone(2);            // Fin Chap.3
       case 'grandgala':return chapterDone(4);            // Fin Chap.5
       case 'record':   return chapterDone(5);            // Fin Chap.6
+      case 'defile':   return chapterDone(6);            // Fin Chap.7 (à ajuster si besoin)
       default:         return true;
     }
   }
@@ -1155,10 +1156,14 @@ const CWGameState = (() => {
   let _auraCache = { version: -1, total: 0, team: 0 };
 
   /** Score Aura d'un personnage possédé (stats totales, hors bonus Aura lui-même) */
-  function getCharacterAuraScore(inst) {
-    if (!inst) return 0;
+  /**
+   * Stats finales d'un personnage (base + niveau + éveil + équipement + bonus
+   * joueur) — logique partagée par le score Aura ET le mode Défilé.
+   */
+  function getCharacterFinalStats(inst) {
+    if (!inst) return null;
     const def = getCharDef(inst.charId);
-    if (!def) return 0;
+    if (!def) return null;
     const computed = CWGameDatabase.computeStats(
       def, inst.level, inst.awakening || 0, _state.config.awakening, def.rarity, _state.config.level
     );
@@ -1166,12 +1171,18 @@ const CWGameState = (() => {
       inst.equipment, _state.player.equipInventory, _state.equipment
     );
     const playerBonus = getPlayerStatBonus(['scoreTotal', 'scoreTeam']).bonus;
-    const finalStats = {
+    return {
       hp:  computed.hp  + eqBonus.hp  + playerBonus,
       atk: computed.atk + eqBonus.atk + playerBonus,
       def: computed.def + eqBonus.def + playerBonus,
       spd: computed.spd + eqBonus.spd + playerBonus,
     };
+  }
+
+  function getCharacterAuraScore(inst) {
+    if (!inst) return 0;
+    const finalStats = getCharacterFinalStats(inst);
+    if (!finalStats) return 0;
     return CWGameDatabase.computeAuraScore(finalStats, _state.config.combat);
   }
 
@@ -2008,7 +2019,7 @@ const CWGameState = (() => {
     refreshRotatingShop, getRotatingShopListings,
     checkEvent, getActiveEvent, setEventConfig, setNextEventConfig, setNextEventTag, setCurrentEventTag,
     trackEventQuestProgress, claimEventQuest, planifyNextEvent, cancelNextEvent, getPlayerStatBonus,
-    getCharacterAuraScore, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
+    getCharacterAuraScore, getCharacterFinalStats, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
     getStoryChapterProgress, completeStoryStage, isFeatureUnlocked,
