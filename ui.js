@@ -6340,12 +6340,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   let _defileLastResult = null;
   let _dpbSkip = false;
 
-  const _sleep = (ms) => new Promise(r => setTimeout(r, _dpbSkip ? 0 : ms));
+  let _dpbSpeed = 1; // 1 = normal, 2 = accéléré
+  const _sleep = (ms) => new Promise(r => setTimeout(r, _dpbSkip ? 0 : ms / _dpbSpeed));
 
   function renderDefilePlayback() {
     const el = document.getElementById('screen-defile-playback');
     if (!el || !_defileLastResult) return;
     _dpbSkip = false;
+    _dpbSpeed = 1;
 
     el.innerHTML = `
       <div class="dpb-screen">
@@ -6361,7 +6363,6 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           </div>
         </div>
         <div class="dpb-theme" id="dpb-theme"></div>
-        <div class="dpb-phase-caption" id="dpb-phase-caption"></div>
         <div class="dpb-stage">
           <div class="dpb-side dpb-side-player" id="dpb-side-player">
             <div class="dpb-card-frame">
@@ -6393,11 +6394,17 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
             </div>
           </div>
         </div>
+        <div class="dpb-phase-caption" id="dpb-phase-caption"></div>
+        <button class="dpb-speed-btn" id="btn-dpb-speed">×1</button>
         <button class="dpb-skip-btn" id="btn-dpb-skip">Passer ›</button>
       </div>
     `;
 
     document.getElementById('btn-dpb-skip')?.addEventListener('click', () => { _dpbSkip = true; });
+    document.getElementById('btn-dpb-speed')?.addEventListener('click', (e) => {
+      _dpbSpeed = _dpbSpeed === 1 ? 2 : 1;
+      e.currentTarget.textContent = `×${_dpbSpeed}`;
+    });
 
     _runDefilePlaybackSequence();
   }
