@@ -361,15 +361,15 @@
     font-size:.62rem; font-weight:700; text-align:center; padding:2px 0;
     border-radius:5px; margin-top:2px;
   }
-  .defile-roster-cards{ display:flex; flex-direction:column; gap:10px; }
+  .defile-roster-cards{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; align-items:start; }
   .defile-fighter-card{
-    display:flex; flex-direction:column; gap:10px; background:rgba(255,255,255,.05);
-    border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:10px;
+    display:flex; gap:8px; background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:8px;
     cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none;
   }
   .defile-fighter-card.exhausted{ opacity:.4; cursor:default; }
   .defile-fighter-card-portrait{
-    width:100%; aspect-ratio:4/3; flex-shrink:0; border-radius:8px; overflow:hidden;
+    width:64px; aspect-ratio:1/1.5; flex-shrink:0; border-radius:8px; overflow:hidden;
     position:relative; background:linear-gradient(150deg, var(--surface-2), var(--surface-3));
   }
   .defile-fighter-card-info{ flex:1; min-width:0; }
