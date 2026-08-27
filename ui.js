@@ -6363,26 +6363,35 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         <div class="dpb-theme" id="dpb-theme"></div>
         <div class="dpb-stage">
           <div class="dpb-side dpb-side-player" id="dpb-side-player">
-            <div class="dpb-portrait-wrap"><div class="dpb-portrait" id="dpb-portrait-player"></div></div>
-            <div class="dpb-name" id="dpb-name-player"></div>
+            <div class="dpb-card-frame">
+              <div class="dpb-portrait" id="dpb-portrait-player"></div>
+              <div class="dpb-nameplate" id="dpb-name-player"></div>
+            </div>
             <div class="dpb-stat-line" id="dpb-stat-player"></div>
-            <div class="dpb-score-row">
-              <span class="dpb-score" id="dpb-score-player">—</span>
-              <span class="dpb-type-badge" id="dpb-type-badge-player"></span>
+            <div class="dpb-score-box">
+              <div class="dpb-score-tag">Score</div>
+              <div class="dpb-score-row">
+                <span class="dpb-score" id="dpb-score-player">—</span>
+                <span class="dpb-type-badge" id="dpb-type-badge-player"></span>
+              </div>
             </div>
           </div>
           <div class="dpb-vs">VS</div>
           <div class="dpb-side dpb-side-enemy" id="dpb-side-enemy">
-            <div class="dpb-portrait-wrap"><div class="dpb-portrait" id="dpb-portrait-enemy"></div></div>
-            <div class="dpb-name" id="dpb-name-enemy"></div>
+            <div class="dpb-card-frame">
+              <div class="dpb-portrait" id="dpb-portrait-enemy"></div>
+              <div class="dpb-nameplate" id="dpb-name-enemy"></div>
+            </div>
             <div class="dpb-stat-line" id="dpb-stat-enemy"></div>
-            <div class="dpb-score-row">
-              <span class="dpb-type-badge" id="dpb-type-badge-enemy"></span>
-              <span class="dpb-score" id="dpb-score-enemy">—</span>
+            <div class="dpb-score-box">
+              <div class="dpb-score-tag">Score</div>
+              <div class="dpb-score-row">
+                <span class="dpb-type-badge" id="dpb-type-badge-enemy"></span>
+                <span class="dpb-score" id="dpb-score-enemy">—</span>
+              </div>
             </div>
           </div>
         </div>
-        <div class="dpb-talent-banner" id="dpb-talent-banner"></div>
         <button class="dpb-skip-btn" id="btn-dpb-skip">Passer ›</button>
       </div>
     `;
@@ -6413,8 +6422,6 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     $('dpb-round-num').textContent = l.round;
     $('dpb-theme').textContent = `${STAT_LABELS_SHORT[l.stat]} — jugé sur ce tournage`;
-    const banner = $('dpb-talent-banner');
-    banner.textContent = ''; banner.classList.remove('visible');
 
     const pDef = l.playerCharId ? CWGameState.getCharDef(l.playerCharId) : null;
     const eDef = l.enemyCharId  ? CWGameState.getCharDef(l.enemyCharId)  : null;
@@ -6430,6 +6437,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     $('dpb-type-badge-player').textContent = '';
     $('dpb-type-badge-enemy').className = 'dpb-type-badge';
     $('dpb-type-badge-enemy').textContent = '';
+    $('dpb-side-player').classList.remove('winner');
+    $('dpb-side-enemy').classList.remove('winner');
 
     // Phase 1 — présentation : zoom rapide sur chaque participante, l'une
     // après l'autre (jamais simultané, pour rester lisible)
@@ -6437,54 +6446,72 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     pSide.classList.remove('reveal'); eSide.classList.remove('reveal');
     void pSide.offsetWidth; // force le rejeu de l'animation à chaque tournage
     pSide.classList.add('reveal');
-    await _sleep(350);
+    await _sleep(400);
     eSide.classList.add('reveal');
-    await _sleep(450);
+    await _sleep(600);
 
     // Phase 2 — la stat jugée apparaît sous chaque participante
     $('dpb-stat-player').textContent = STAT_LABELS_SHORT[l.stat];
     $('dpb-stat-enemy').textContent  = STAT_LABELS_SHORT[l.stat];
-    await _sleep(350);
+    await _sleep(450);
 
-    // Phase 3 — score de base (valeur brute de la stat)
+    // Phase 3 — score de base (valeur brute de la stat), révélé pour l'alliée
+    // D'ABORD, puis pour l'adversaire — jamais les deux en même temps
     _setScorePop('dpb-score-player', l.playerStatValue ?? 0);
-    _setScorePop('dpb-score-enemy',  l.enemyStatValue  ?? 0);
-    await _sleep(550);
+    await _sleep(500);
+    _setScorePop('dpb-score-enemy', l.enemyStatValue ?? 0);
+    await _sleep(700);
 
     // Phase 4 — bonus/malus de type révélé, score recalculé en direct
     const pAfterType = (l.playerStatValue != null && l.playerMult != null) ? Math.round(l.playerStatValue * l.playerMult) : l.playerStatValue;
     const eAfterType = (l.enemyStatValue  != null && l.enemyMult  != null) ? Math.round(l.enemyStatValue  * l.enemyMult)  : l.enemyStatValue;
     _showDefileTypeBadge('dpb-type-badge-player', l.playerMult);
-    _showDefileTypeBadge('dpb-type-badge-enemy',  l.enemyMult);
     _setScorePop('dpb-score-player', pAfterType);
-    _setScorePop('dpb-score-enemy',  eAfterType);
-    await _sleep(650);
+    await _sleep(600);
+    _showDefileTypeBadge('dpb-type-badge-enemy', l.enemyMult);
+    _setScorePop('dpb-score-enemy', eAfterType);
+    await _sleep(800);
 
     // Phase 5 — les Talents s'activent un par un (jamais deux en même temps),
-    // visibles des deux côtés
+    // avec la même grande bannière que celle utilisée en combat classique
     for (const evtRaw of l.events) {
       if (_dpbSkip) break;
       const evt = String(evtRaw).replace(/<[^>]+>/g, '');
-      banner.textContent = evt;
-      banner.classList.add('visible');
-      await _sleep(1150);
-      banner.classList.remove('visible');
-      await _sleep(250);
+      await _showDefileTalentBanner(evt);
     }
 
-    // Phase 6 — score final du tournage, la gagnante du passage se distingue
+    // Phase 6 — score final du tournage, révélé alliée d'abord puis adversaire
     _setScorePop('dpb-score-player', l.playerScore);
-    _setScorePop('dpb-score-enemy',  l.enemyScore);
+    await _sleep(500);
+    _setScorePop('dpb-score-enemy', l.enemyScore);
+    await _sleep(500);
     pSide.classList.toggle('winner', l.playerScore > l.enemyScore);
     eSide.classList.toggle('winner', l.enemyScore > l.playerScore);
-    await _sleep(550);
+    await _sleep(700);
 
     // Phase 7 — le score du tournage rejoint le total cumulé (compteur animé)
     await Promise.all([
-      _animateCountUp('dpb-total-player', totalPBefore, totalPBefore + l.playerScore, 550),
-      _animateCountUp('dpb-total-enemy',  totalEBefore,  totalEBefore  + l.enemyScore,  550),
+      _animateCountUp('dpb-total-player', totalPBefore, totalPBefore + l.playerScore, 600),
+      _animateCountUp('dpb-total-enemy',  totalEBefore,  totalEBefore  + l.enemyScore,  600),
     ]);
-    await _sleep(350);
+    await _sleep(500);
+  }
+
+  /**
+   * Affiche la même grande bannière centrale que celle utilisée pour les
+   * passifs en combat classique (pilule dégradée, avec rebond), le temps
+   * qu'un Talent s'active — attend sa disparition avant de continuer.
+   */
+  function _showDefileTalentBanner(text) {
+    return new Promise(resolve => {
+      const stage = document.querySelector('.dpb-stage');
+      if (!stage) { resolve(); return; }
+      const big = document.createElement('div');
+      big.className = 'passive-banner-big dpb-talent-banner-big';
+      big.innerHTML = `<span class="passive-banner-big-icon">⭐</span>${text}`;
+      stage.appendChild(big);
+      setTimeout(() => { big.remove(); resolve(); }, 1700);
+    });
   }
 
   /** Met à jour un score avec un petit effet de "pop" pour bien marquer le changement */
