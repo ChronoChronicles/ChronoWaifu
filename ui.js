@@ -413,7 +413,7 @@ const CWGameUI = (() => {
           overlay.style.opacity = '0'; overlay.style.transition = 'opacity 300ms';
           requestAnimationFrame(() => { overlay.style.opacity = '1'; });
           setTimeout(() => { overlay.style.transition = ''; }, 320);
-          if (titleEl)  titleEl.textContent = evt === 'victory' ? '✨ Bravo !' : 'Courage !';
+          if (titleEl)  titleEl.textContent = evt === 'victory' ? '✨ Standing Ovation !' : 'Éclipsée...';
           if (textEl)   textEl.textContent  = sub(s.postCombatText || '');
           if (nameWrap) nameWrap.style.display = 'none';
           if (rewWrap)  rewWrap.style.display  = 'none';
@@ -2052,7 +2052,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       state.config.combat
     );
 
-    const STATUS_LABELS = { poison: '☠ Empoisonné(e)', paralysis: '⚡ Paralysé(e)', charm: '💞 Charmé(e)' };
+    const STATUS_LABELS = { poison: '🗞️ Sous une rumeur', paralysis: '📸 Figée sous les projecteurs', charm: '💞 Sous le charme' };
 
     // Mêmes barres que la fiche Collection, sauf les PV : ici on affiche les PV
     // ACTUELS restants (information vitale en plein combat), pas seulement le
@@ -2092,7 +2092,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                 <button class="modal-close" id="modal-close">✕</button>
                 <div class="char-detail-name-row">
                   <h3 class="char-detail-name">${combatant.name}</h3>
-                  <span class="detail-side-tag ${combatant.isEnemy ? 'detail-side-enemy' : 'detail-side-ally'}">${combatant.isEnemy ? 'Ennemi' : 'Allié'}</span>
+                  <span class="detail-side-tag ${combatant.isEnemy ? 'detail-side-enemy' : 'detail-side-ally'}">${combatant.isEnemy ? 'Rivale' : 'Alliée'}</span>
                 </div>
                 <div class="char-detail-name-underline"></div>
                 <div class="char-detail-types">
@@ -2988,7 +2988,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     area.innerHTML = `
       <div class="battle-scene">
         <div class="battle-side battle-enemy">
-          <h3>Ennemis</h3>
+          <h3>Rivales</h3>
           <div class="battle-fighters" id="enemy-fighters">
             ${b.enemyTeam.map((e, i) => _renderFighter(e, i)).join('')}
           </div>
@@ -3084,9 +3084,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     // Altérations d'état (statusEffects)
     const STATUS_META = {
-      poison:    { icon: '☠', label: 'Poison',     color: '#a855f7', pulse: false },
-      paralysis: { icon: '⚡', label: 'Paralysie',  color: '#facc15', pulse: true  },
-      charm:     { icon: '💞', label: 'Charme',     color: '#f472b6', pulse: false },
+      poison:    { icon: '🗞️', label: 'Rumeur',                       color: '#a855f7', pulse: false },
+      paralysis: { icon: '📸', label: 'Figée sous les projecteurs',   color: '#facc15', pulse: true  },
+      charm:     { icon: '💞', label: 'Charme',                       color: '#f472b6', pulse: false },
     };
     (combatant.statusEffects || []).forEach(s => {
       const meta = STATUS_META[s.type];
@@ -3157,7 +3157,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     if (_battle.phase === 'enemy') {
       const enemy = _battle.enemyTeam.find(c => c.instanceId === _battle.currentActor);
-      actionsEl.innerHTML = `<p class="turn-waiting">👹 ${enemy ? enemy.name : "L'ennemi"} agit...</p>`;
+      actionsEl.innerHTML = `<p class="turn-waiting">🎬 ${enemy ? enemy.name : "La rivale"} entre en scène...</p>`;
       return;
     }
 
@@ -3478,7 +3478,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     } else if (effectType === 'stat_boost_evasion') {
       _spawnPassiveFx(sourceCard, 'adorable');
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.hitResist);
-      subtitle = '→ Soi-même : Esquive renforcée';
+      subtitle = '→ Soi-même : Hors-champ renforcé';
 
     } else if (effectType === 'stat_boost_crit_damage') {
       _spawnPassiveFx(sourceCard, 'scenique');
@@ -3489,9 +3489,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       const statusVariant = effectType === 'on_hit_paralyze' ? 'paralysis'
                           : effectType === 'on_hit_poison'   ? 'poison'
                           :                                    'charm';
-      const statusLabel = effectType === 'on_hit_paralyze' ? 'Paralysie'
-                         : effectType === 'on_hit_poison'   ? 'Poison'
-                         :                                    'Charme';
+      const statusLabel = effectType === 'on_hit_paralyze' ? 'Figée sous les projecteurs'
+                         : effectType === 'on_hit_poison'   ? 'Rumeur'
+                         :                                    'Sous le charme';
       const targetId = data.extra?.targetId;
       const targetName = _findCombatantById(targetId)?.name || 'Cible';
       subtitle = `→ ${targetName} : ${statusLabel}`;
@@ -3557,7 +3557,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       _spawnPassiveFx(card, 'paralysis');
       // Icônes figées maintenant (le statut est déjà consommé côté moteur)
       const iconsHtml = combatant ? _renderStatusIcons(combatant) : null;
-      _spawnPassiveBanner(card, 'Paralysé(e) !', null, {
+      _spawnPassiveBanner(card, 'Figée sous les projecteurs !', null, {
         onRetreat: () => {
           if (iconsHtml === null) return;
           const ic = document.getElementById(`status-icons-${data.combatantId}`);
@@ -3568,7 +3568,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     } else if (data.statusType === 'charm') {
       _spawnPassiveFx(card, 'charm');
       const iconsHtml = combatant ? _renderStatusIcons(combatant) : null;
-      _spawnPassiveBanner(card, 'Charmé(e) !', null, {
+      _spawnPassiveBanner(card, 'Sous le charme !', null, {
         onRetreat: () => {
           if (iconsHtml === null) return;
           const ic = document.getElementById(`status-icons-${data.combatantId}`);
@@ -3928,7 +3928,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const targetPortrait = targetCard.querySelector('.fighter-portrait');
 
     if (result.evaded) {
-      _spawnFloatText(targetCard, '💨 Esquive !', 'float-evade');
+      _spawnFloatText(targetCard, '🎬 Hors-champ !', 'float-evade');
       return;
     }
 
@@ -3937,10 +3937,20 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     targetPortrait?.classList.add('hit-flash', result.critical ? 'shake-big' : 'shake-hit');
     setTimeout(() => targetPortrait?.classList.remove('hit-flash', 'shake-big', 'shake-hit'), 480);
 
+    // Coup critique = "Flash" (façon photographes qui s'emballent) : un vrai
+    // éclat blanc plein cadre en plus de la secousse, pour bien le distinguer
+    // visuellement d'un coup normal.
+    if (result.critical && targetPortrait) {
+      const flashOverlay = document.createElement('div');
+      flashOverlay.className = 'camera-flash-overlay';
+      targetPortrait.appendChild(flashOverlay);
+      setTimeout(() => flashOverlay.remove(), 400);
+    }
+
     _spawnFloatText(targetCard, `-${result.damage}`, result.critical ? 'float-dmg float-crit-dmg' : 'float-dmg', 0);
 
     if (result.critical) {
-      _spawnFloatText(targetCard, 'CRITIQUE !', 'float-crit-label', 1);
+      _spawnFloatText(targetCard, '📸 FLASH !', 'float-crit-label', 1);
     }
 
     if (result.multiplier >= 2.0) {
@@ -4082,6 +4092,38 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     if (iconsEl) iconsEl.innerHTML = _renderStatusIcons(combatant);
   }
 
+  /**
+   * Génère le petit "verdict du jury" affiché en fin de victoire (3 membres
+   * fixes, une réplique tirée au sort parmi plusieurs pour chacun — pure
+   * mise en scène, aucun impact sur les récompenses).
+   */
+  function _buildJuryVerdictHtml() {
+    const JURY_PANEL = [
+      { role: '🎬 Réalisateur', lines: [
+        "Une prestation à couper le souffle.",
+        "Le public en redemande déjà.",
+        "On tient notre scène culte.",
+      ]},
+      { role: '📷 Photographe', lines: [
+        "Chaque pose était parfaite.",
+        "J'ai rempli toute ma pellicule.",
+        "Le flash n'a jamais autant servi.",
+      ]},
+      { role: '✍️ Critique mode', lines: [
+        "Digne d'une couverture de magazine.",
+        "Un style qui va marquer la saison.",
+        "Cinq étoiles, sans hésiter.",
+      ]},
+    ];
+    const picks = JURY_PANEL.map(j => ({ role: j.role, line: j.lines[Math.floor(Math.random() * j.lines.length)] }));
+    return `
+      <div class="bro-jury">
+        <div class="bro-jury-title">👑 Le Jury</div>
+        ${picks.map(p => `<div class="bro-jury-line"><strong>${p.role}</strong> — « ${p.line} »</div>`).join('')}
+      </div>
+    `;
+  }
+
   function _showBattleResult(result, data) {
     const isVictory = result === 'victory';
     const battle    = CWCombatEngine.getBattle();
@@ -4160,9 +4202,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         <div class="bro-victory-top">
           <div class="bro-particles" id="victory-particles"></div>
           <div class="bro-glow-ring"></div>
-          <div class="bro-title">✨ VICTOIRE ✨</div>
+          <div class="bro-title">✨ STANDING OVATION ✨</div>
           <div class="bro-survivors" id="victory-survivors"></div>
-          <div class="bro-subtitle">Combat remporté avec brio</div>
+          <div class="bro-subtitle">Une étoile est née</div>
         </div>
         ${battle?.mode === 'story' && battle.storyWorld != null ? `
           <div class="bro-story-label">
@@ -4182,6 +4224,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         ` : ''}
         ${levelUpHtml}
         ${captureHtml}
+        ${_buildJuryVerdictHtml()}
         <button class="btn-primary bro-back-btn" id="btn-back-lobby">Retour au lobby</button>
       `;
     } else if (result === 'record') {
@@ -4214,9 +4257,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     } else {
       overlay.innerHTML = `
         <div class="bro-defeat-top">
-          <div class="bro-defeat-icon">💀</div>
-          <div class="bro-defeat-title">Défaite...</div>
-          <div class="bro-defeat-sub">Elles étaient trop fortes cette fois</div>
+          <div class="bro-defeat-icon">📷</div>
+          <div class="bro-defeat-title">Éclipsée...</div>
+          <div class="bro-defeat-sub">La rivale a volé la vedette cette fois</div>
         </div>
         ${battle?.mode === 'story' && battle.storyWorld != null ? `
           <div class="bro-story-label" style="color:#f87171">

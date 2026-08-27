@@ -1528,6 +1528,17 @@
   .fighter-portrait.shake-hit{ animation:shakeHit .35s ease; }
   .fighter-portrait.shake-big{ animation:shakeBig .48s ease; }
 
+  /* ── Flash (coup critique) — façon flash de photographe ── */
+  @keyframes cameraFlashPulse{
+    0%{ opacity:0; }
+    12%{ opacity:1; }
+    100%{ opacity:0; }
+  }
+  .camera-flash-overlay{
+    position:absolute; inset:0; background:#fff; z-index:8;
+    animation:cameraFlashPulse .4s ease-out forwards; pointer-events:none;
+  }
+
   /* ── Montée de niveau ── */
   @keyframes levelUpFlash{
     0%{ filter:brightness(1) saturate(1); box-shadow:0 0 0 0 rgba(255,221,128,0); }
@@ -2742,6 +2753,20 @@
     border:1px solid rgba(167,139,250,.7); color:#c4b5fd;
     text-shadow:0 0 12px rgba(167,139,250,.8);
   }
+  .bro-jury{
+    background:rgba(255,255,255,.04); border:1px solid rgba(251,191,36,.25);
+    border-radius:12px; padding:12px 14px; margin:10px auto; max-width:340px;
+    animation:broFadeIn 500ms 1300ms ease both; opacity:0;
+  }
+  .bro-jury-title{
+    font-family:'Playfair Display', serif; font-style:italic; font-weight:600;
+    font-size:.95rem; color:#f3d9a8; text-align:center; margin-bottom:8px;
+  }
+  .bro-jury-line{
+    font-size:.74rem; color:#c7c2d9; line-height:1.5; margin-bottom:4px;
+  }
+  .bro-jury-line:last-child{ margin-bottom:0; }
+  .bro-jury-line strong{ color:#e2d9f3; }
 
   /* Contexte story */
   .bro-story-label{
