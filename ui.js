@@ -6361,6 +6361,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           </div>
         </div>
         <div class="dpb-theme" id="dpb-theme"></div>
+        <div class="dpb-phase-caption" id="dpb-phase-caption"></div>
         <div class="dpb-stage">
           <div class="dpb-side dpb-side-player" id="dpb-side-player">
             <div class="dpb-card-frame">
@@ -6415,6 +6416,15 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     showScreen('defile-result');
   }
 
+  /** Affiche une légende explicative sous les cartes, décrivant ce qui se passe à l'instant */
+  function _setDefilePhaseCaption(text) {
+    const el = document.getElementById('dpb-phase-caption');
+    if (!el) return;
+    el.classList.remove('visible'); void el.offsetWidth;
+    el.textContent = text;
+    el.classList.add('visible');
+  }
+
   /** Joue l'intégralité de la séquence d'UN tournage, sans le moindre chevauchement */
   async function _playDefileRound(l, totalPBefore, totalEBefore) {
     const $ = (id) => document.getElementById(id);
@@ -6422,6 +6432,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     $('dpb-round-num').textContent = l.round;
     $('dpb-theme').textContent = `${STAT_LABELS_SHORT[l.stat]} — jugé sur ce tournage`;
+    _setDefilePhaseCaption('');
 
     const pDef = l.playerCharId ? CWGameState.getCharDef(l.playerCharId) : null;
     const eDef = l.enemyCharId  ? CWGameState.getCharDef(l.enemyCharId)  : null;
@@ -6440,61 +6451,75 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     $('dpb-side-player').classList.remove('winner');
     $('dpb-side-enemy').classList.remove('winner');
 
+    const statLabel = STAT_LABELS_SHORT[l.stat].replace(/^[^\s]+\s/, ''); // enlève l'icône, garde le mot
+
     // Phase 1 — présentation : zoom rapide sur chaque participante, l'une
     // après l'autre (jamais simultané, pour rester lisible)
     const pSide = $('dpb-side-player'), eSide = $('dpb-side-enemy');
     pSide.classList.remove('reveal'); eSide.classList.remove('reveal');
     void pSide.offsetWidth; // force le rejeu de l'animation à chaque tournage
+    _setDefilePhaseCaption(`Présentation — ${l.playerFighter || '?'}`);
     pSide.classList.add('reveal');
-    await _sleep(400);
+    await _sleep(900);
+    _setDefilePhaseCaption(`Présentation — ${l.enemyFighter || '?'}`);
     eSide.classList.add('reveal');
-    await _sleep(600);
+    await _sleep(1400);
 
     // Phase 2 — la stat jugée apparaît sous chaque participante
     $('dpb-stat-player').textContent = STAT_LABELS_SHORT[l.stat];
     $('dpb-stat-enemy').textContent  = STAT_LABELS_SHORT[l.stat];
-    await _sleep(450);
+    _setDefilePhaseCaption(`Épreuve de ce tournage : ${statLabel}`);
+    await _sleep(1600);
 
     // Phase 3 — score de base (valeur brute de la stat), révélé pour l'alliée
     // D'ABORD, puis pour l'adversaire — jamais les deux en même temps
+    _setDefilePhaseCaption(`Score de base (${statLabel}) — ${l.playerFighter || '?'}`);
     _setScorePop('dpb-score-player', l.playerStatValue ?? 0);
-    await _sleep(500);
+    await _sleep(2600);
+    _setDefilePhaseCaption(`Score de base (${statLabel}) — ${l.enemyFighter || '?'}`);
     _setScorePop('dpb-score-enemy', l.enemyStatValue ?? 0);
-    await _sleep(700);
+    await _sleep(2600);
 
     // Phase 4 — bonus/malus de type révélé, score recalculé en direct
     const pAfterType = (l.playerStatValue != null && l.playerMult != null) ? Math.round(l.playerStatValue * l.playerMult) : l.playerStatValue;
     const eAfterType = (l.enemyStatValue  != null && l.enemyMult  != null) ? Math.round(l.enemyStatValue  * l.enemyMult)  : l.enemyStatValue;
+    _setDefilePhaseCaption(`Multiplicateur de type ${l.playerMult != null ? _formatAffinityMult(l.playerMult) : ''} — ${l.playerFighter || '?'}`);
     _showDefileTypeBadge('dpb-type-badge-player', l.playerMult);
     _setScorePop('dpb-score-player', pAfterType);
-    await _sleep(600);
+    await _sleep(2600);
+    _setDefilePhaseCaption(`Multiplicateur de type ${l.enemyMult != null ? _formatAffinityMult(l.enemyMult) : ''} — ${l.enemyFighter || '?'}`);
     _showDefileTypeBadge('dpb-type-badge-enemy', l.enemyMult);
     _setScorePop('dpb-score-enemy', eAfterType);
-    await _sleep(800);
+    await _sleep(2600);
 
     // Phase 5 — les Talents s'activent un par un (jamais deux en même temps),
     // avec la même grande bannière que celle utilisée en combat classique
     for (const evtRaw of l.events) {
       if (_dpbSkip) break;
       const evt = String(evtRaw).replace(/<[^>]+>/g, '');
+      _setDefilePhaseCaption(`Talent activé : ${evt}`);
       await _showDefileTalentBanner(evt);
+      await _sleep(600);
     }
 
     // Phase 6 — score final du tournage, révélé alliée d'abord puis adversaire
+    _setDefilePhaseCaption(`Score final du tournage — ${l.playerFighter || '?'}`);
     _setScorePop('dpb-score-player', l.playerScore);
-    await _sleep(500);
+    await _sleep(2600);
+    _setDefilePhaseCaption(`Score final du tournage — ${l.enemyFighter || '?'}`);
     _setScorePop('dpb-score-enemy', l.enemyScore);
-    await _sleep(500);
+    await _sleep(2600);
     pSide.classList.toggle('winner', l.playerScore > l.enemyScore);
     eSide.classList.toggle('winner', l.enemyScore > l.playerScore);
-    await _sleep(700);
+    await _sleep(1200);
 
     // Phase 7 — le score du tournage rejoint le total cumulé (compteur animé)
+    _setDefilePhaseCaption('Ajout au score total cumulé');
     await Promise.all([
-      _animateCountUp('dpb-total-player', totalPBefore, totalPBefore + l.playerScore, 600),
-      _animateCountUp('dpb-total-enemy',  totalEBefore,  totalEBefore  + l.enemyScore,  600),
+      _animateCountUp('dpb-total-player', totalPBefore, totalPBefore + l.playerScore, 700),
+      _animateCountUp('dpb-total-enemy',  totalEBefore,  totalEBefore  + l.enemyScore,  700),
     ]);
-    await _sleep(500);
+    await _sleep(1200);
   }
 
   /**

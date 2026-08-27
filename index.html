@@ -465,8 +465,14 @@
   }
   .dpb-theme{
     text-align:center; font-size:.8rem; color:#c4b5fd; font-weight:700;
-    letter-spacing:.03em; margin-bottom:18px; min-height:1.2em;
+    letter-spacing:.03em; margin-bottom:10px; min-height:1.2em;
   }
+  .dpb-phase-caption{
+    text-align:center; font-size:.74rem; color:#f3d9a8; font-style:italic;
+    font-family:'Playfair Display', serif; min-height:1.4em; margin-bottom:16px;
+    opacity:0; transition:opacity 200ms ease;
+  }
+  .dpb-phase-caption.visible{ opacity:1; }
   .dpb-stage{ display:flex; align-items:flex-start; justify-content:center; gap:14px; position:relative; }
   .dpb-side{
     flex:1; max-width:150px; display:flex; flex-direction:column; align-items:center;
@@ -526,7 +532,10 @@
   }
   /* Réutilise .passive-banner-big (combat classique) — juste repositionnée en
      absolute dans .dpb-stage plutôt qu'en absolute dans .battle-scene */
-  .dpb-talent-banner-big{ position:absolute; top:50%; left:50%; }
+  .dpb-talent-banner-big{
+    position:absolute; top:50%; left:50%;
+    white-space:normal !important; max-width:85vw; text-align:center; line-height:1.4;
+  }
 
   /* ── MODE PERFORMANCE ── */
   .record-home-card{
