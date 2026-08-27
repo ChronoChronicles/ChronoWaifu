@@ -1800,6 +1800,21 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
    * fiche détaillée d'un personnage, partagée entre Collection et Combat.
    * @param {string} type1 @param {string|null} type2
    */
+  /** Version ultra-compacte des affinités (icônes seules, sans libellé) — pour les cartes étroites */
+  function _buildCompactAffinitiesHtml(type1, type2) {
+    const { dealt } = _computeTypeAffinities(type1, type2);
+    if (dealt.length === 0) return '';
+    const strong = dealt.filter(d => d.mult >= 2).map(d => d.type);
+    const weak   = dealt.filter(d => d.mult <= 0.5).map(d => d.type);
+    const badge = (t, cls) => `<span class="defile-affinity-dot ${cls}" style="background:${t.color}" title="${t.name}">${t.icon}</span>`;
+    return `
+      <div class="defile-compact-affinities">
+        ${strong.length ? `<div class="defile-affinity-row"><span class="defile-affinity-sign good">✚</span>${strong.map(t => badge(t, 'good')).join('')}</div>` : ''}
+        ${weak.length ? `<div class="defile-affinity-row"><span class="defile-affinity-sign bad">−</span>${weak.map(t => badge(t, 'bad')).join('')}</div>` : ''}
+      </div>
+    `;
+  }
+
   function _buildTypeAffinitiesHtml(type1, type2, dealtOnly = false) {
     const { dealt, received } = _computeTypeAffinities(type1, type2);
     if (dealt.length === 0 && (dealtOnly || received.length === 0)) return '';
@@ -6169,14 +6184,15 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                 ${_detailPortraitImgHtml(def)}
               </div>
               <div class="defile-fighter-card-info">
-                <div class="defile-chip-name">${f.name} ${typeBadge(f.type1)}${typeBadge(f.type2)}</div>
+                <div class="defile-chip-name">${f.name}</div>
+                <div class="defile-chip-types">${typeBadge(f.type1)}${typeBadge(f.type2)}</div>
                 <div class="defile-chip-stats-grid">
                   <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">✨</span><span class="defile-chip-stat-value">${f.atk}</span></div>
                   <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🌹</span><span class="defile-chip-stat-value">${f.def}</span></div>
                   <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🕊️</span><span class="defile-chip-stat-value">${f.spd}</span></div>
                 </div>
-                <div class="defile-chip-uses">${left} / ${_defileState.usesPerChar} tournages restants</div>
-                ${_buildTypeAffinitiesHtml(f.type1, f.type2, true)}
+                <div class="defile-chip-uses">${left}/${_defileState.usesPerChar} restants</div>
+                ${_buildCompactAffinitiesHtml(f.type1, f.type2)}
               </div>
             </div>`;
         }).join('')}

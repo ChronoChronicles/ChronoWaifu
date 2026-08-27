@@ -361,18 +361,19 @@
     font-size:.62rem; font-weight:700; text-align:center; padding:2px 0;
     border-radius:5px; margin-top:2px;
   }
-  .defile-roster-cards{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; align-items:start; }
+  .defile-roster-cards{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; align-items:stretch; }
   .defile-fighter-card{
-    display:flex; gap:8px; background:rgba(255,255,255,.05);
+    display:flex; flex-direction:column; gap:6px; background:rgba(255,255,255,.05);
     border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:8px;
     cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none;
+    overflow:hidden; min-width:0;
   }
   .defile-fighter-card.exhausted{ opacity:.4; cursor:default; }
   .defile-fighter-card-portrait{
-    width:64px; aspect-ratio:1/1.5; flex-shrink:0; border-radius:8px; overflow:hidden;
+    width:100%; aspect-ratio:1/1.3; flex-shrink:0; border-radius:8px; overflow:hidden;
     position:relative; background:linear-gradient(150deg, var(--surface-2), var(--surface-3));
   }
-  .defile-fighter-card-info{ flex:1; min-width:0; }
+  .defile-fighter-card-info{ min-width:0; display:flex; flex-direction:column; gap:4px; }
   .defile-roster{ display:flex; flex-direction:column; gap:8px; }
   .defile-chip{
     background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12);
@@ -380,26 +381,37 @@
     user-select:none; -webkit-user-select:none;
   }
   .defile-chip.exhausted{ opacity:.4; cursor:default; }
-  .defile-chip-name{ font-size:.85rem; font-weight:700; color:#fff; display:flex; align-items:center; gap:6px; }
+  .defile-chip-name{
+    font-size:.76rem; font-weight:700; color:#fff;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+  }
+  .defile-chip-types{ display:flex; gap:3px; }
   .defile-chip-stats{
     display:flex; gap:10px; font-size:.72rem; color:#e2d9f3;
     font-family:var(--font-mono); margin-top:4px;
   }
   .defile-chip-stats-grid{
-    display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:4px;
-    margin-top:6px; background:rgba(255,255,255,.04); border-radius:8px; padding:6px 4px;
+    display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:2px;
+    background:rgba(255,255,255,.04); border-radius:8px; padding:5px 2px;
   }
   .defile-chip-stat-col{
-    display:flex; flex-direction:column; align-items:center; gap:2px;
+    display:flex; flex-direction:column; align-items:center; gap:1px;
     text-align:center; min-width:0;
   }
-  .defile-chip-stat-label{
-    font-size:.6rem; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
-  }
+  .defile-chip-stat-label{ font-size:.62rem; line-height:1; }
   .defile-chip-stat-value{
-    font-family:var(--font-mono); font-size:.82rem; font-weight:800; color:#fff;
+    font-family:var(--font-mono); font-size:.74rem; font-weight:800; color:#fff; line-height:1.2;
   }
-  .defile-chip-uses{ font-size:.68rem; color:var(--text-dim); margin-top:4px; }
+  .defile-chip-uses{ font-size:.6rem; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .defile-compact-affinities{ display:flex; flex-direction:column; gap:2px; }
+  .defile-affinity-row{ display:flex; align-items:center; gap:3px; flex-wrap:wrap; }
+  .defile-affinity-sign{ font-size:.68rem; font-weight:800; flex-shrink:0; }
+  .defile-affinity-sign.good{ color:#4ade80; }
+  .defile-affinity-sign.bad{ color:#f87171; }
+  .defile-affinity-dot{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:15px; height:15px; border-radius:50%; font-size:.6rem; flex-shrink:0;
+  }
   .defile-talent-chip{ border-color:rgba(251,191,36,.3); background:rgba(251,191,36,.05); }
   .defile-chip-talent-desc{ font-size:.68rem; color:var(--text-dim); margin-top:3px; line-height:1.4; }
   .defile-drag-ghost{
