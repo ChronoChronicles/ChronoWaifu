@@ -941,6 +941,7 @@ const CWGameUI = (() => {
       record:           renderRecordHome,
       'record-rewards': renderRecordRewards,
       'defile-planning': renderDefilePlanning,
+      'defile-playback': renderDefilePlayback,
       'defile-result':   renderDefileResult,
     };
     renderers[screenId]?.();
@@ -6337,6 +6338,186 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   }
 
   let _defileLastResult = null;
+  let _dpbSkip = false;
+
+  const _sleep = (ms) => new Promise(r => setTimeout(r, _dpbSkip ? 0 : ms));
+
+  function renderDefilePlayback() {
+    const el = document.getElementById('screen-defile-playback');
+    if (!el || !_defileLastResult) return;
+    _dpbSkip = false;
+
+    el.innerHTML = `
+      <div class="dpb-screen">
+        <div class="dpb-totals">
+          <div class="dpb-total-block player">
+            <span class="dpb-total-label">Toi</span>
+            <strong class="dpb-total-value" id="dpb-total-player">0</strong>
+          </div>
+          <div class="dpb-round-indicator">Tournage <span id="dpb-round-num">1</span> / ${_defileLastResult.log.length}</div>
+          <div class="dpb-total-block enemy">
+            <span class="dpb-total-label">Adversaire</span>
+            <strong class="dpb-total-value" id="dpb-total-enemy">0</strong>
+          </div>
+        </div>
+        <div class="dpb-theme" id="dpb-theme"></div>
+        <div class="dpb-stage">
+          <div class="dpb-side dpb-side-player" id="dpb-side-player">
+            <div class="dpb-portrait-wrap"><div class="dpb-portrait" id="dpb-portrait-player"></div></div>
+            <div class="dpb-name" id="dpb-name-player"></div>
+            <div class="dpb-stat-line" id="dpb-stat-player"></div>
+            <div class="dpb-score-row">
+              <span class="dpb-score" id="dpb-score-player">—</span>
+              <span class="dpb-type-badge" id="dpb-type-badge-player"></span>
+            </div>
+          </div>
+          <div class="dpb-vs">VS</div>
+          <div class="dpb-side dpb-side-enemy" id="dpb-side-enemy">
+            <div class="dpb-portrait-wrap"><div class="dpb-portrait" id="dpb-portrait-enemy"></div></div>
+            <div class="dpb-name" id="dpb-name-enemy"></div>
+            <div class="dpb-stat-line" id="dpb-stat-enemy"></div>
+            <div class="dpb-score-row">
+              <span class="dpb-type-badge" id="dpb-type-badge-enemy"></span>
+              <span class="dpb-score" id="dpb-score-enemy">—</span>
+            </div>
+          </div>
+        </div>
+        <div class="dpb-talent-banner" id="dpb-talent-banner"></div>
+        <button class="dpb-skip-btn" id="btn-dpb-skip">Passer ›</button>
+      </div>
+    `;
+
+    document.getElementById('btn-dpb-skip')?.addEventListener('click', () => { _dpbSkip = true; });
+
+    _runDefilePlaybackSequence();
+  }
+
+  async function _runDefilePlaybackSequence() {
+    const log = _defileLastResult.log;
+    let totalP = 0, totalE = 0;
+
+    for (let i = 0; i < log.length; i++) {
+      if (_dpbSkip) break;
+      await _playDefileRound(log[i], totalP, totalE);
+      totalP += log[i].playerScore;
+      totalE += log[i].enemyScore;
+    }
+
+    showScreen('defile-result');
+  }
+
+  /** Joue l'intégralité de la séquence d'UN tournage, sans le moindre chevauchement */
+  async function _playDefileRound(l, totalPBefore, totalEBefore) {
+    const $ = (id) => document.getElementById(id);
+    if (!$('dpb-side-player')) return; // écran quitté entre-temps
+
+    $('dpb-round-num').textContent = l.round;
+    $('dpb-theme').textContent = `${STAT_LABELS_SHORT[l.stat]} — jugé sur ce tournage`;
+    const banner = $('dpb-talent-banner');
+    banner.textContent = ''; banner.classList.remove('visible');
+
+    const pDef = l.playerCharId ? CWGameState.getCharDef(l.playerCharId) : null;
+    const eDef = l.enemyCharId  ? CWGameState.getCharDef(l.enemyCharId)  : null;
+    $('dpb-portrait-player').innerHTML = pDef ? _combatPortraitImgHtml(pDef) : '';
+    $('dpb-portrait-enemy').innerHTML  = eDef ? _combatPortraitImgHtml(eDef) : '';
+    $('dpb-name-player').textContent = l.playerFighter || '—';
+    $('dpb-name-enemy').textContent  = l.enemyFighter  || '—';
+    $('dpb-stat-player').textContent = '';
+    $('dpb-stat-enemy').textContent  = '';
+    $('dpb-score-player').textContent = '—';
+    $('dpb-score-enemy').textContent  = '—';
+    $('dpb-type-badge-player').className = 'dpb-type-badge';
+    $('dpb-type-badge-player').textContent = '';
+    $('dpb-type-badge-enemy').className = 'dpb-type-badge';
+    $('dpb-type-badge-enemy').textContent = '';
+
+    // Phase 1 — présentation : zoom rapide sur chaque participante, l'une
+    // après l'autre (jamais simultané, pour rester lisible)
+    const pSide = $('dpb-side-player'), eSide = $('dpb-side-enemy');
+    pSide.classList.remove('reveal'); eSide.classList.remove('reveal');
+    void pSide.offsetWidth; // force le rejeu de l'animation à chaque tournage
+    pSide.classList.add('reveal');
+    await _sleep(350);
+    eSide.classList.add('reveal');
+    await _sleep(450);
+
+    // Phase 2 — la stat jugée apparaît sous chaque participante
+    $('dpb-stat-player').textContent = STAT_LABELS_SHORT[l.stat];
+    $('dpb-stat-enemy').textContent  = STAT_LABELS_SHORT[l.stat];
+    await _sleep(350);
+
+    // Phase 3 — score de base (valeur brute de la stat)
+    _setScorePop('dpb-score-player', l.playerStatValue ?? 0);
+    _setScorePop('dpb-score-enemy',  l.enemyStatValue  ?? 0);
+    await _sleep(550);
+
+    // Phase 4 — bonus/malus de type révélé, score recalculé en direct
+    const pAfterType = (l.playerStatValue != null && l.playerMult != null) ? Math.round(l.playerStatValue * l.playerMult) : l.playerStatValue;
+    const eAfterType = (l.enemyStatValue  != null && l.enemyMult  != null) ? Math.round(l.enemyStatValue  * l.enemyMult)  : l.enemyStatValue;
+    _showDefileTypeBadge('dpb-type-badge-player', l.playerMult);
+    _showDefileTypeBadge('dpb-type-badge-enemy',  l.enemyMult);
+    _setScorePop('dpb-score-player', pAfterType);
+    _setScorePop('dpb-score-enemy',  eAfterType);
+    await _sleep(650);
+
+    // Phase 5 — les Talents s'activent un par un (jamais deux en même temps),
+    // visibles des deux côtés
+    for (const evtRaw of l.events) {
+      if (_dpbSkip) break;
+      const evt = String(evtRaw).replace(/<[^>]+>/g, '');
+      banner.textContent = evt;
+      banner.classList.add('visible');
+      await _sleep(1150);
+      banner.classList.remove('visible');
+      await _sleep(250);
+    }
+
+    // Phase 6 — score final du tournage, la gagnante du passage se distingue
+    _setScorePop('dpb-score-player', l.playerScore);
+    _setScorePop('dpb-score-enemy',  l.enemyScore);
+    pSide.classList.toggle('winner', l.playerScore > l.enemyScore);
+    eSide.classList.toggle('winner', l.enemyScore > l.playerScore);
+    await _sleep(550);
+
+    // Phase 7 — le score du tournage rejoint le total cumulé (compteur animé)
+    await Promise.all([
+      _animateCountUp('dpb-total-player', totalPBefore, totalPBefore + l.playerScore, 550),
+      _animateCountUp('dpb-total-enemy',  totalEBefore,  totalEBefore  + l.enemyScore,  550),
+    ]);
+    await _sleep(350);
+  }
+
+  /** Met à jour un score avec un petit effet de "pop" pour bien marquer le changement */
+  function _setScorePop(elId, value) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.textContent = value;
+    el.classList.remove('score-pop'); void el.offsetWidth; el.classList.add('score-pop');
+  }
+
+  function _showDefileTypeBadge(elId, mult) {
+    const el = document.getElementById(elId);
+    if (!el || mult == null) return;
+    el.textContent = _formatAffinityMult(mult);
+    el.className = 'dpb-type-badge visible ' + (mult >= 2 ? 'good' : mult <= 0.5 ? 'bad' : 'neutral');
+  }
+
+  /** Anime un compteur de total en le faisant défiler de "from" à "to" */
+  function _animateCountUp(elId, from, to, duration) {
+    return new Promise(resolve => {
+      const el = document.getElementById(elId);
+      if (!el || _dpbSkip) { if (el) el.textContent = to.toLocaleString('fr-FR'); resolve(); return; }
+      const start = performance.now();
+      function step(now) {
+        const t = Math.min(1, (now - start) / duration);
+        el.textContent = Math.round(from + (to - from) * t).toLocaleString('fr-FR');
+        if (t < 1) requestAnimationFrame(step);
+        else resolve();
+      }
+      requestAnimationFrame(step);
+    });
+  }
+
 
   /** Lance la résolution du duel une fois le programme validé */
   function _runDefileDuel() {
@@ -6373,7 +6554,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     _defileLastResult = result;
     _defileState = null; // repart de zéro pour le prochain défilé
-    showScreen('defile-result');
+    showScreen('defile-playback');
   }
 
   /**

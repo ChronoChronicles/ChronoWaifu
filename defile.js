@@ -316,6 +316,8 @@ const CWDefileEngine = (() => {
       entry.enemyCharId   = eFighter?.charId || null;
       entry.playerMult = pFighter ? CWGameDatabase.getBestTypeEffectiveness(pFighter.type1, pFighter.type2, effectivePassage.typeId, null, matrix) : null;
       entry.enemyMult  = eFighter ? CWGameDatabase.getBestTypeEffectiveness(eFighter.type1, eFighter.type2, effectivePassage.typeId, null, matrix) : null;
+      entry.playerStatValue = pFighter ? Math.round(pFighter[effectivePassage.stat]) : null;
+      entry.enemyStatValue  = eFighter ? Math.round(eFighter[effectivePassage.stat]) : null;
       entry.playerScore = playerScores[i];
       entry.enemyScore  = enemyScores[i];
       log.push(entry);

@@ -447,6 +447,74 @@
   .defile-result-round-vs{ font-size:.62rem; color:var(--text-faint); font-weight:700; flex-shrink:0; }
   .defile-result-round-events{ font-size:.66rem; color:var(--text-dim); margin-top:5px; line-height:1.5; }
 
+  /* ── DÉFILÉ — DÉROULÉ ANIMÉ ── */
+  .dpb-screen{ display:flex; flex-direction:column; min-height:70vh; padding-top:6px; }
+  .dpb-totals{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:0 4px 10px; border-bottom:1px solid rgba(255,255,255,.08); margin-bottom:14px;
+  }
+  .dpb-total-block{ display:flex; flex-direction:column; align-items:center; min-width:70px; }
+  .dpb-total-label{ font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; color:var(--text-dim); }
+  .dpb-total-value{
+    font-family:var(--font-mono); font-size:1.3rem; font-weight:800; color:#fff;
+  }
+  .dpb-total-block.player .dpb-total-value{ color:#a78bfa; }
+  .dpb-total-block.enemy .dpb-total-value{ color:#f87171; }
+  .dpb-round-indicator{
+    font-family:'Playfair Display', serif; font-style:italic; font-size:.85rem; color:#f3d9a8;
+  }
+  .dpb-theme{
+    text-align:center; font-size:.78rem; color:#c4b5fd; font-weight:700;
+    letter-spacing:.03em; margin-bottom:14px; min-height:1.2em;
+  }
+  .dpb-stage{ display:flex; align-items:flex-start; justify-content:center; gap:10px; flex:1; }
+  .dpb-side{
+    flex:1; max-width:150px; display:flex; flex-direction:column; align-items:center;
+    text-align:center; opacity:0; transform:scale(.6) translateY(10px);
+  }
+  .dpb-side.reveal{ animation:dpbReveal 500ms cubic-bezier(.22,.68,0,1.2) forwards; }
+  @keyframes dpbReveal{ to{ opacity:1; transform:scale(1) translateY(0); } }
+  .dpb-side.winner .dpb-portrait-wrap{ box-shadow:0 0 0 3px #fbbf24, 0 0 20px 4px rgba(251,191,36,.5); }
+  .dpb-portrait-wrap{
+    width:84px; height:84px; border-radius:50%; overflow:hidden; flex-shrink:0;
+    background:var(--surface-2); border:2px solid rgba(255,255,255,.15);
+    transition:box-shadow 300ms ease; margin-bottom:8px;
+  }
+  .dpb-portrait{ width:100%; height:100%; }
+  .dpb-name{ font-size:.82rem; font-weight:700; color:#fff; margin-bottom:4px; }
+  .dpb-stat-line{ font-size:.7rem; color:var(--text-dim); min-height:1.2em; margin-bottom:6px; }
+  .dpb-score-row{ display:flex; align-items:center; gap:6px; min-height:1.6em; }
+  .dpb-score{
+    font-family:var(--font-mono); font-size:1.4rem; font-weight:800; color:#fff;
+  }
+  .dpb-score.score-pop{ animation:dpbScorePop 350ms cubic-bezier(.22,.68,0,1.2); }
+  @keyframes dpbScorePop{ 0%{ transform:scale(1.5); color:#fbbf24; } 100%{ transform:scale(1); } }
+  .dpb-type-badge{
+    font-family:var(--font-mono); font-size:.68rem; font-weight:800; padding:2px 6px;
+    border-radius:6px; opacity:0; transform:translateY(4px); transition:opacity 250ms, transform 250ms;
+  }
+  .dpb-type-badge.visible{ opacity:1; transform:translateY(0); }
+  .dpb-type-badge.good{ background:rgba(74,222,128,.18); color:#4ade80; }
+  .dpb-type-badge.bad{ background:rgba(248,113,113,.18); color:#f87171; }
+  .dpb-type-badge.neutral{ background:rgba(255,255,255,.08); color:var(--text-dim); }
+  .dpb-vs{
+    font-family:'Playfair Display', serif; font-style:italic; font-size:1.1rem;
+    color:#605a78; align-self:center; flex-shrink:0;
+  }
+  .dpb-talent-banner{
+    position:fixed; left:50%; bottom:90px; transform:translateX(-50%) translateY(10px);
+    max-width:88%; text-align:center; background:linear-gradient(90deg,rgba(251,191,36,.15),rgba(244,63,94,.15));
+    border:1px solid rgba(251,191,36,.5); border-radius:14px; padding:10px 18px;
+    font-size:.8rem; font-weight:700; color:#fff; opacity:0; transition:opacity 280ms ease, transform 280ms ease;
+    pointer-events:none; z-index:50; box-shadow:0 8px 24px rgba(0,0,0,.4);
+  }
+  .dpb-talent-banner.visible{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .dpb-skip-btn{
+    position:fixed; top:14px; right:14px; z-index:60;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2);
+    color:#fff; font-size:.72rem; font-weight:700; padding:6px 14px; border-radius:999px;
+  }
+
   /* ── MODE PERFORMANCE ── */
   .record-home-card{
     background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1);
@@ -3787,6 +3855,7 @@
       <section id="screen-record" class="screen"></section>
       <section id="screen-record-rewards" class="screen"></section>
       <section id="screen-defile-planning" class="screen"></section>
+      <section id="screen-defile-playback" class="screen"></section>
       <section id="screen-defile-result" class="screen"></section>
     </main>
 
