@@ -335,18 +335,28 @@
     border-radius:8px; display:inline-block; width:fit-content;
   }
   .defile-slot-content{ flex:1; display:flex; flex-direction:column; justify-content:flex-end; gap:4px; }
-  .defile-slot-empty{ font-size:.66rem; color:var(--text-faint); text-align:center; margin:auto 0; }
+  .defile-slot-empty{ font-size:.62rem; color:var(--text-faint); text-align:center; margin:auto 0; }
   .defile-slot-fighter{ display:flex; align-items:center; justify-content:space-between; gap:4px; }
   .defile-slot-fighter-name{ font-size:.7rem; font-weight:700; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .defile-slot-remove{
+  .defile-slot-remove, .defile-talent-remove{
     background:rgba(244,63,94,.15); border:1px solid rgba(244,63,94,.4); color:#f87171;
     border-radius:6px; width:18px; height:18px; font-size:.6rem; flex-shrink:0; cursor:pointer; line-height:1;
   }
-  .defile-slot-talent-btn{
-    background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.3);
-    border-radius:6px; font-size:.7rem; padding:2px 0; cursor:pointer; color:#fbbf24;
+  .defile-slot-stats{
+    display:flex; align-items:center; gap:5px; flex-wrap:wrap;
+    font-size:.62rem; color:var(--text-dim); font-family:var(--font-mono);
   }
-  .defile-slot-talent-btn.active{ background:rgba(251,191,36,.3); border-color:#fbbf24; }
+  .defile-type-badge{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:16px; height:16px; border-radius:50%; font-size:.6rem; flex-shrink:0;
+  }
+  .defile-slot-talent-zone{
+    border:1px dashed rgba(251,191,36,.35); border-radius:7px; padding:4px 6px;
+    display:flex; align-items:center; justify-content:space-between; gap:4px;
+    font-size:.66rem; color:#fbbf24; min-height:22px;
+  }
+  .defile-slot-talent-zone.has-talent{ background:rgba(251,191,36,.12); border-style:solid; }
+  .defile-slot-talent-zone .defile-slot-empty{ color:var(--text-faint); margin:0; }
   .defile-roster{ display:flex; flex-direction:column; gap:8px; }
   .defile-chip{
     background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12);
@@ -354,9 +364,14 @@
     user-select:none; -webkit-user-select:none;
   }
   .defile-chip.exhausted{ opacity:.4; cursor:default; }
-  .defile-chip-name{ font-size:.85rem; font-weight:700; color:#fff; }
-  .defile-chip-uses{ font-size:.68rem; color:var(--text-dim); margin-top:2px; }
-  .defile-chip-talent{ font-size:.68rem; color:#c4b5fd; margin-top:4px; }
+  .defile-chip-name{ font-size:.85rem; font-weight:700; color:#fff; display:flex; align-items:center; gap:6px; }
+  .defile-chip-stats{
+    display:flex; gap:10px; font-size:.72rem; color:#e2d9f3;
+    font-family:var(--font-mono); margin-top:4px;
+  }
+  .defile-chip-uses{ font-size:.68rem; color:var(--text-dim); margin-top:4px; }
+  .defile-talent-chip{ border-color:rgba(251,191,36,.3); background:rgba(251,191,36,.05); }
+  .defile-chip-talent-desc{ font-size:.68rem; color:var(--text-dim); margin-top:3px; line-height:1.4; }
   .defile-drag-ghost{
     position:fixed; z-index:9999; pointer-events:none; transform:translate(-50%,-140%);
     background:rgba(167,139,250,.95); color:#1b1330; font-size:.75rem; font-weight:700;
