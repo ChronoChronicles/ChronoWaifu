@@ -6115,8 +6115,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     el.innerHTML = `
       <div class="screen-header"><h2>💃 Défilé — Planification</h2></div>
       <p class="defile-help">
-        Glisse chacune de tes personnages sur ${_defileState.usesPerChar} passages, puis glisse
-        librement un Talent par personnage sur le passage de ton choix (une fois par duel).
+        Glisse chacune de tes personnages sur ${_defileState.usesPerChar} tournages, puis glisse
+        librement un Talent par personnage sur le tournage de ton choix (une fois par duel).
       </p>
       <div class="defile-programme" id="defile-programme">
         ${programme.map((p, idx) => {
@@ -6132,7 +6132,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
           return `
             <div class="defile-slot ${fighter ? 'filled' : ''}" data-round="${idx}">
-              <div class="defile-slot-num">${p.round}</div>
+              <div class="defile-slot-num">Tournage ${p.round}</div>
               <div class="defile-slot-theme">
                 <span>${STAT_LABELS_SHORT[p.stat]}</span>
                 <span class="defile-slot-type" style="background:${t?.color || '#888'}">${t?.icon || ''} ${t?.name || p.typeId}</span>
@@ -6175,7 +6175,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                   <span>${STAT_LABELS_SHORT.def} ${f.def}</span>
                   <span>${STAT_LABELS_SHORT.spd} ${f.spd}</span>
                 </div>
-                <div class="defile-chip-uses">${left} / ${_defileState.usesPerChar} passages restants</div>
+                <div class="defile-chip-uses">${left} / ${_defileState.usesPerChar} tournages restants</div>
                 ${_buildTypeAffinitiesHtml(f.type1, f.type2, true)}
               </div>
             </div>`;
@@ -6183,7 +6183,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       </div>
 
       <div class="defile-help" style="margin-top:14px;">
-        Talents disponibles — ${talentsPlaced}/${maxTalents} placés (glisse-en un sur le passage de ton choix, peu importe la personnage) :
+        Talents disponibles — ${talentsPlaced}/${maxTalents} placés (glisse-en un sur le tournage de ton choix, peu importe la personnage) :
       </div>
       <div class="defile-roster" id="defile-talents">
         ${talentChips.map(chip => {
@@ -6200,7 +6200,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
               </div>
               <div class="defile-chip-talent-desc">${talent?.description || ''}</div>
               <div class="defile-chip-uses">
-                ${placed ? `Placé — passage ${ownRound + 1}`
+                ${placed ? `Placé — tournage ${ownRound + 1}`
                   : limitReached ? `Limite de ${maxTalents} Talents atteinte`
                   : 'Non placé'}
               </div>
@@ -6291,7 +6291,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         }
       } else { // talent
         if (!_defileState.assignment[round]) {
-          _showToast('⚠️ Place d\'abord une personnage sur ce passage.', 'error');
+          _showToast('⚠️ Place d\'abord une personnage sur ce tournage.', 'error');
           return;
         }
         const cfg = CWGameState.get().config.combat;
@@ -6426,7 +6426,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
             </div>`;
           return `
           <div class="defile-result-round">
-            <div class="defile-result-round-num">Passage ${l.round} — ${STAT_LABELS_SHORT[l.stat]}</div>
+            <div class="defile-result-round-num">Tournage ${l.round} — ${STAT_LABELS_SHORT[l.stat]}</div>
             <div class="defile-result-round-mirror">
               ${side(pDef, l.playerFighter, l.playerScore, l.playerMult, false)}
               <div class="defile-result-round-vs">VS</div>
