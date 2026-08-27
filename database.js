@@ -860,6 +860,11 @@ const CWGameDatabase = (() => {
       currentWinStreak: 0,   // série en cours
       favoriteCharId:   null,// perso le plus utilisé (id)
       playTimeMinutes:  0,   // temps de jeu estimé (minutes)
+      // ── Mode Défilé ──────────────────────────────────────────────────────
+      totalDefiles:      0,  // Défilés disputés
+      totalDefilesWon:   0,  // Défilés remportés
+      totalPassagesWon:  0,  // passages individuels remportés (toutes personnages confondues)
+      totalDefilePoints: 0,  // points cumulés marqués en Défilé (toutes personnages confondues)
       playtime: 0,
     },
   };

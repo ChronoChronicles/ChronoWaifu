@@ -1322,6 +1322,10 @@ const CWGameUI = (() => {
       { label: '👑 Aura d\'équipe',     value: (CWGameState.getPlayerAuraScoreTeam?.()||0).toLocaleString('fr-FR'),  highlight: true, progress: _progressBarHtml('scoreTeam') },
       { label: '🌍 Tournée',            value: `Monde ${tourneeWorld} — ${tourneeSubLevel}/${tourneePerWorld}`, highlight: true, progress: _progressBarHtml('tourneeProgress') },
       { label: '📊 Performance',        value: `${(player.recordBest||0).toLocaleString('fr-FR')} pts`, highlight: true },
+      { label: '💃 Défilés',            value: (stats.totalDefiles||0).toLocaleString('fr-FR'), highlight: false },
+      { label: '🏆 Défilés Remportés',  value: (stats.totalDefilesWon||0).toLocaleString('fr-FR'), highlight: false },
+      { label: '🎬 Passages Remportés', value: (stats.totalPassagesWon||0).toLocaleString('fr-FR'), highlight: false },
+      { label: '✨ Points gagnés',      value: (stats.totalDefilePoints||0).toLocaleString('fr-FR'), highlight: true },
     ];
     const statsEl = document.getElementById('pm-stats-grid');
     if (statsEl) statsEl.innerHTML = statCards.map(s => `
@@ -1796,9 +1800,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
    * fiche détaillée d'un personnage, partagée entre Collection et Combat.
    * @param {string} type1 @param {string|null} type2
    */
-  function _buildTypeAffinitiesHtml(type1, type2) {
+  function _buildTypeAffinitiesHtml(type1, type2, dealtOnly = false) {
     const { dealt, received } = _computeTypeAffinities(type1, type2);
-    if (dealt.length === 0 && received.length === 0) return '';
+    if (dealt.length === 0 && (dealtOnly || received.length === 0)) return '';
 
     const renderGroups = (groups) => groups.map(({ mult, types }) => {
       const meta = _affinityMeta(mult);
@@ -1820,7 +1824,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
             ${renderGroups(_groupAffinitiesByMult(dealt))}
           </div>
         ` : ''}
-        ${received.length > 0 ? `
+        ${(!dealtOnly && received.length > 0) ? `
           <div class="affinity-section">
             <div class="affinity-section-title">🛡️ Dégâts reçus</div>
             ${renderGroups(_groupAffinitiesByMult(received))}
@@ -6025,7 +6029,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
   let _defileState = null; // { programme, playerTeam, assignment, usesPerChar }
 
-  const STAT_LABELS_SHORT = { atk: 'Charisme', def: 'Prestance', spd: 'Grâce' };
+  const STAT_LABELS_SHORT = { atk: '✨ Charisme', def: '🌹 Prestance', spd: '🕊️ Grâce' };
 
   function renderDefilePlanning() {
     const el = document.getElementById('screen-defile-planning');
@@ -6047,13 +6051,15 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       const playerTeam = teamInstances.map(inst => {
         const def = CWGameState.getCharDef(inst.charId);
         const finalStats = CWGameState.getCharacterFinalStats(inst);
-        return CWDefileEngine.buildFighter(inst, def, finalStats, cfg);
+        const fighter = CWDefileEngine.buildFighter(inst, def, finalStats, cfg);
+        fighter.portrait = def.portrait; // pour l'affichage façon fiche Collection
+        return fighter;
       });
       _defileState = {
         programme,
         playerTeam,
         assignment: new Array(programme.length).fill(null), // { instanceId } — qui défile
-        talentPlacement: {},                                 // { round: typeId } — où chaque Talent est placé (libre)
+        talentPlacement: {},                                 // { round: { instanceId, typeId } } — Talent placé (libre, par personnage + type)
         usesPerChar: cfg.defileUsesPerChar ?? 3,
       };
     }
@@ -6066,9 +6072,15 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     return _defileState.usesPerChar - used;
   }
 
-  /** Round (index) où le Talent d'un type donné est actuellement placé, ou -1 */
-  function _defileTalentRoundFor(typeId) {
-    const entry = Object.entries(_defileState.talentPlacement).find(([, t]) => t === typeId);
+  /** Round où CETTE personnage (peu importe lequel de ses types) a déjà placé son Talent, ou -1 */
+  function _defileCharacterTalentRound(instanceId) {
+    const entry = Object.entries(_defileState.talentPlacement).find(([, v]) => v.instanceId === instanceId);
+    return entry ? parseInt(entry[0]) : -1;
+  }
+
+  /** Round où LE Talent précis (cette personnage + ce type) est placé, ou -1 */
+  function _defileTalentChipRound(instanceId, typeId) {
+    const entry = Object.entries(_defileState.talentPlacement).find(([, v]) => v.instanceId === instanceId && v.typeId === typeId);
     return entry ? parseInt(entry[0]) : -1;
   }
 
@@ -6080,8 +6092,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const { programme, playerTeam, assignment, talentPlacement } = _defileState;
 
     const allFilled = assignment.every(a => a);
+    const maxTalents = state.config.combat.defileTalentsCount ?? 3;
     const talentsPlaced = Object.keys(talentPlacement).length;
-    const canValidate = allFilled && talentsPlaced === playerTeam.length;
+    const canValidate = allFilled && talentsPlaced === maxTalents;
 
     const typeBadge = (typeId) => {
       const t = types.find(tt => tt.id === typeId);
@@ -6089,19 +6102,34 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       return `<span class="defile-type-badge" style="background:${t.color}">${t.icon}</span>`;
     };
 
+    // Une "puce" de Talent par type possédé (donc 2 si double-type) — si 2
+    // personnages partagent un même type, chacune a bien sa PROPRE puce
+    // indépendante (identifiée par personnage + type, pas juste par type).
+    const talentChips = [];
+    playerTeam.forEach(f => {
+      [f.type1, f.type2].filter(Boolean).forEach(typeId => {
+        talentChips.push({ instanceId: f.instanceId, typeId, owner: f });
+      });
+    });
+
     el.innerHTML = `
       <div class="screen-header"><h2>💃 Défilé — Planification</h2></div>
       <p class="defile-help">
         Glisse chacune de tes personnages sur ${_defileState.usesPerChar} passages, puis glisse
-        librement ses 3 Talents sur les passages de ton choix (une fois chacun par duel).
+        librement un Talent par personnage sur le passage de ton choix (une fois par duel).
       </p>
       <div class="defile-programme" id="defile-programme">
         ${programme.map((p, idx) => {
           const slot = assignment[idx];
           const fighter = slot ? playerTeam.find(f => f.instanceId === slot.instanceId) : null;
           const t = types.find(tt => tt.id === p.typeId);
-          const talentTypeId = talentPlacement[idx];
-          const talent = talentTypeId ? CWGameDatabase.DEFILE_TALENTS[talentTypeId] : null;
+          const talentSlot = talentPlacement[idx];
+          const talent = talentSlot ? CWGameDatabase.DEFILE_TALENTS[talentSlot.typeId] : null;
+          const talentOwner = talentSlot ? playerTeam.find(f => f.instanceId === talentSlot.instanceId) : null;
+
+          // Modificateur en direct de CETTE personnage face au type du passage
+          const liveMult = fighter ? CWGameDatabase.getBestTypeEffectiveness(fighter.type1, fighter.type2, p.typeId, null, state.typeMatrix) : null;
+
           return `
             <div class="defile-slot ${fighter ? 'filled' : ''}" data-round="${idx}">
               <div class="defile-slot-num">${p.round}</div>
@@ -6117,47 +6145,70 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                   </div>
                   <div class="defile-slot-stats">
                     ${typeBadge(fighter.type1)}${typeBadge(fighter.type2)}
-                    <span>✨${fighter.atk}</span><span>🌹${fighter.def}</span><span>🕊️${fighter.spd}</span>
+                    <span>${STAT_LABELS_SHORT.atk.slice(0,2)}${fighter.atk}</span><span>${STAT_LABELS_SHORT.def.slice(0,2)}${fighter.def}</span><span>${STAT_LABELS_SHORT.spd.slice(0,2)}${fighter.spd}</span>
                   </div>
+                  ${liveMult != null ? `<div class="defile-slot-mult ${_affinityMeta(liveMult).cls}">${_formatAffinityMult(liveMult)} sur ce thème</div>` : ''}
                 ` : `<span class="defile-slot-empty">Glisse une personnage ici</span>`}
                 <div class="defile-slot-talent-zone ${talent ? 'has-talent' : ''}">
                   ${talent
-                    ? `<span>⭐ ${talent.name}</span><button class="defile-talent-remove" data-round="${idx}" title="Retirer">✕</button>`
+                    ? `<span>⭐ ${talent.name} <small>(${talentOwner?.name || ''})</small></span><button class="defile-talent-remove" data-round="${idx}" title="Retirer">✕</button>`
                     : `<span class="defile-slot-empty">Dépose un Talent ici</span>`}
                 </div>
               </div>
             </div>`;
         }).join('')}
       </div>
-      <div class="defile-roster" id="defile-roster">
+
+      <div class="defile-roster-cards" id="defile-roster">
         ${playerTeam.map(f => {
           const left = _defileUsesLeft(f.instanceId);
+          const def = CWGameState.getCharDef(f.charId);
           return `
-            <div class="defile-chip ${left === 0 ? 'exhausted' : ''}" data-instance="${f.instanceId}" data-drag-kind="char">
-              <div class="defile-chip-name">${f.name} ${typeBadge(f.type1)}${typeBadge(f.type2)}</div>
-              <div class="defile-chip-stats">
-                <span>✨ ${f.atk}</span><span>🌹 ${f.def}</span><span>🕊️ ${f.spd}</span>
+            <div class="defile-fighter-card ${left === 0 ? 'exhausted' : ''}" data-instance="${f.instanceId}" data-drag-kind="char">
+              <div class="defile-fighter-card-portrait">
+                ${_detailPortraitImgHtml(def)}
               </div>
-              <div class="defile-chip-uses">${left} / ${_defileState.usesPerChar} passages restants</div>
+              <div class="defile-fighter-card-info">
+                <div class="defile-chip-name">${f.name} ${typeBadge(f.type1)}${typeBadge(f.type2)}</div>
+                <div class="defile-chip-stats">
+                  <span>${STAT_LABELS_SHORT.atk} ${f.atk}</span>
+                  <span>${STAT_LABELS_SHORT.def} ${f.def}</span>
+                  <span>${STAT_LABELS_SHORT.spd} ${f.spd}</span>
+                </div>
+                <div class="defile-chip-uses">${left} / ${_defileState.usesPerChar} passages restants</div>
+                ${_buildTypeAffinitiesHtml(f.type1, f.type2, true)}
+              </div>
             </div>`;
         }).join('')}
       </div>
-      <div class="defile-help" style="margin-top:14px;">Talents (glisse chacun sur le passage de ton choix) :</div>
+
+      <div class="defile-help" style="margin-top:14px;">
+        Talents disponibles — ${talentsPlaced}/${maxTalents} placés (glisse-en un sur le passage de ton choix, peu importe la personnage) :
+      </div>
       <div class="defile-roster" id="defile-talents">
-        ${playerTeam.map(f => {
-          const talent = CWGameDatabase.DEFILE_TALENTS[f.type1];
-          const round = _defileTalentRoundFor(f.type1);
-          const placed = round >= 0;
+        ${talentChips.map(chip => {
+          const talent = CWGameDatabase.DEFILE_TALENTS[chip.typeId];
+          const ownRound = _defileTalentChipRound(chip.instanceId, chip.typeId);
+          const placed = ownRound >= 0;
+          const limitReached = talentsPlaced >= maxTalents && !placed;
+          const disabled = placed || limitReached;
           return `
-            <div class="defile-chip defile-talent-chip ${placed ? 'exhausted' : ''}" data-type="${f.type1}" data-drag-kind="talent">
-              <div class="defile-chip-name">${typeBadge(f.type1)} ${talent?.name || f.type1}</div>
+            <div class="defile-chip defile-talent-chip ${disabled ? 'exhausted' : ''}"
+                 data-instance="${chip.instanceId}" data-type="${chip.typeId}" data-drag-kind="talent">
+              <div class="defile-chip-name">${typeBadge(chip.typeId)} ${talent?.name || chip.typeId}
+                <small style="color:var(--text-faint);font-weight:400;">— ${chip.owner.name}</small>
+              </div>
               <div class="defile-chip-talent-desc">${talent?.description || ''}</div>
-              <div class="defile-chip-uses">${placed ? `Placé — passage ${round + 1}` : 'Non placé'}</div>
+              <div class="defile-chip-uses">
+                ${placed ? `Placé — passage ${ownRound + 1}`
+                  : limitReached ? `Limite de ${maxTalents} Talents atteinte`
+                  : 'Non placé'}
+              </div>
             </div>`;
         }).join('')}
       </div>
       <button class="btn-primary" id="btn-defile-validate" ${canValidate ? '' : 'disabled'} style="width:100%;margin-top:14px;">
-        ${canValidate ? '✅ Valider le programme' : `Programme incomplet (${assignment.filter(Boolean).length}/${programme.length} placés, ${talentsPlaced}/${playerTeam.length} Talents)`}
+        ${canValidate ? '✅ Valider le programme' : `Programme incomplet (${assignment.filter(Boolean).length}/${programme.length} placés, ${talentsPlaced}/${maxTalents} Talents)`}
       </button>
     `;
 
@@ -6169,11 +6220,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     if (!el) return;
 
     // Glisser-déposer tactile/souris via Pointer Events (fonctionne au doigt ET à la souris)
-    el.querySelectorAll('.defile-chip:not(.exhausted)').forEach(chip => {
+    el.querySelectorAll('.defile-chip:not(.exhausted), .defile-fighter-card:not(.exhausted)').forEach(chip => {
       const kind = chip.dataset.dragKind;
       chip.addEventListener('pointerdown', (e) => {
-        if (kind === 'char') _startDefileDrag(e, 'char', chip.dataset.instance);
-        else _startDefileDrag(e, 'talent', chip.dataset.type);
+        if (kind === 'char') _startDefileDrag(e, 'char', { instanceId: chip.dataset.instance });
+        else _startDefileDrag(e, 'talent', { instanceId: chip.dataset.instance, typeId: chip.dataset.type });
       });
     });
 
@@ -6203,14 +6254,15 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
    * Démarre le glisser-déposer via Pointer Events (fonctionne au doigt ET à la
    * souris), pour deux sortes d'éléments :
    * - 'char'   : place une personnage sur un passage (limité à ses N usages)
-   * - 'talent' : place librement le Talent d'un type sur n'importe quel
-   *              passage déjà occupé par une personnage (peu importe laquelle)
+   * - 'talent' : place librement l'un des Talents d'une personnage (un par
+   *              type possédé) sur n'importe quel passage déjà occupé — une
+   *              même personnage ne peut en placer qu'un seul au total.
    */
   function _startDefileDrag(e, kind, payload) {
     e.preventDefault();
     const label = kind === 'char'
-      ? _defileState.playerTeam.find(f => f.instanceId === payload)?.name
-      : CWGameDatabase.DEFILE_TALENTS[payload]?.name;
+      ? _defileState.playerTeam.find(f => f.instanceId === payload.instanceId)?.name
+      : CWGameDatabase.DEFILE_TALENTS[payload.typeId]?.name;
     if (!label) return;
 
     const ghost = document.createElement('div');
@@ -6231,8 +6283,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       const round = parseInt(slotEl.dataset.round);
 
       if (kind === 'char') {
-        if (_defileUsesLeft(payload) > 0) {
-          _defileState.assignment[round] = { instanceId: payload };
+        if (_defileUsesLeft(payload.instanceId) > 0) {
+          _defileState.assignment[round] = { instanceId: payload.instanceId };
           _renderDefilePlanningDOM();
         } else {
           _showToast('⚠️ Cette personnage a déjà défilé le nombre de fois autorisé.', 'error');
@@ -6242,11 +6294,20 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           _showToast('⚠️ Place d\'abord une personnage sur ce passage.', 'error');
           return;
         }
-        // Un Talent donné ne peut être placé qu'à un seul endroit : on retire
-        // son ancien emplacement s'il en avait déjà un.
-        const prevRound = _defileTalentRoundFor(payload);
-        if (prevRound >= 0) delete _defileState.talentPlacement[prevRound];
-        _defileState.talentPlacement[round] = payload;
+        const cfg = CWGameState.get().config.combat;
+        const maxTalents = cfg.defileTalentsCount ?? 3;
+        const alreadyPlacedThisChip = _defileTalentChipRound(payload.instanceId, payload.typeId) >= 0;
+        const totalPlaced = Object.keys(_defileState.talentPlacement).length;
+        if (!alreadyPlacedThisChip && totalPlaced >= maxTalents) {
+          _showToast(`⚠️ Limite de ${maxTalents} Talents déjà atteinte.`, 'error');
+          return;
+        }
+        // Cette puce précise ne peut être placée qu'à un seul endroit à la fois
+        if (alreadyPlacedThisChip) {
+          const prevRound = _defileTalentChipRound(payload.instanceId, payload.typeId);
+          delete _defileState.talentPlacement[prevRound];
+        }
+        _defileState.talentPlacement[round] = { instanceId: payload.instanceId, typeId: payload.typeId };
         _renderDefilePlanningDOM();
       }
     };
@@ -6284,7 +6345,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     // sont placés les Talents) dans le format attendu par le moteur.
     const playerAssignment = _defileState.assignment.map((slot, idx) => slot ? {
       instanceId: slot.instanceId,
-      talentTypeId: _defileState.talentPlacement[idx] || null,
+      talentTypeId: _defileState.talentPlacement[idx]?.typeId || null,
     } : null);
 
     const result = CWDefileEngine.resolveDuel(
@@ -6292,9 +6353,40 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       _defileState.playerTeam, enemyTeam, cfg, matrix
     );
 
+    _applyDefileStats(result, playerAssignment);
+
     _defileLastResult = result;
     _defileState = null; // repart de zéro pour le prochain défilé
     showScreen('defile-result');
+  }
+
+  /**
+   * Met à jour les stats joueur ET personnage après un défilé : Défilés
+   * disputés/remportés, passages remportés, points cumulés — au niveau du
+   * joueur ET de chaque personnage qui a défilé.
+   */
+  function _applyDefileStats(result, playerAssignment) {
+    const state = CWGameState.get();
+    const stats = { ...state.player.stats };
+    stats.totalDefiles = (stats.totalDefiles || 0) + 1;
+    if (result.winner === 'player') stats.totalDefilesWon = (stats.totalDefilesWon || 0) + 1;
+
+    result.log.forEach((l, idx) => {
+      stats.totalDefilePoints = (stats.totalDefilePoints || 0) + l.playerScore;
+      const passageWon = l.playerScore > l.enemyScore;
+      if (passageWon) stats.totalPassagesWon = (stats.totalPassagesWon || 0) + 1;
+
+      const slot = playerAssignment[idx];
+      if (slot) {
+        const inst = CWGameState.getPlayerChar(slot.instanceId);
+        if (inst) {
+          inst.defilePointsEarned = (inst.defilePointsEarned || 0) + l.playerScore;
+          if (passageWon) inst.passagesWon = (inst.passagesWon || 0) + 1;
+        }
+      }
+    });
+
+    CWGameState.updatePlayer({ stats });
   }
 
   function renderDefileResult() {
@@ -6317,16 +6409,32 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         </div>
       </div>
       <div class="defile-result-log">
-        ${r.log.map(l => `
+        ${r.log.map(l => {
+          const pDef = l.playerCharId ? CWGameState.getCharDef(l.playerCharId) : null;
+          const eDef = l.enemyCharId  ? CWGameState.getCharDef(l.enemyCharId)  : null;
+          const multClass = (m) => m == null ? '' : m >= 2 ? 'defile-stat-good' : m <= 0.5 ? 'defile-stat-bad' : '';
+          const side = (def, name, score, mult, mirrored) => `
+            <div class="defile-result-side ${mirrored ? 'mirrored' : ''}">
+              <div class="fighter-portrait defile-result-portrait">
+                ${def ? _combatPortraitImgHtml(def) : ''}
+              </div>
+              <div class="defile-result-side-info">
+                <div class="defile-result-side-name">${name || '—'}</div>
+                <div class="defile-result-side-score">${score}</div>
+                <div class="defile-result-side-stat ${multClass(mult)}">${STAT_LABELS_SHORT[l.stat]} ${mult != null ? _formatAffinityMult(mult) : ''}</div>
+              </div>
+            </div>`;
+          return `
           <div class="defile-result-round">
             <div class="defile-result-round-num">Passage ${l.round} — ${STAT_LABELS_SHORT[l.stat]}</div>
-            <div class="defile-result-round-scores">
-              <span>${l.playerFighter || '—'} : ${l.playerScore}</span>
-              <span>${l.enemyFighter || '—'} : ${l.enemyScore}</span>
+            <div class="defile-result-round-mirror">
+              ${side(pDef, l.playerFighter, l.playerScore, l.playerMult, false)}
+              <div class="defile-result-round-vs">VS</div>
+              ${side(eDef, l.enemyFighter, l.enemyScore, l.enemyMult, true)}
             </div>
             ${l.events.length ? `<div class="defile-result-round-events">${l.events.join('<br>')}</div>` : ''}
-          </div>
-        `).join('')}
+          </div>`;
+        }).join('')}
       </div>
       <button class="btn-primary" id="btn-defile-back" style="width:100%;margin-top:14px;">Retour</button>
     `;
