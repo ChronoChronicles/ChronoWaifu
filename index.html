@@ -361,7 +361,7 @@
     font-size:.62rem; font-weight:700; text-align:center; padding:2px 0;
     border-radius:5px; margin-top:2px;
   }
-  .defile-roster-cards{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; align-items:start; }
+  .defile-roster-cards{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; align-items:start; }
   .defile-fighter-card{
     display:flex; gap:8px; background:rgba(255,255,255,.05);
     border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:8px;
@@ -384,6 +384,20 @@
   .defile-chip-stats{
     display:flex; gap:10px; font-size:.72rem; color:#e2d9f3;
     font-family:var(--font-mono); margin-top:4px;
+  }
+  .defile-chip-stats-grid{
+    display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:4px;
+    margin-top:6px; background:rgba(255,255,255,.04); border-radius:8px; padding:6px 4px;
+  }
+  .defile-chip-stat-col{
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    text-align:center; min-width:0;
+  }
+  .defile-chip-stat-label{
+    font-size:.6rem; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+  }
+  .defile-chip-stat-value{
+    font-family:var(--font-mono); font-size:.82rem; font-weight:800; color:#fff;
   }
   .defile-chip-uses{ font-size:.68rem; color:var(--text-dim); margin-top:4px; }
   .defile-talent-chip{ border-color:rgba(251,191,36,.3); background:rgba(251,191,36,.05); }

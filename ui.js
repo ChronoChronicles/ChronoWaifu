@@ -6170,10 +6170,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
               </div>
               <div class="defile-fighter-card-info">
                 <div class="defile-chip-name">${f.name} ${typeBadge(f.type1)}${typeBadge(f.type2)}</div>
-                <div class="defile-chip-stats">
-                  <span>${STAT_LABELS_SHORT.atk} ${f.atk}</span>
-                  <span>${STAT_LABELS_SHORT.def} ${f.def}</span>
-                  <span>${STAT_LABELS_SHORT.spd} ${f.spd}</span>
+                <div class="defile-chip-stats-grid">
+                  <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">✨</span><span class="defile-chip-stat-value">${f.atk}</span></div>
+                  <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🌹</span><span class="defile-chip-stat-value">${f.def}</span></div>
+                  <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🕊️</span><span class="defile-chip-stat-value">${f.spd}</span></div>
                 </div>
                 <div class="defile-chip-uses">${left} / ${_defileState.usesPerChar} tournages restants</div>
                 ${_buildTypeAffinitiesHtml(f.type1, f.type2, true)}
