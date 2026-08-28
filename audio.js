@@ -168,6 +168,17 @@ const CWAudioSystem = (() => {
     levelUp:   'sfx_levelup',
     evolution: 'sfx_evolution',
     gachaPull: 'sfx_gacha_pull',
+    // ── Mode Défilé ──────────────────────────────────────────────────────
+    defileReveal:    'sfx_defile_reveal',     // présentation d'une participante
+    defileScoreTick: 'sfx_defile_score_tick', // apparition d'un chiffre de score
+    defileTypeGood:  'sfx_defile_type_good',  // bonus de type favorable
+    defileTypeBad:   'sfx_defile_type_bad',   // malus de type défavorable
+    defileEndurance: 'sfx_defile_endurance',  // bonus de Forme révélé
+    defileTalent:    'sfx_defile_talent',     // activation d'un Talent
+    defileRoundWin:  'sfx_defile_round_win',  // tournage remporté
+    defileRoundLose: 'sfx_defile_round_lose', // tournage perdu
+    defileVictory:   'sfx_defile_victory',    // défilé remporté (applaudissements)
+    defileDefeat:    'sfx_defile_defeat',     // défilé perdu (déception)
   };
 
   // Bruitages "de coup" exclus de l'atténuation (ils sont volontairement courts et

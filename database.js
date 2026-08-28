@@ -173,6 +173,17 @@ const CWGameDatabase = (() => {
       sfxLevelUpName:   "",    // Bruitage : montée de niveau
       sfxEvolutionName: "",    // Bruitage : évolution
       sfxGachaPullName: "",    // Bruitage : tirage Gacha (et révélation de capture)
+      // ── Mode Défilé ────────────────────────────────────────────────────
+      sfxDefileRevealName:    "", // Présentation d'une participante
+      sfxDefileScoreTickName: "", // Apparition d'un chiffre de score
+      sfxDefileTypeGoodName:  "", // Bonus de type favorable
+      sfxDefileTypeBadName:   "", // Malus de type défavorable
+      sfxDefileEnduranceName: "", // Bonus de Forme révélé
+      sfxDefileTalentName:    "", // Activation d'un Talent
+      sfxDefileRoundWinName:  "", // Tournage remporté
+      sfxDefileRoundLoseName: "", // Tournage perdu
+      sfxDefileVictoryName:   "", // Défilé remporté (applaudissements)
+      sfxDefileDefeatName:    "", // Défilé perdu (déception)
     },
     // ── Fonds d'écran personnalisés ─────────────────────────────────────────
     // Une image hébergée (URL) par écran. null/absent = fond par défaut du thème.

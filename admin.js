@@ -5554,6 +5554,16 @@ const CWAdminPanel = (() => {
     sfx_levelup:    'sfxLevelUpName',
     sfx_evolution:  'sfxEvolutionName',
     sfx_gacha_pull: 'sfxGachaPullName',
+    sfx_defile_reveal:     'sfxDefileRevealName',
+    sfx_defile_score_tick: 'sfxDefileScoreTickName',
+    sfx_defile_type_good:  'sfxDefileTypeGoodName',
+    sfx_defile_type_bad:   'sfxDefileTypeBadName',
+    sfx_defile_endurance:  'sfxDefileEnduranceName',
+    sfx_defile_talent:     'sfxDefileTalentName',
+    sfx_defile_round_win:  'sfxDefileRoundWinName',
+    sfx_defile_round_lose: 'sfxDefileRoundLoseName',
+    sfx_defile_victory:    'sfxDefileVictoryName',
+    sfx_defile_defeat:     'sfxDefileDefeatName',
   };
 
   // ─── ONGLET TUTORIEL ─────────────────────────────────────────────────────────
@@ -6029,6 +6039,24 @@ const CWAdminPanel = (() => {
         ${fileRow('sfx_levelup',    'Montée de niveau', aCfg.sfxLevelUpName)}
         ${fileRow('sfx_evolution',  'Évolution', aCfg.sfxEvolutionName)}
         ${fileRow('sfx_gacha_pull', 'Révélation de carte (Gacha / capture)', aCfg.sfxGachaPullName)}
+      </div>
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">💃 Mode Défilé</div>
+        <p style="font-size:.8rem;color:#888;margin-bottom:14px;">
+          Bruitages joués pendant le déroulé animé d'un défilé, dans l'ordre où ils
+          interviennent à chaque tournage.
+        </p>
+        ${fileRow('sfx_defile_reveal',     'Présentation d\'une participante (entrée en scène)', aCfg.sfxDefileRevealName)}
+        ${fileRow('sfx_defile_score_tick', 'Apparition d\'un chiffre de score', aCfg.sfxDefileScoreTickName)}
+        ${fileRow('sfx_defile_type_good',  'Bonus de type favorable (efficace)', aCfg.sfxDefileTypeGoodName)}
+        ${fileRow('sfx_defile_type_bad',   'Malus de type défavorable (peu efficace)', aCfg.sfxDefileTypeBadName)}
+        ${fileRow('sfx_defile_endurance',  'Bonus de Forme révélé', aCfg.sfxDefileEnduranceName)}
+        ${fileRow('sfx_defile_talent',     'Activation d\'un Talent', aCfg.sfxDefileTalentName)}
+        ${fileRow('sfx_defile_round_win',  'Tournage remporté', aCfg.sfxDefileRoundWinName)}
+        ${fileRow('sfx_defile_round_lose', 'Tournage perdu', aCfg.sfxDefileRoundLoseName)}
+        ${fileRow('sfx_defile_victory',    'Défilé remporté (applaudissements)', aCfg.sfxDefileVictoryName)}
+        ${fileRow('sfx_defile_defeat',     'Défilé perdu (déception)', aCfg.sfxDefileDefeatName)}
       </div>
       <hr class="admin-sep" />
       <div class="admin-section" style="opacity:.55;">
