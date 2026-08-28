@@ -88,6 +88,20 @@ const CWGameDatabase = (() => {
       defilePlayerXpPercent:  5, // % du score total du défilé → XP joueur
       defileGoldPercent:      1, // % du score total du défilé → dollars
       // Diamants : à définir plus tard
+      // ── Grand Casting ────────────────────────────────────────────────────
+      reputationPercentOfScore: 10, // % du score d'un Défilé converti en Réputation
+      castingThresholdMin: 25,      // Nb minimum de Défilés avant un nouveau Casting
+      castingThresholdMax: 30,      // Nb maximum
+      castingCandidateCount: 4,     // Nombre de candidates proposées par Casting
+      castingRivalCount: 3,         // Nombre d'agences rivales simulées
+      // Prix de départ aux enchères, par rareté (en Réputation)
+      castingBasePriceByRarity: {
+        common: 50, uncommon: 120, rare: 300, epic: 700, legendary: 1500, mythic: 3500,
+      },
+      castingBidIncrement: 10,      // % d'augmentation minimum à chaque surenchère
+      castingConvictionBonus: 15,   // % de réduction du coût effectif si tag partagé avec la collection
+      castingRivalAggressionMin: 0.6, // Agressivité simulée des rivales (tirée entre min et max à chaque Casting)
+      castingRivalAggressionMax: 1.2,
       // ── Équilibrage joueur / ennemi ────────────────────────────────────────
       playerDmgBonus:  1.15, // Multiplicateur de dégâts joueur → ennemi (+15%)
       enemyDmgPenalty: 0.80, // Multiplicateur de dégâts ennemi → joueur (−20%)
@@ -854,6 +868,11 @@ const CWGameDatabase = (() => {
     recordBest: 0,          // Meilleur score jamais atteint en mode Performance
     recordClaimedTierCount: 0, // Nombre de paliers du totem déjà réclamés
     affinity: {},           // { [evolutionLine]: pourcentage 0-100 } — remplace le Gacha
+    // ── Grand Casting ────────────────────────────────────────────────────
+    reputation: 0,               // Ressource dédiée, cumulative entre les Castings
+    defilesSinceLastCasting: 0,  // Compteur, remis à 0 à l'ouverture d'un nouveau Casting
+    castingThreshold: null,      // Nb de Défilés à atteindre ce cycle (tiré 25-30, null = à initialiser)
+    currentCasting: null,        // Casting en cours (candidates + enchères), null si aucun ouvert
     storyMode: {           // Progression Mode Histoire
       // { [chapterIdx]: { completedStages: [1,2,...], highestStage: 3 } }
     },
@@ -1144,24 +1163,28 @@ const CWGameDatabase = (() => {
      * @param {object} combatCfg - config.combat (scoreDefReference, critDivisor, critMultiplier)
      * @returns {number}
      */
-    computeAuraScore(stats, combatCfg) {
-      const cfg = combatCfg || {};
-      const defRef         = cfg.scoreDefReference ?? 10;
-      const critDivisor    = cfg.critDivisor        ?? 200;
-      const critMultiplier = cfg.critMultiplier     ?? 1.5;
-
-      const atk = Math.max(1, stats?.atk || 0);
+    /**
+     * Score d'Aura — reflète directement la logique du Défilé plutôt que
+     * l'ancien combat (plus de PV/critique/DPS) :
+     * - Moyenne géométrique de Charisme/Prestance/Grâce (atk/def/spd), pour
+     *   garder l'esprit "pénalise les profils déséquilibrés" : un personnage
+     *   doit être polyvalente, pas juste excellente sur une seule stat.
+     * - Multipliée par (1 + potentiel maximal de Bonus Forme), calculé
+     *   exactement comme en jeu (Endurance max ÷ 100) — une personnage
+     *   endurante vaut structurellement plus dans ce nouveau système.
+     * @param {{hp:number, atk:number, def:number, spd:number}} stats
+     * @returns {number}
+     */
+    computeAuraScore(stats) {
+      const atk = Math.max(0, stats?.atk || 0);
       const def = Math.max(0, stats?.def || 0);
-      const hp  = Math.max(0, stats?.hp  || 0);
       const spd = Math.max(0, stats?.spd || 0);
+      const hp  = Math.max(0, stats?.hp  || 0);
 
-      const critChance = spd / (spd + critDivisor);
-      const critFactor = 1 + critChance * (critMultiplier - 1);
+      const geometricMean = Math.cbrt(Math.max(1, atk) * Math.max(1, def) * Math.max(1, spd));
+      const formeBonusMultiplier = 1 + (hp / 100) / 100; // ex: hp=7440 -> Bonus Forme max +74,4% -> ×1,744
 
-      const dps          = (atk * atk / (atk + defRef)) * critFactor;
-      const effectiveHp  = hp * (1 + def / defRef);
-
-      return Math.round(Math.sqrt(dps * effectiveHp));
+      return Math.round(geometricMean * formeBonusMultiplier);
     },
 
     /**
@@ -1182,16 +1205,10 @@ const CWGameDatabase = (() => {
     },
 
     /**
-     * Variante double-type côté attaquant : si l'attaquant a deux types,
-     * calcule l'efficacité de CHACUN de ses types contre le(s) type(s) du
-     * défenseur, et retourne le multiplicateur le plus avantageux (le plus
-     * élevé) parmi les deux. Équivaut à getTypeEffectiveness si atkType2 est null.
-     * @param {string} atkType1
-     * @param {string|null} atkType2
-     * @param {string} defType1
-     * @param {string|null} defType2
-     * @param {object} matrix
-     * @returns {number} Le meilleur multiplicateur entre les deux types de l'attaquant
+     * Variante double-type côté attaquant : si l'attaquant a deux types, les
+     * effets des DEUX se CUMULENT (multiplication), exactement comme les deux
+     * types du défenseur se cumulent déjà entre eux. Équivaut à
+     * getTypeEffectiveness si atkType2 est null.
      */
     getBestTypeEffectiveness(atkType1, atkType2, defType1, defType2, matrix) {
       const m = matrix || DEFAULT_TYPE_MATRIX;
@@ -1205,7 +1222,7 @@ const CWGameDatabase = (() => {
       const mult1 = computeFor(atkType1);
       if (!atkType2 || atkType2 === atkType1) return mult1;
       const mult2 = computeFor(atkType2);
-      return Math.max(mult1, mult2);
+      return mult1 * mult2;
     },
 
     /**

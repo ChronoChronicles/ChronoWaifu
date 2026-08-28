@@ -1810,9 +1810,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     `;
   }
 
-  function _buildTypeAffinitiesHtml(type1, type2, dealtOnly = false) {
-    const { dealt, received } = _computeTypeAffinities(type1, type2);
-    if (dealt.length === 0 && (dealtOnly || received.length === 0)) return '';
+  function _buildTypeAffinitiesHtml(type1, type2) {
+    const { dealt } = _computeTypeAffinities(type1, type2);
+    if (dealt.length === 0) return '';
 
     const renderGroups = (groups) => groups.map(({ mult, types }) => {
       const meta = _affinityMeta(mult);
@@ -1828,18 +1828,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     return `
       <div class="detail-affinities">
-        ${dealt.length > 0 ? `
-          <div class="affinity-section">
-            <div class="affinity-section-title">⚔️ Dégâts infligés</div>
-            ${renderGroups(_groupAffinitiesByMult(dealt))}
-          </div>
-        ` : ''}
-        ${(!dealtOnly && received.length > 0) ? `
-          <div class="affinity-section">
-            <div class="affinity-section-title">🛡️ Dégâts reçus</div>
-            ${renderGroups(_groupAffinitiesByMult(received))}
-          </div>
-        ` : ''}
+        <div class="affinity-section">
+          <div class="affinity-section-title">⚔️ Dégâts infligés</div>
+          ${renderGroups(_groupAffinitiesByMult(dealt))}
+        </div>
       </div>
     `;
   }
