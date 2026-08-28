@@ -6493,9 +6493,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     pSide.classList.remove('reveal'); eSide.classList.remove('reveal');
     void pSide.offsetWidth; // force le rejeu de l'animation à chaque tournage
     _setDefilePhaseCaption(`Présentation — ${l.playerFighter || '?'}`);
+    CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileReveal);
     pSide.classList.add('reveal');
     await _sleep(900);
     _setDefilePhaseCaption(`Présentation — ${l.enemyFighter || '?'}`);
+    CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileReveal);
     eSide.classList.add('reveal');
     await _sleep(1400);
 
@@ -6509,9 +6511,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     // D'ABORD, puis pour l'adversaire — jamais les deux en même temps
     _setDefilePhaseCaption(`Score de base (${statLabel}) — ${l.playerFighter || '?'}`);
     _setScorePop('dpb-score-player', l.playerStatValue ?? 0);
+    CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileScoreTick);
     await _sleep(2600);
     _setDefilePhaseCaption(`Score de base (${statLabel}) — ${l.enemyFighter || '?'}`);
     _setScorePop('dpb-score-enemy', l.enemyStatValue ?? 0);
+    CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileScoreTick);
     await _sleep(2600);
 
     // Phase 4 — bonus/malus de type révélé, score recalculé en direct
@@ -6520,21 +6524,25 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     _setDefilePhaseCaption(`Multiplicateur de type ${l.playerMult != null ? _formatAffinityMult(l.playerMult) : ''} — ${l.playerFighter || '?'}`);
     _showDefileTypeBadge('dpb-type-badge-player', l.playerMult);
     _setScorePop('dpb-score-player', pAfterType);
+    if (l.playerMult != null) CWAudioSystem.playSfx(l.playerMult >= 2 ? CWAudioSystem.SFX_KEYS.defileTypeGood : l.playerMult <= 0.5 ? CWAudioSystem.SFX_KEYS.defileTypeBad : null);
     await _sleep(2600);
     _setDefilePhaseCaption(`Multiplicateur de type ${l.enemyMult != null ? _formatAffinityMult(l.enemyMult) : ''} — ${l.enemyFighter || '?'}`);
     _showDefileTypeBadge('dpb-type-badge-enemy', l.enemyMult);
     _setScorePop('dpb-score-enemy', eAfterType);
+    if (l.enemyMult != null) CWAudioSystem.playSfx(l.enemyMult >= 2 ? CWAudioSystem.SFX_KEYS.defileTypeGood : l.enemyMult <= 0.5 ? CWAudioSystem.SFX_KEYS.defileTypeBad : null);
     await _sleep(2600);
 
     // Phase 4b — bonus de Forme (Endurance restante), révélé alliée puis adversaire
     if (l.playerEnduranceBonusPct != null) {
       _setDefilePhaseCaption(`Bonus Forme +${l.playerEnduranceBonusPct}% — ${l.playerFighter || '?'}`);
       _setScorePop('dpb-score-player', l.playerAfterEndurance ?? pAfterType);
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileEndurance);
       await _sleep(2600);
     }
     if (l.enemyEnduranceBonusPct != null) {
       _setDefilePhaseCaption(`Bonus Forme +${l.enemyEnduranceBonusPct}% — ${l.enemyFighter || '?'}`);
       _setScorePop('dpb-score-enemy', l.enemyAfterEndurance ?? eAfterType);
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileEndurance);
       await _sleep(2600);
     }
 
@@ -6544,6 +6552,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       if (_dpbSkip) break;
       const text = String(evt.text || evt).replace(/<[^>]+>/g, '');
       _setDefilePhaseCaption(`Talent activé : ${text}`);
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTalent);
       await _showDefileTalentBanner(text);
       // Met à jour le score affiché EN MÊME TEMPS que le texte — plus aucun
       // changement invisible révélé seulement au score final.
@@ -6561,6 +6570,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     await _sleep(2600);
     pSide.classList.toggle('winner', l.playerScore > l.enemyScore);
     eSide.classList.toggle('winner', l.enemyScore > l.playerScore);
+    CWAudioSystem.playSfx(l.playerScore > l.enemyScore ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose);
     await _sleep(1200);
 
     // Phase 7 — le score du tournage rejoint le total cumulé (compteur animé)
@@ -6953,6 +6963,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     if (!el || !_defileLastResult) return;
     const r = _defileLastResult;
     const won = r.winner === 'player';
+    CWAudioSystem.playSfx(won ? CWAudioSystem.SFX_KEYS.defileVictory : r.winner === 'tie' ? null : CWAudioSystem.SFX_KEYS.defileDefeat);
 
     el.innerHTML = `
       <div class="screen-header"><h2>${won ? '🏆 Défilé remporté !' : r.winner === 'tie' ? '🤝 Égalité' : '💔 Défilé perdu'}</h2></div>
