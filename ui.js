@@ -6377,6 +6377,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
               <div class="dpb-nameplate" id="dpb-name-player"></div>
             </div>
             <div class="dpb-stat-line" id="dpb-stat-player"></div>
+            <div class="dpb-endurance-line" id="dpb-endurance-player"></div>
             <div class="dpb-score-box">
               <div class="dpb-score-tag">Score</div>
               <div class="dpb-score-row">
@@ -6392,6 +6393,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
               <div class="dpb-nameplate" id="dpb-name-enemy"></div>
             </div>
             <div class="dpb-stat-line" id="dpb-stat-enemy"></div>
+            <div class="dpb-endurance-line" id="dpb-endurance-enemy"></div>
             <div class="dpb-score-box">
               <div class="dpb-score-tag">Score</div>
               <div class="dpb-score-row">
@@ -6402,6 +6404,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           </div>
         </div>
         <div class="dpb-phase-caption" id="dpb-phase-caption"></div>
+        <div class="dpb-event-log" id="dpb-event-log"></div>
         <button class="dpb-speed-btn" id="btn-dpb-speed">×1</button>
         <button class="dpb-skip-btn" id="btn-dpb-skip">Passer ›</button>
       </div>
@@ -6433,10 +6436,25 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   /** Affiche une légende explicative sous les cartes, décrivant ce qui se passe à l'instant */
   function _setDefilePhaseCaption(text) {
     const el = document.getElementById('dpb-phase-caption');
-    if (!el) return;
-    el.classList.remove('visible'); void el.offsetWidth;
-    el.textContent = text;
-    el.classList.add('visible');
+    if (el) {
+      el.classList.remove('visible'); void el.offsetWidth;
+      el.textContent = text;
+      el.classList.add('visible');
+    }
+    if (text) _appendDefileLog(text);
+  }
+
+  /** Ajoute une ligne au log d'événements du bas d'écran (utile si on n'a pas le temps de lire les légendes) */
+  function _appendDefileLog(text) {
+    const log = document.getElementById('dpb-event-log');
+    if (!log) return;
+    const line = document.createElement('div');
+    line.className = 'dpb-log-line';
+    line.textContent = text;
+    log.appendChild(line);
+    // Garde un historique raisonnable, défile automatiquement vers le bas
+    while (log.children.length > 30) log.removeChild(log.firstChild);
+    log.scrollTop = log.scrollHeight;
   }
 
   /** Joue l'intégralité de la séquence d'UN tournage, sans le moindre chevauchement */
@@ -6464,6 +6482,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     $('dpb-type-badge-enemy').textContent = '';
     $('dpb-side-player').classList.remove('winner');
     $('dpb-side-enemy').classList.remove('winner');
+    $('dpb-endurance-player').textContent = l.playerEndurancePercent != null ? `Forme : ${l.playerEndurancePercent}%` : '';
+    $('dpb-endurance-enemy').textContent  = l.enemyEndurancePercent  != null ? `Forme : ${l.enemyEndurancePercent}%`  : '';
 
     const statLabel = STAT_LABELS_SHORT[l.stat].replace(/^[^\s]+\s/, ''); // enlève l'icône, garde le mot
 
@@ -6505,6 +6525,18 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     _showDefileTypeBadge('dpb-type-badge-enemy', l.enemyMult);
     _setScorePop('dpb-score-enemy', eAfterType);
     await _sleep(2600);
+
+    // Phase 4b — bonus de Forme (Endurance restante), révélé alliée puis adversaire
+    if (l.playerEnduranceBonusPct != null) {
+      _setDefilePhaseCaption(`Bonus Forme +${l.playerEnduranceBonusPct}% — ${l.playerFighter || '?'}`);
+      _setScorePop('dpb-score-player', l.playerAfterEndurance ?? pAfterType);
+      await _sleep(2600);
+    }
+    if (l.enemyEnduranceBonusPct != null) {
+      _setDefilePhaseCaption(`Bonus Forme +${l.enemyEnduranceBonusPct}% — ${l.enemyFighter || '?'}`);
+      _setScorePop('dpb-score-enemy', l.enemyAfterEndurance ?? eAfterType);
+      await _sleep(2600);
+    }
 
     // Phase 5 — les Talents s'activent un par un (jamais deux en même temps),
     // avec la même grande bannière que celle utilisée en combat classique
@@ -6554,10 +6586,22 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   }
 
   /** Met à jour un score avec un petit effet de "pop" pour bien marquer le changement */
+  /** Anime un score en le faisant défiler rapidement jusqu'à sa valeur finale (façon compteur) */
   function _setScorePop(elId, value) {
     const el = document.getElementById(elId);
     if (!el) return;
-    el.textContent = value;
+    const target = Math.round(value);
+    const from = parseInt(el.textContent, 10) || 0;
+    const duration = 500;
+    const start = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 2); // ease-out : rapide au début, se stabilise à la fin
+      el.textContent = Math.round(from + (target - from) * eased);
+      if (t < 1) requestAnimationFrame(step);
+      else el.textContent = target;
+    }
+    requestAnimationFrame(step);
     el.classList.remove('score-pop'); void el.offsetWidth; el.classList.add('score-pop');
   }
 
@@ -6729,12 +6773,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           ${plan.charXp.map(c => {
             const inst = CWGameState.getPlayerChar(c.instanceId);
             const def  = inst ? CWGameState.getCharDef(inst.charId) : null;
+            const startNeeded = inst ? CWGameDatabase.xpForLevel(inst.level + 1, state.config.level) : 1;
+            const startPct = inst ? Math.min(100, (inst.xp / startNeeded) * 100) : 0;
             return `
               <div class="reward-row">
                 <div class="reward-row-portrait">${def ? _combatPortraitImgHtml(def) : ''}</div>
                 <div class="reward-row-info">
                   <div class="reward-row-name">${c.name} <span class="reward-row-level" id="reward-level-${c.instanceId}">Niv. ${inst?.level ?? '?'}</span></div>
-                  <div class="reward-bar-track"><div class="reward-bar-fill" id="reward-bar-${c.instanceId}" style="width:0%"></div></div>
+                  <div class="reward-bar-track"><div class="reward-bar-fill" id="reward-bar-${c.instanceId}" style="width:${startPct}%"></div></div>
                   <div class="reward-row-gain">+${c.xpAmount} XP</div>
                 </div>
               </div>`;
@@ -6783,12 +6829,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const levelEl = document.getElementById(`reward-level-${c.instanceId}`);
     if (!inst || !barEl) return;
 
-    const startLevel = inst.level, startXp = inst.xp;
-    const startNeeded = CWGameDatabase.xpForLevel(startLevel + 1, levelCfg);
-    barEl.style.transition = 'none';
-    barEl.style.width = `${Math.min(100, (startXp / startNeeded) * 100)}%`;
-    void barEl.offsetWidth;
-    barEl.style.transition = 'width 650ms ease';
+    const startLevel = inst.level;
     await _rewardSleep(150);
 
     const result = CWGameState.addXpToCharacter(c.instanceId, c.xpAmount); // applique réellement le gain

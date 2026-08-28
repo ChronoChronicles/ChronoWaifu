@@ -134,7 +134,7 @@ const CWDefileEngine = (() => {
 
     const enduranceLoss = cfg.defileEnduranceLossPct ?? 15;
     const enduranceGain = cfg.defileEnduranceGainPct ?? 15;
-    const enduranceFactor = cfg.defileEnduranceScoreFactor ?? 0.4;
+    const enduranceFactor = cfg.defileEnduranceScoreFactor ?? 0.01;
 
     // Talent copié par une éventuelle Légende (choisi AVANT toute planification)
     const legendeCopy = choices.legendeCopyTypeId || null;
@@ -144,11 +144,20 @@ const CWDefileEngine = (() => {
       return CWGameDatabase.DEFILE_TALENTS[typeId];
     }
 
-    function baseScore(fighter, passage) {
+    function computeSideScore(fighter, passage) {
+      const statValue = fighter[passage.stat];
       const mult = CWGameDatabase.getBestTypeEffectiveness(fighter.type1, fighter.type2, passage.typeId, null, matrix);
+      const afterType = statValue * mult;
+      const endurancePercent = fighter.endurance;
+      // "Forme restante" = valeur ABSOLUE (comme les PV), pas un pourcentage :
+      // enduranceMax × (endurancePercent/100). Le bonus = 1% de cette valeur
+      // absolue (ex: 785 de Forme restante → +7,85%, arrondi à l'unité supérieure).
+      const enduranceRemaining = fighter.enduranceMax * (endurancePercent / 100);
+      const enduranceBonusPct = enduranceRemaining * enduranceFactor; // valeur décimale précise (ex: 0,32%), pas arrondie ici
+      const afterEndurance = afterType * (1 + enduranceBonusPct / 100);
       const variance = 1 + (Math.random() * 0.1 - 0.05); // ±5%, comme en combat classique
-      const enduranceMult = 1 + (fighter.endurance / 100) * enduranceFactor;
-      return fighter[passage.stat] * mult * variance * enduranceMult;
+      const final = afterEndurance * variance;
+      return { statValue, mult, afterType, endurancePercent, enduranceRemaining: Math.round(enduranceRemaining), enduranceBonusPct, afterEndurance, final };
     }
 
     for (let i = 0; i < rounds; i++) {
@@ -173,9 +182,19 @@ const CWDefileEngine = (() => {
         f.endurance = Math.max(0, Math.min(100, f.endurance + (isWalkingThisRound ? -enduranceLoss : enduranceGain)));
       });
 
-      // Scores de base
-      let pScore = pFighter ? baseScore(pFighter, effectivePassage) : 0;
-      let eScore = eFighter ? baseScore(eFighter, effectivePassage) : 0;
+      // Scores de base — calcul détaillé, exposé dans l'entrée pour l'animation
+      const pDetail = pFighter ? computeSideScore(pFighter, effectivePassage) : null;
+      const eDetail = eFighter ? computeSideScore(eFighter, effectivePassage) : null;
+      let pScore = pDetail ? pDetail.final : 0;
+      let eScore = eDetail ? eDetail.final : 0;
+      entry.playerEndurancePercent  = pDetail?.endurancePercent  ?? null;
+      entry.enemyEndurancePercent   = eDetail?.endurancePercent  ?? null;
+      entry.playerEnduranceBonusPct = pDetail?.enduranceBonusPct ?? null;
+      entry.enemyEnduranceBonusPct  = eDetail?.enduranceBonusPct ?? null;
+      entry.playerAfterType = pDetail ? Math.round(pDetail.afterType) : null;
+      entry.enemyAfterType  = eDetail ? Math.round(eDetail.afterType) : null;
+      entry.playerAfterEndurance = pDetail ? Math.round(pDetail.afterEndurance) : null;
+      entry.enemyAfterEndurance  = eDetail ? Math.round(eDetail.afterEndurance) : null;
 
       // ── Talents programmés sur CE passage (déjà placés lors de la planification) ──
       const pTalentId = pSlot?.talentTypeId || null;
@@ -308,16 +327,16 @@ const CWDefileEngine = (() => {
       if (pTalentId && !pIsElegance) applyTalent(pTalentId, true, pTalentCancelledRef.value);
       if (eTalentId && !eIsElegance) applyTalent(eTalentId, false, eTalentCancelledRef.value);
 
-      playerScores[i] = Math.max(0, Math.round(pScore));
-      enemyScores[i]  = Math.max(0, Math.round(eScore));
+      playerScores[i] = Math.max(0, Math.ceil(pScore));
+      enemyScores[i]  = Math.max(0, Math.ceil(eScore));
       entry.playerFighter = pFighter?.name || null;
       entry.enemyFighter  = eFighter?.name || null;
       entry.playerCharId  = pFighter?.charId || null;
       entry.enemyCharId   = eFighter?.charId || null;
-      entry.playerMult = pFighter ? CWGameDatabase.getBestTypeEffectiveness(pFighter.type1, pFighter.type2, effectivePassage.typeId, null, matrix) : null;
-      entry.enemyMult  = eFighter ? CWGameDatabase.getBestTypeEffectiveness(eFighter.type1, eFighter.type2, effectivePassage.typeId, null, matrix) : null;
-      entry.playerStatValue = pFighter ? Math.round(pFighter[effectivePassage.stat]) : null;
-      entry.enemyStatValue  = eFighter ? Math.round(eFighter[effectivePassage.stat]) : null;
+      entry.playerMult = pDetail?.mult ?? null;
+      entry.enemyMult  = eDetail?.mult ?? null;
+      entry.playerStatValue = pDetail ? Math.round(pDetail.statValue) : null;
+      entry.enemyStatValue  = eDetail ? Math.round(eDetail.statValue) : null;
       entry.playerScore = playerScores[i];
       entry.enemyScore  = enemyScores[i];
       log.push(entry);

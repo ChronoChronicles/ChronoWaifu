@@ -63,7 +63,7 @@ const CWGameDatabase = (() => {
       defileStartEndurancePct: 50,    // Endurance de départ (% de l'Endurance max)
       defileEnduranceLossPct: 15,     // Perdue quand la personnage défile
       defileEnduranceGainPct: 15,     // Regagnée quand elle est au repos ce passage
-      defileEnduranceScoreFactor: 0.4,// Score final ×(1 + Endurance/100 × ce facteur)
+      defileEnduranceScoreFactor: 0.01, // Bonus de score = ce taux × la Forme restante EN VALEUR ABSOLUE (ex: 785 de Forme restante → +7,85%, arrondi au supérieur)
       // Ampleur de chaque Talent (tous exprimés en %)
       defileTalentCharmeBonus: 15,       // Grand Sourire : + points garantis
       defileTalentRebelleMalus: 20,      // Sale Rumeur : − points prochain passage adverse
