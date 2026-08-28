@@ -6579,6 +6579,21 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     }
     await _sleep(600);
 
+    // Phase 6c — la journée se termine, la Forme redescend EN DIRECT sous
+    // chaque carte, avec la baisse visible et une mention explicative
+    if (l.playerWalked && l.playerEnduranceBefore != null) {
+      const dropAmount = l.playerEnduranceBefore - l.playerEnduranceAfter;
+      _setDefilePhaseCaption(`La journée est terminée, ${l.playerFighter} est fatiguée : -${dropAmount}% Forme`);
+      await _animateDefileEnduranceDrop('dpb-endurance-player', l.playerEnduranceMax, l.playerEnduranceBefore, l.playerEnduranceAfter);
+      await _sleep(1800);
+    }
+    if (l.enemyWalked && l.enemyEnduranceBefore != null) {
+      const dropAmount = l.enemyEnduranceBefore - l.enemyEnduranceAfter;
+      _setDefilePhaseCaption(`La journée est terminée, ${l.enemyFighter} est fatiguée : -${dropAmount}% Forme`);
+      await _animateDefileEnduranceDrop('dpb-endurance-enemy', l.enemyEnduranceMax, l.enemyEnduranceBefore, l.enemyEnduranceAfter);
+      await _sleep(1800);
+    }
+
     // Phase 7 — le score du tournage rejoint le total cumulé (compteur animé)
     _setDefilePhaseCaption('Ajout au score total cumulé');
     await Promise.all([
@@ -6586,6 +6601,26 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       _animateCountUp('dpb-total-enemy',  totalEBefore,  totalEBefore  + l.enemyScore,  700),
     ]);
     await _sleep(1200);
+  }
+
+  /** Anime la baisse de Forme d'une personnage sous sa carte, en valeur X/Y, avec un effet visuel de fatigue */
+  function _animateDefileEnduranceDrop(elId, enduranceMax, fromPct, toPct) {
+    return new Promise(resolve => {
+      const el = document.getElementById(elId);
+      if (!el || enduranceMax == null) { resolve(); return; }
+      el.classList.add('endurance-dropping');
+      const duration = 900;
+      const start = performance.now();
+      function step(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const pct = fromPct + (toPct - fromPct) * t;
+        const remaining = Math.round(enduranceMax * (pct / 100));
+        el.textContent = `Forme : ${remaining}/${enduranceMax}`;
+        if (t < 1) requestAnimationFrame(step);
+        else { el.classList.remove('endurance-dropping'); resolve(); }
+      }
+      requestAnimationFrame(step);
+    });
   }
 
   /**
@@ -6829,6 +6864,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                   <div class="reward-row-name">${c.name} <span class="reward-row-level" id="reward-level-${c.instanceId}">Niv. ${inst?.level ?? '?'}</span></div>
                   <div class="reward-bar-track"><div class="reward-bar-fill" id="reward-bar-${c.instanceId}" style="width:${startPct}%"></div></div>
                   <div class="reward-row-gain">+${c.xpAmount} XP</div>
+                  <div class="reward-stat-changes" id="reward-stats-${c.instanceId}"></div>
                 </div>
               </div>`;
           }).join('')}
@@ -6888,6 +6924,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const inst = CWGameState.getPlayerChar(c.instanceId);
     const barEl = document.getElementById(`reward-bar-${c.instanceId}`);
     const levelEl = document.getElementById(`reward-level-${c.instanceId}`);
+    const statsEl = document.getElementById(`reward-stats-${c.instanceId}`);
     if (!inst || !barEl) return;
 
     const startLevel = inst.level;
@@ -6898,6 +6935,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     let level = startLevel;
     for (const newLevel of result.levelUps) {
       barEl.style.width = '100%';
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.levelUp);
       await _rewardSleep(600);
       level = newLevel;
       levelEl.textContent = `Niv. ${level}`;
@@ -6911,6 +6949,26 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const finalNeeded = CWGameDatabase.xpForLevel(level + 1, levelCfg);
     barEl.style.width = `${Math.min(100, (inst.xp / finalNeeded) * 100)}%`;
     await _rewardSleep(600);
+
+    // Évolution éventuelle (son + mention) puis affichage des stats gagnées
+    if (result.evolved) {
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.evolution);
+      if (statsEl) {
+        statsEl.innerHTML = `<div class="reward-evolved-tag">✨ A évolué !</div>`;
+        await _rewardSleep(400);
+      }
+    }
+    if (statsEl && (result.levelUps.length > 0 || result.evolved) && result.statsOld && result.statsNew) {
+      const STAT_ICONS = { atk: '✨', def: '🌹', spd: '🕊️', hp: '💗' };
+      const STAT_NAMES = { atk: 'Charisme', def: 'Prestance', spd: 'Grâce', hp: 'Endurance' };
+      const rows = Object.keys(STAT_ICONS).map(key => {
+        const before = Math.round(result.statsOld[key] || 0);
+        const after  = Math.round(result.statsNew[key] || 0);
+        if (after === before) return '';
+        return `<div class="reward-stat-row">${STAT_ICONS[key]} ${STAT_NAMES[key]} : ${before} → <strong>${after}</strong> (+${after - before})</div>`;
+      }).join('');
+      statsEl.innerHTML += rows;
+    }
   }
 
   /** Anime les jauges d'affinité gagnées, lignée par lignée */
@@ -6926,12 +6984,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       const g = grouped[lineageId];
       const rd = CWGameDatabase.RARITIES[g.rarity] || {};
       const startPercent = CWGameState.getAffinityPercent(lineageId);
+      const baseCharNow = CWGameState.get().characters.find(c => c.evolutionLine === lineageId && c.evolutionStage === 0);
 
       const row = document.createElement('div');
-      row.className = 'reward-row';
+      row.className = 'reward-row affinity-reward-row';
       row.innerHTML = `
         <div class="reward-row-portrait affinity-reward-portrait" id="affinity-reward-portrait-${lineageId}">
-          <div class="unknown-silhouette">?</div>
+          ${baseCharNow ? _combatPortraitImgHtml(baseCharNow) : `<div class="unknown-silhouette">?</div>`}
         </div>
         <div class="reward-row-info">
           <div class="reward-row-name">${g.enemyName} <span class="affinity-rarity-badge" style="background:${rd.color}">${rd.name}</span></div>
@@ -7065,11 +7124,25 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     renderCasting();
   }
 
+  let _affinitySortMode = 'rarity'; // 'rarity' | 'name' | 'percent'
+  let _affinityHideUndiscovered = false;
+
+  const RARITY_ORDER_INDEX = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4, mythic: 5 };
+
   function renderAffinity() {
     const el = document.getElementById('screen-affinity');
     if (!el) return;
     const state = CWGameState.get();
-    const progress = CWGameState.getAllAffinityProgress();
+    let progress = CWGameState.getAllAffinityProgress();
+
+    if (_affinityHideUndiscovered) progress = progress.filter(p => p.percent > 0);
+
+    progress = [...progress].sort((a, b) => {
+      if (_affinitySortMode === 'name')    return a.baseChar.name.localeCompare(b.baseChar.name);
+      if (_affinitySortMode === 'percent') return b.percent - a.percent;
+      // rarity (du plus rare au plus commun)
+      return (RARITY_ORDER_INDEX[b.baseChar.rarity] ?? 0) - (RARITY_ORDER_INDEX[a.baseChar.rarity] ?? 0);
+    });
 
     el.innerHTML = `
       <div class="screen-header"><h2>💞 Affinités</h2></div>
@@ -7080,8 +7153,19 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         Chaque tournage de Défilé gagné contre une personnage augmente ton
         affinité avec sa lignée. À 100%, elle rejoint ta collection.
       </p>
+      <div class="affinity-controls">
+        <select id="affinity-sort-select" class="affinity-sort-select">
+          <option value="rarity"  ${_affinitySortMode === 'rarity'  ? 'selected' : ''}>Trier par rareté</option>
+          <option value="name"    ${_affinitySortMode === 'name'    ? 'selected' : ''}>Trier par nom</option>
+          <option value="percent" ${_affinitySortMode === 'percent' ? 'selected' : ''}>Trier par taux d'affinité</option>
+        </select>
+        <label class="affinity-filter-toggle">
+          <input type="checkbox" id="affinity-hide-toggle" ${_affinityHideUndiscovered ? 'checked' : ''} />
+          Masquer les non-affinées
+        </label>
+      </div>
       ${progress.length === 0 ? `
-        <p class="empty-msg">Toutes les lignées disponibles ont déjà rejoint ta collection !</p>
+        <p class="empty-msg">${_affinityHideUndiscovered ? 'Aucune lignée avec de l\'affinité pour l\'instant.' : 'Toutes les lignées disponibles ont déjà rejoint ta collection !'}</p>
       ` : `
         <div class="affinity-list">
           ${progress.map(p => {
@@ -7110,6 +7194,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       `}
     `;
     document.getElementById('btn-goto-casting')?.addEventListener('click', () => showScreen('casting'));
+    document.getElementById('affinity-sort-select')?.addEventListener('change', (e) => {
+      _affinitySortMode = e.target.value;
+      renderAffinity();
+    });
+    document.getElementById('affinity-hide-toggle')?.addEventListener('change', (e) => {
+      _affinityHideUndiscovered = e.target.checked;
+      renderAffinity();
+    });
   }
 
   function renderDefileResult() {

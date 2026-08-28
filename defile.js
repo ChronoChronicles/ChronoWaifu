@@ -179,11 +179,8 @@ const CWDefileEngine = (() => {
         entry.events.push({ text: `🎲 Catégorie chamboulée (Chaos de Casting) → ${effectivePassage.stat}`, playerScoreAfter: null, enemyScoreAfter: null });
       }
 
-      // Endurance : baisse si elle défile, remonte si elle est au repos ce passage
-      [...playerTeam, ...enemyTeam].forEach(f => {
-        const isWalkingThisRound = (pFighter && f.instanceId === pFighter.instanceId) || (eFighter && f.instanceId === eFighter.instanceId);
-        f.endurance = Math.max(0, Math.min(100, f.endurance + (isWalkingThisRound ? -enduranceLoss : enduranceGain)));
-      });
+      // (l'Endurance est désormais mise à jour APRÈS le score final du
+      // tournage, cf. plus bas — elle reflète ici l'état AVANT ce tournage)
 
       // Scores de base — calcul détaillé, exposé dans l'entrée pour l'animation
       const pDetail = pFighter ? computeSideScore(pFighter, effectivePassage) : null;
@@ -354,6 +351,21 @@ const CWDefileEngine = (() => {
       entry.enemyStatValue  = eDetail ? Math.ceil(eDetail.statValue) : null;
       entry.playerScore = playerScores[i];
       entry.enemyScore  = enemyScores[i];
+
+      // Endurance : mise à jour APRÈS le score final de ce tournage (elle
+      // reflète la fatigue/le repos qui s'installe EN CONSÉQUENCE de ce
+      // tournage, visible juste après le score plutôt que masquée avant).
+      entry.playerEnduranceBefore = pFighter ? pFighter.endurance : null;
+      entry.enemyEnduranceBefore  = eFighter ? eFighter.endurance : null;
+      [...playerTeam, ...enemyTeam].forEach(f => {
+        const isWalkingThisRound = (pFighter && f.instanceId === pFighter.instanceId) || (eFighter && f.instanceId === eFighter.instanceId);
+        f.endurance = Math.max(0, Math.min(100, f.endurance + (isWalkingThisRound ? -enduranceLoss : enduranceGain)));
+      });
+      entry.playerEnduranceAfter = pFighter ? pFighter.endurance : null;
+      entry.enemyEnduranceAfter  = eFighter ? eFighter.endurance : null;
+      entry.playerWalked = !!pFighter;
+      entry.enemyWalked  = !!eFighter;
+
       log.push(entry);
     }
 

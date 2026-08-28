@@ -516,7 +516,10 @@
   }
   .dpb-endurance-line{
     font-size:.66rem; color:#4ade80; font-weight:600; min-height:1.2em; margin-bottom:8px;
+    transition:color 300ms ease;
   }
+  .dpb-endurance-line.endurance-dropping{ color:#f87171; animation:enduranceShake 300ms ease infinite; }
+  @keyframes enduranceShake{ 0%,100%{ transform:translateX(0); } 50%{ transform:translateX(-1px); } }
   .dpb-event-log{
     max-height:110px; overflow-y:auto; margin-top:18px; padding:8px 10px;
     background:rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.08); border-radius:10px;
@@ -552,6 +555,18 @@
   }
 
   /* ── ÉCRAN AFFINITÉS ── */
+  .affinity-controls{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    margin-bottom:12px; flex-wrap:wrap;
+  }
+  .affinity-sort-select{
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15);
+    color:#fff; font-size:.76rem; padding:6px 10px; border-radius:8px;
+  }
+  .affinity-filter-toggle{
+    display:flex; align-items:center; gap:6px; font-size:.74rem; color:var(--text-dim);
+    cursor:pointer;
+  }
   .affinity-list{ display:flex; flex-direction:column; gap:10px; }
   .affinity-card{
     display:flex; gap:12px; background:rgba(255,255,255,.04);
@@ -596,6 +611,13 @@
   }
   .affinity-reward-fill{ background:linear-gradient(90deg,#f472b6,#a78bfa); }
   .reward-row-gain{ font-family:var(--font-mono); font-size:.68rem; color:var(--text-dim); text-align:right; }
+  .reward-stat-changes{ margin-top:6px; }
+  .reward-stat-row{ font-size:.68rem; color:#4ade80; font-family:var(--font-mono); line-height:1.5; }
+  .reward-evolved-tag{
+    font-size:.72rem; font-weight:800; color:#fbbf24; margin-bottom:2px;
+    text-shadow:0 0 8px rgba(251,191,36,.5);
+  }
+  .affinity-reward-row{ border-color:rgba(244,114,182,.35); background:rgba(244,114,182,.06); }
   .rewards-money{
     text-align:center; font-family:var(--font-mono); font-size:1.5rem; font-weight:800;
     color:#4ade80; margin-top:10px; opacity:0; animation:broFadeIn 400ms ease forwards;
