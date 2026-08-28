@@ -6511,8 +6511,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     await _sleep(2600);
 
     // Phase 4 — bonus/malus de type révélé, score recalculé en direct
-    const pAfterType = (l.playerStatValue != null && l.playerMult != null) ? Math.round(l.playerStatValue * l.playerMult) : l.playerStatValue;
-    const eAfterType = (l.enemyStatValue  != null && l.enemyMult  != null) ? Math.round(l.enemyStatValue  * l.enemyMult)  : l.enemyStatValue;
+    const pAfterType = l.playerAfterType ?? l.playerStatValue;
+    const eAfterType = l.enemyAfterType  ?? l.enemyStatValue;
     _setDefilePhaseCaption(`Multiplicateur de type ${l.playerMult != null ? _formatAffinityMult(l.playerMult) : ''} — ${l.playerFighter || '?'}`);
     _showDefileTypeBadge('dpb-type-badge-player', l.playerMult);
     _setScorePop('dpb-score-player', pAfterType);
@@ -6635,18 +6635,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   function _setScorePop(elId, value) {
     const el = document.getElementById(elId);
     if (!el) return;
-    const target = Math.round(value);
-    const from = parseInt(el.textContent, 10) || 0;
-    const duration = 500;
-    const start = performance.now();
-    function step(now) {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - t, 2); // ease-out : rapide au début, se stabilise à la fin
-      el.textContent = Math.round(from + (target - from) * eased);
-      if (t < 1) requestAnimationFrame(step);
-      else el.textContent = target;
-    }
-    requestAnimationFrame(step);
+    // Affichage direct et instantané — l'ancienne animation "compteur qui
+    // défile" (via requestAnimationFrame) pouvait être lue par le joueur
+    // AVANT la fin des 500ms, montrant une valeur intermédiaire au lieu de
+    // la vraie valeur finale. Retirée pour éliminer toute ambiguïté.
+    el.textContent = Math.round(value);
     el.classList.remove('score-pop'); void el.offsetWidth; el.classList.add('score-pop');
   }
 

@@ -145,22 +145,22 @@ const CWDefileEngine = (() => {
     }
 
     function computeSideScore(fighter, passage) {
-      const statValue = fighter[passage.stat];
+      const statValue = Math.ceil(fighter[passage.stat]);
       const mult = CWGameDatabase.getBestTypeEffectiveness(fighter.type1, fighter.type2, passage.typeId, null, matrix);
-      const variance = 1 + (Math.random() * 0.1 - 0.05); // ±5%, appliquée ICI (avant le Bonus Forme affiché)
-      const afterType = statValue * mult * variance;
+      const afterType = Math.ceil(statValue * mult); // plus de variance aléatoire : calcul 100% déterministe
       const endurancePercent = fighter.endurance;
       // "Forme restante" = valeur ABSOLUE (comme les PV), pas un pourcentage :
-      // enduranceMax × (endurancePercent/100). Bonus = ce facteur × cette
-      // valeur absolue, arrondi à l'unité supérieure (ex: 785 → +8%).
-      const enduranceRemaining = fighter.enduranceMax * (endurancePercent / 100);
+      // enduranceMax × (endurancePercent/100). Bonus = cette valeur absolue
+      // ÷ 100, arrondi à l'unité supérieure (ex: 785 → +8%).
+      const enduranceRemaining = Math.ceil(fighter.enduranceMax * (endurancePercent / 100));
       const enduranceBonusPct = Math.ceil(enduranceRemaining / 100);
-      const afterEndurance = afterType * (1 + enduranceBonusPct / 100);
-      // Plus aucun calcul après ceci : ce qui est affiché comme "Bonus Forme"
-      // EST la valeur utilisée pour le score final (sauf Talent, qui a sa
-      // propre étape explicite et donc justifiée aux yeux du joueur).
+      // IMPORTANT : ce calcul part de "afterType" déjà arrondi ci-dessus —
+      // exactement le nombre affiché à l'écran à l'étape précédente. Plus
+      // aucun écart possible entre ce que le joueur voit et ce qui est
+      // réellement utilisé pour la suite du calcul.
+      const afterEndurance = Math.ceil(afterType * (1 + enduranceBonusPct / 100));
       const final = afterEndurance;
-      return { statValue, mult, afterType, endurancePercent, enduranceRemaining: Math.round(enduranceRemaining), enduranceBonusPct, afterEndurance, final };
+      return { statValue, mult, afterType, endurancePercent, enduranceRemaining, enduranceBonusPct, afterEndurance, final };
     }
 
     for (let i = 0; i < rounds; i++) {
@@ -198,10 +198,10 @@ const CWDefileEngine = (() => {
       entry.enemyEnduranceMax  = eFighter ? Math.round(eFighter.enduranceMax) : null;
       entry.playerEnduranceBonusPct = pDetail?.enduranceBonusPct ?? null;
       entry.enemyEnduranceBonusPct  = eDetail?.enduranceBonusPct ?? null;
-      entry.playerAfterType = pDetail ? Math.round(pDetail.afterType) : null;
-      entry.enemyAfterType  = eDetail ? Math.round(eDetail.afterType) : null;
-      entry.playerAfterEndurance = pDetail ? Math.round(pDetail.afterEndurance) : null;
-      entry.enemyAfterEndurance  = eDetail ? Math.round(eDetail.afterEndurance) : null;
+      entry.playerAfterType = pDetail ? Math.ceil(pDetail.afterType) : null;
+      entry.enemyAfterType  = eDetail ? Math.ceil(eDetail.afterType) : null;
+      entry.playerAfterEndurance = pDetail ? Math.ceil(pDetail.afterEndurance) : null;
+      entry.enemyAfterEndurance  = eDetail ? Math.ceil(eDetail.afterEndurance) : null;
 
       // Capture le score courant des DEUX côtés à l'instant de chaque
       // événement (malus différé, Talent...), pour que l'écran puisse mettre
@@ -350,8 +350,8 @@ const CWDefileEngine = (() => {
       entry.enemyCharId   = eFighter?.charId || null;
       entry.playerMult = pDetail?.mult ?? null;
       entry.enemyMult  = eDetail?.mult ?? null;
-      entry.playerStatValue = pDetail ? Math.round(pDetail.statValue) : null;
-      entry.enemyStatValue  = eDetail ? Math.round(eDetail.statValue) : null;
+      entry.playerStatValue = pDetail ? Math.ceil(pDetail.statValue) : null;
+      entry.enemyStatValue  = eDetail ? Math.ceil(eDetail.statValue) : null;
       entry.playerScore = playerScores[i];
       entry.enemyScore  = enemyScores[i];
       log.push(entry);
