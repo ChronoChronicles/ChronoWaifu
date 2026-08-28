@@ -6540,11 +6540,15 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     // Phase 5 — les Talents s'activent un par un (jamais deux en même temps),
     // avec la même grande bannière que celle utilisée en combat classique
-    for (const evtRaw of l.events) {
+    for (const evt of l.events) {
       if (_dpbSkip) break;
-      const evt = String(evtRaw).replace(/<[^>]+>/g, '');
-      _setDefilePhaseCaption(`Talent activé : ${evt}`);
-      await _showDefileTalentBanner(evt);
+      const text = String(evt.text || evt).replace(/<[^>]+>/g, '');
+      _setDefilePhaseCaption(`Talent activé : ${text}`);
+      await _showDefileTalentBanner(text);
+      // Met à jour le score affiché EN MÊME TEMPS que le texte — plus aucun
+      // changement invisible révélé seulement au score final.
+      if (evt.playerScoreAfter != null) _setScorePop('dpb-score-player', evt.playerScoreAfter);
+      if (evt.enemyScoreAfter  != null) _setScorePop('dpb-score-enemy',  evt.enemyScoreAfter);
       await _sleep(600);
     }
 
@@ -6987,7 +6991,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
               <div class="defile-result-round-vs">VS</div>
               ${side(eDef, l.enemyFighter, l.enemyScore, l.enemyMult, true)}
             </div>
-            ${l.events.length ? `<div class="defile-result-round-events">${l.events.join('<br>')}</div>` : ''}
+            ${l.events.length ? `<div class="defile-result-round-events">${l.events.map(e => e.text || e).join('<br>')}</div>` : ''}
           </div>`;
         }).join('')}
       </div>
