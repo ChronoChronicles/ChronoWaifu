@@ -6131,7 +6131,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           const fighter = slot ? playerTeam.find(f => f.instanceId === slot.instanceId) : null;
           const t = types.find(tt => tt.id === p.typeId);
           const talentSlot = talentPlacement[idx];
-          const talent = talentSlot ? CWGameDatabase.DEFILE_TALENTS[talentSlot.typeId] : null;
+          const talent = talentSlot ? CWGameDatabase.getDefileTalentDisplay(talentSlot.typeId, state.config.combat) : null;
           const talentOwner = talentSlot ? playerTeam.find(f => f.instanceId === talentSlot.instanceId) : null;
 
           // Modificateur en direct de CETTE personnage face au type du passage
@@ -6195,7 +6195,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       </div>
       <div class="defile-roster" id="defile-talents">
         ${talentChips.map(chip => {
-          const talent = CWGameDatabase.DEFILE_TALENTS[chip.typeId];
+          const talent = CWGameDatabase.getDefileTalentDisplay(chip.typeId, state.config.combat);
           const ownRound = _defileTalentChipRound(chip.instanceId, chip.typeId);
           const placed = ownRound >= 0;
           const limitReached = talentsPlaced >= maxTalents && !placed;
@@ -6270,7 +6270,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     e.preventDefault();
     const label = kind === 'char'
       ? _defileState.playerTeam.find(f => f.instanceId === payload.instanceId)?.name
-      : CWGameDatabase.DEFILE_TALENTS[payload.typeId]?.name;
+      : CWGameDatabase.getDefileTalentDisplay(payload.typeId, CWGameState.get().config.combat)?.name;
     if (!label) return;
 
     const ghost = document.createElement('div');

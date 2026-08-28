@@ -4580,6 +4580,54 @@ const CWAdminPanel = (() => {
       </div>
       <hr class="admin-sep" />
       <div class="admin-section">
+        <div class="admin-section-title">⭐ Talents du Défilé</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:14px;">
+          Un Talent par type, activable une fois par duel. Laisse nom/description
+          vides pour garder la valeur par défaut.
+        </p>
+        ${(() => {
+          const TALENT_PARAM_FIELDS = {
+            Charme:   { field: 'defileTalentCharmeBonus',   label: '% de score bonus' },
+            naturerelle: { field: 'defileTalentNatureRegen', label: "% d'Endurance restaurée" },
+            Rebelle:  { field: 'defileTalentRebelleMalus',  label: '% de malus adverse' },
+            Passion:  { field: 'defileTalentPassionBoost',  label: '% de stats bonus' },
+            Idole:    { field: 'defileTalentIdoleTransfer', label: '% de stat transférée' },
+            Enchant:  { field: 'defileTalentEnchantSteal',  label: '% de stat volée' },
+          };
+          const typeOrder = ['Charme','Elegance','naturerelle','Rebelle','Diva','Passion','Idole','Amazone','Mystique','Enchant','Legende'];
+          return typeOrder.map(typeId => {
+            const t = CWGameDatabase.DEFILE_TALENTS[typeId];
+            const typeDef = state.types.find(x => x.id === typeId);
+            const param = TALENT_PARAM_FIELDS[typeId];
+            return `
+              <div class="admin-talent-row" style="border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <span style="background:${typeDef?.color || '#888'};color:#1b1330;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:8px;">${typeDef?.icon || ''} ${typeDef?.name || typeId}</span>
+                  <span style="font-size:.72rem;color:#888;">(effet : ${t.effect})</span>
+                </div>
+                <div class="admin-grid">
+                  <div class="admin-field">
+                    <label>Nom (défaut : "${t.name}")</label>
+                    <input type="text" id="talent-name-${typeId}" value="${cCfg.defileTalentNameOverrides?.[typeId] || ''}" placeholder="${t.name}" />
+                  </div>
+                  ${param ? `
+                    <div class="admin-field">
+                      <label>${param.label}</label>
+                      <input type="number" id="talent-param-${typeId}" value="${cCfg[param.field] ?? 10}" min="0" step="1" />
+                    </div>
+                  ` : ''}
+                </div>
+                <div class="admin-field" style="margin-top:8px;">
+                  <label>Description (défaut : "${t.description}")</label>
+                  <textarea id="talent-desc-${typeId}" rows="2" placeholder="${t.description}">${cCfg.defileTalentDescOverrides?.[typeId] || ''}</textarea>
+                </div>
+              </div>
+            `;
+          }).join('');
+        })()}
+      </div>
+      <hr class="admin-sep" />
+      <div class="admin-section">
         <div class="admin-section-title">🎬 Grand Casting</div>
         <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
           Recrutement par enchères face à des agences rivales, alimenté par la
@@ -6684,6 +6732,28 @@ const CWAdminPanel = (() => {
         defilePlayerXpPercent:   parseFloat(document.getElementById('defile-player-xp-pct')?.value || '5'),
         defileGoldPercent:       parseFloat(document.getElementById('defile-gold-pct')?.value || '1'),
         affinityGainMultiplier:  parseFloat(document.getElementById('defile-affinity-mult')?.value || '1'),
+        defileTalentNameOverrides: (() => {
+          const out = {};
+          ['Charme','Elegance','naturerelle','Rebelle','Diva','Passion','Idole','Amazone','Mystique','Enchant','Legende'].forEach(typeId => {
+            const v = document.getElementById(`talent-name-${typeId}`)?.value.trim();
+            if (v) out[typeId] = v;
+          });
+          return out;
+        })(),
+        defileTalentDescOverrides: (() => {
+          const out = {};
+          ['Charme','Elegance','naturerelle','Rebelle','Diva','Passion','Idole','Amazone','Mystique','Enchant','Legende'].forEach(typeId => {
+            const v = document.getElementById(`talent-desc-${typeId}`)?.value.trim();
+            if (v) out[typeId] = v;
+          });
+          return out;
+        })(),
+        defileTalentCharmeBonus:   parseFloat(document.getElementById('talent-param-Charme')?.value      || '15'),
+        defileTalentNatureRegen:   parseFloat(document.getElementById('talent-param-naturerelle')?.value  || '10'),
+        defileTalentRebelleMalus:  parseFloat(document.getElementById('talent-param-Rebelle')?.value      || '20'),
+        defileTalentPassionBoost:  parseFloat(document.getElementById('talent-param-Passion')?.value      || '20'),
+        defileTalentIdoleTransfer: parseFloat(document.getElementById('talent-param-Idole')?.value        || '10'),
+        defileTalentEnchantSteal:  parseFloat(document.getElementById('talent-param-Enchant')?.value      || '10'),
         reputationPercentOfScore: parseFloat(document.getElementById('casting-rep-pct')?.value || '10'),
         castingThresholdMin:     parseInt(document.getElementById('casting-threshold-min')?.value || '25'),
         castingThresholdMax:     parseInt(document.getElementById('casting-threshold-max')?.value || '30'),

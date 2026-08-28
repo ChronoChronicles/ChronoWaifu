@@ -83,6 +83,11 @@ const CWGameDatabase = (() => {
       },
       affinityStageMultiplier: [1, 2, 3, 4], // index = evolutionStage (0 à 3)
       affinityGainMultiplier: 1, // multiplicateur global appliqué par-dessus le calcul ci-dessus
+      // ── Talents du Défilé — nom/description personnalisables (vide = valeur
+      // par défaut). Les pourcentages de chaque effet restent dans les champs
+      // defileTalentXxx déjà présents plus haut/bas dans cette config.
+      defileTalentNameOverrides: {},
+      defileTalentDescOverrides: {},
       // ── Récompenses de fin de Défilé (toutes réglables) ─────────────────────
       defileCharXpPercent:   10, // % du score marqué par CHAQUE personnage → XP perso
       defilePlayerXpPercent:  5, // % du score total du défilé → XP joueur
@@ -392,6 +397,22 @@ const CWGameDatabase = (() => {
       effect: 'copy_enemy_talent_pre_planning',
     },
   };
+
+  /**
+   * Résout le Talent d'un type en tenant compte des personnalisations admin
+   * (nom/description) — retombe sur DEFILE_TALENTS si rien n'a été modifié.
+   */
+  function getDefileTalentDisplay(typeId, cfg) {
+    const base = DEFILE_TALENTS[typeId];
+    if (!base) return null;
+    const nameOverride = cfg?.defileTalentNameOverrides?.[typeId];
+    const descOverride = cfg?.defileTalentDescOverrides?.[typeId];
+    return {
+      ...base,
+      name: nameOverride || base.name,
+      description: descOverride || base.description,
+    };
+  }
 
   // ─── MATRICE DES TYPES ────────────────────────────────────────────────────────
   // Format : typeMatrix[attacker][defender] = multiplicateur
@@ -1083,6 +1104,7 @@ const CWGameDatabase = (() => {
     DEFAULT_CONFIG,
     DEFAULT_TYPES,
     DEFILE_TALENTS,
+    getDefileTalentDisplay,
     DEFAULT_TYPE_MATRIX,
     DEFAULT_CHARACTERS,
     RARITIES,

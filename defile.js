@@ -140,8 +140,8 @@ const CWDefileEngine = (() => {
     const legendeCopy = choices.legendeCopyTypeId || null;
 
     function talentOf(typeId) {
-      if (typeId === 'Legende' && legendeCopy) return CWGameDatabase.DEFILE_TALENTS[legendeCopy];
-      return CWGameDatabase.DEFILE_TALENTS[typeId];
+      if (typeId === 'Legende' && legendeCopy) return CWGameDatabase.getDefileTalentDisplay(legendeCopy, cfg);
+      return CWGameDatabase.getDefileTalentDisplay(typeId, cfg);
     }
 
     function computeSideScore(fighter, passage) {
@@ -216,8 +216,8 @@ const CWDefileEngine = (() => {
 
       // Malus programmé plus tôt (Sale Rumeur / Vol de Vedette ciblent le round suivant/du jour)
       pendingRoundEffects.filter(e => e.round === i).forEach(e => {
-        if (e.type === 'malus_pct' && e.side === 'player') { pScore *= (1 - e.value / 100); pushEvt(`📉 Sale Rumeur reçue (-${e.value}%)`); }
-        if (e.type === 'malus_pct' && e.side === 'enemy')  { eScore *= (1 - e.value / 100); pushEvt(`📉 L'adversaire subit Sale Rumeur (-${e.value}%)`); }
+        if (e.type === 'malus_pct' && e.side === 'player') { pScore *= (1 - e.value / 100); pushEvt(`📉 ${talentOf('Rebelle').name} reçue (-${e.value}%)`); }
+        if (e.type === 'malus_pct' && e.side === 'enemy')  { eScore *= (1 - e.value / 100); pushEvt(`📉 L'adversaire subit ${talentOf('Rebelle').name} (-${e.value}%)`); }
       });
 
       function applyTalent(typeId, isPlayerSide, cancelled) {
@@ -239,7 +239,7 @@ const CWDefileEngine = (() => {
             const bonus = cfg.defileTalentCharmeBonus ?? 15;
             const delta = (isPlayerSide ? pScore : eScore) * (bonus / 100);
             if (isPlayerSide) pScore += reversedNow ? -delta : delta; else eScore += reversedNow ? -delta : delta;
-            pushEvt(`✨ Grand Sourire (${isPlayerSide ? 'toi' : 'adversaire'}) ${reversedNow ? '— retourné !' : ''}`);
+            pushEvt(`✨ ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'}) ${reversedNow ? '— retourné !' : ''}`);
             break;
           }
           case 'cancel_enemy_talent_same_round': { // Élégance
@@ -248,31 +248,31 @@ const CWDefileEngine = (() => {
             // dans la boucle des talents du passage, cf. plus bas).
             const otherCancelled = isPlayerSide ? eTalentCancelledRef : pTalentCancelledRef;
             otherCancelled.value = true;
-            pushEvt(`🚫 Rectification (${isPlayerSide ? 'toi' : 'adversaire'}) — Talent adverse annulé ce passage`);
+            pushEvt(`🚫 ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'}) — Talent adverse annulé ce passage`);
             break;
           }
           case 'team_endurance_restore': { // Naturelle
             const gain = cfg.defileTalentNatureRegen ?? 10;
             (isPlayerSide ? playerTeam : enemyTeam).forEach(f => { f.endurance = Math.min(100, f.endurance + gain); });
-            pushEvt(`💗 Second Souffle (${isPlayerSide ? 'toi' : 'adversaire'}) — +${gain}% Endurance à toute l'équipe`);
+            pushEvt(`💗 ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'}) — +${gain}% Endurance à toute l'équipe`);
             break;
           }
           case 'enemy_next_round_malus': { // Rebelle
             const malus = cfg.defileTalentRebelleMalus ?? 20;
             if (i + 1 < rounds) pendingRoundEffects.push({ round: i + 1, side: reversedNow ? (isPlayerSide ? 'player' : 'enemy') : (isPlayerSide ? 'enemy' : 'player'), type: 'malus_pct', value: malus });
-            pushEvt(`😈 Sale Rumeur (${isPlayerSide ? 'toi' : 'adversaire'}) programmée pour le prochain passage`);
+            pushEvt(`😈 ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'}) programmée pour le prochain passage`);
             break;
           }
           case 'enemy_same_round_random_category': { // Diva
             pendingRoundEffects.push({ round: enemyIdxSameRound, side: 'n/a', type: 'random_category' });
-            pushEvt(`👠 Chaos de Casting (${isPlayerSide ? 'toi' : 'adversaire'}) — catégorie adverse du passage ${passage.round} chamboulée`);
+            pushEvt(`👠 ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'}) — catégorie adverse du passage ${passage.round} chamboulée`);
             break;
           }
           case 'self_stats_boost': { // Passion
             const boost = cfg.defileTalentPassionBoost ?? 20;
             const delta = (isPlayerSide ? pScore : eScore) * (boost / 100);
             if (isPlayerSide) pScore += reversedNow ? -delta : delta; else eScore += reversedNow ? -delta : delta;
-            pushEvt(`🔥 Montée en Puissance (${isPlayerSide ? 'toi' : 'adversaire'})`);
+            pushEvt(`🔥 ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'})`);
             break;
           }
           case 'self_stat_transfer': { // Idole
@@ -283,13 +283,13 @@ const CWDefileEngine = (() => {
               const pct = cfg.defileTalentIdoleTransfer ?? 10;
               const delta = statVals[highestKey] * (pct / 100);
               if (isPlayerSide) pScore += reversedNow ? -delta : delta; else eScore += reversedNow ? -delta : delta;
-              pushEvt(`⭐ Sous les Projecteurs (${isPlayerSide ? 'toi' : 'adversaire'}) — +${pct}% de ${highestKey} transféré`);
+              pushEvt(`⭐ ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'}) — +${pct}% de ${highestKey} transféré`);
             }
             break;
           }
           case 'next_talent_reversal': { // Amazone
             reversalArmed = true;
-            pushEvt(`🥊 Retournement (${isPlayerSide ? 'toi' : 'adversaire'}) — le prochain Talent activé sera inversé`);
+            pushEvt(`🥊 ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'}) — le prochain Talent activé sera inversé`);
             break;
           }
           case 'swap_enemy_future_rounds': { // Mystique
@@ -306,7 +306,7 @@ const CWDefileEngine = (() => {
             }
             if (r1 !== undefined && r2 !== undefined) {
               const tmp = targetSide[r1]; targetSide[r1] = targetSide[r2]; targetSide[r2] = tmp;
-              pushEvt(`🪄 Substitution (${isPlayerSide ? 'toi' : 'adversaire'}) — passages ${r1 + 1} et ${r2 + 1} adverses échangés`);
+              pushEvt(`🪄 ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'}) — passages ${r1 + 1} et ${r2 + 1} adverses échangés`);
             }
             break;
           }
@@ -317,7 +317,7 @@ const CWDefileEngine = (() => {
               const stolen = otherFighter[effectivePassage.stat] * (pct / 100);
               if (isPlayerSide) { pScore += reversedNow ? -stolen : stolen; eScore -= reversedNow ? -stolen : stolen; }
               else              { eScore += reversedNow ? -stolen : stolen; pScore -= reversedNow ? -stolen : stolen; }
-              pushEvt(`🧚‍♀️ Vol de Vedette (${isPlayerSide ? 'toi' : 'adversaire'}) — ${pct}% de la stat adverse volée`);
+              pushEvt(`🧚‍♀️ ${t.name} (${isPlayerSide ? 'toi' : 'adversaire'}) — ${pct}% de la stat adverse volée`);
             }
             break;
           }
