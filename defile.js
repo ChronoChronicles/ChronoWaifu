@@ -126,8 +126,7 @@ const CWDefileEngine = (() => {
     const enemyScores  = new Array(rounds).fill(0);
     const log = [];
 
-    // Le prochain effet numérique activé (n'importe quel camp) voit sa valeur inversée (Amazone)
-    let reversalArmed = false;
+    // (le retournement d'Amazone est désormais décidé au cas par cas, cf. reversalInfo dans la boucle)
 
     const enduranceLoss = cfg.defileEnduranceLossPct ?? 15;
     const enduranceGain = cfg.defileEnduranceGainPct ?? 15;
@@ -151,31 +150,78 @@ const CWDefileEngine = (() => {
 
     for (let i = 0; i < rounds; i++) {
       const passage = programme[i];
-      const pSlot = playerAssignment[i];
-      const eSlot = enemyAssignment[i];
-      const pFighter = pSlot ? byId[pSlot.instanceId] : null;
-      const eFighter = eSlot ? byId[eSlot.instanceId] : null;
+      let pSlot = playerAssignment[i];
+      let eSlot = enemyAssignment[i];
+      let pFighter = pSlot ? byId[pSlot.instanceId] : null;
+      let eFighter = eSlot ? byId[eSlot.instanceId] : null;
       const entry = { round: passage.round, stat: passage.stat, typeId: passage.typeId, events: [] };
 
-      const pTalentId = pSlot?.talentTypeId || null;
-      const eTalentId = eSlot?.talentTypeId || null;
-      const pTalent = pTalentId ? talentOf(pTalentId) : null;
-      const eTalent = eTalentId ? talentOf(eTalentId) : null;
+      let pTalentId = pSlot?.talentTypeId || null;
+      let eTalentId = eSlot?.talentTypeId || null;
+      let pTalent = pTalentId ? talentOf(pTalentId) : null;
+      let eTalent = eTalentId ? talentOf(eTalentId) : null;
+
+      /** Relit les combattantes/talents de CE tournage — nécessaire après un
+       * éventuel échange de Mystique, qui peut remplacer qui défile ici même. */
+      function refreshCurrentRound() {
+        pSlot = playerAssignment[i]; eSlot = enemyAssignment[i];
+        pFighter = pSlot ? byId[pSlot.instanceId] : null;
+        eFighter = eSlot ? byId[eSlot.instanceId] : null;
+        pTalentId = pSlot?.talentTypeId || null; eTalentId = eSlot?.talentTypeId || null;
+        pTalent = pTalentId ? talentOf(pTalentId) : null; eTalent = eTalentId ? talentOf(eTalentId) : null;
+      }
 
       let _currentStage = 0;
-      function pushEvt(text) {
-        entry.events.push({ text, stage: _currentStage, playerScoreAfter: null, enemyScoreAfter: null });
-      }
-      // Consomme le retournement d'Amazone s'il est armé (ne s'applique jamais
-      // à Élégance/Amazone elles-mêmes — cf. règle "ne s'active pas contre
-      // Rectification", généralisée pour l'instant à tous les effets non
-      // numériques en attendant la passe dédiée à Amazone/Mystique/Légende).
-      function consumeReversal() {
-        if (reversalArmed) { reversalArmed = false; return true; }
-        return false;
+      function pushEvt(text, reversed = false) {
+        entry.events.push({ text, stage: _currentStage, reversed, playerScoreAfter: null, enemyScoreAfter: null });
       }
 
       // ═══ ÉTAPE 0 — déclenchements en tout DÉBUT de tournage ═══════════════════
+
+      // Mystique résout EN TOUT PREMIER : elle peut remplacer qui défile sur
+      // CE tournage même, donc tout ce qui suit doit se baser sur l'état
+      // d'ASSIGNATION à jour, pas sur celui d'avant l'échange.
+      function resolveMystique(isPlayerSide, talent) {
+        if (!talent || talent.effect !== 'swap_enemy_future_rounds') return;
+        const targetSide = isPlayerSide ? enemyAssignment : playerAssignment;
+        const futureRounds = targetSide.map((s, idx) => idx).filter(idx => idx > i && targetSide[idx]);
+        const preChoice = choices.mystiqueSwapRounds?.[passage.round];
+        let r1, r2;
+        // r1 EST le passage actuel par définition (celui où Mystique agit) —
+        // seul r2 (le passage cible choisi par le joueur) doit être validé
+        // comme réellement ultérieur et occupé côté adverse.
+        if (preChoice && (preChoice[0] - 1) === i && futureRounds.includes(preChoice[1] - 1)) {
+          r1 = i; r2 = preChoice[1] - 1;
+        } else if (futureRounds.length >= 1) {
+          r1 = i; r2 = futureRounds[Math.floor(Math.random() * futureRounds.length)];
+        }
+        if (r1 !== undefined && r2 !== undefined && targetSide[r1]) {
+          const tmp = targetSide[r1]; targetSide[r1] = targetSide[r2]; targetSide[r2] = tmp;
+          pushEvt(`🪄 ${talent.name} (${isPlayerSide ? 'toi' : 'adversaire'}) — passages ${r1 + 1} et ${r2 + 1} adverses échangés`);
+        }
+      }
+      if (pTalent?.effect === 'swap_enemy_future_rounds') resolveMystique(true, pTalent);
+      if (eTalent?.effect === 'swap_enemy_future_rounds') resolveMystique(false, eTalent);
+      refreshCurrentRound(); // relit qui défile réellement ce tournage après un éventuel échange
+
+      // Amazone : détermine si son Retournement contre le Talent adverse
+      // programmé sur CE MÊME tournage (jamais contre Rectification ni contre
+      // Amazone elle-même). Le talent visé ne bénéficie plus à son camp
+      // d'origine — c'est l'AUTRE camp (celui qui a activé Retournement) qui
+      // en profite à la place.
+      let reversalInfo = null; // { targetSide, beneficiaryName }
+      const isReversible = (t) => t && t.effect !== 'cancel_enemy_talent_same_round' && t.effect !== 'next_talent_reversal' && t.effect !== 'swap_enemy_future_rounds';
+      if (pTalent?.effect === 'next_talent_reversal' && isReversible(eTalent)) {
+        reversalInfo = { targetSide: 'enemy', beneficiaryName: pFighter?.name || 'toi' };
+      } else if (eTalent?.effect === 'next_talent_reversal' && isReversible(pTalent)) {
+        reversalInfo = { targetSide: 'player', beneficiaryName: eFighter?.name || "l'adversaire" };
+      }
+      entry.reversalInfo = reversalInfo;
+
+      /** true si l'effet numérique du camp `side` doit être inversé ce tournage */
+      function consumeReversal(side) {
+        return !!(reversalInfo && reversalInfo.targetSide === side);
+      }
 
       // Élégance : annule le talent adverse programmé sur CE MÊME passage
       let pTalentCancelled = false, eTalentCancelled = false;
@@ -201,29 +247,6 @@ const CWDefileEngine = (() => {
         enemyTeam.forEach(f => { f.endurance = Math.min(100, f.endurance + gain); });
         pushEvt(`💗 ${eTalent.name} (adversaire) — +${gain}% Endurance à toute l'équipe`);
       }
-
-      // Mystique : échange 2 passages FUTURS de l'équipe adverse (logique de
-      // repli automatique conservée telle quelle — l'écran de choix interactif
-      // reste à construire dans une passe dédiée)
-      function resolveMystique(isPlayerSide, talent, cancelled) {
-        if (!talent || talent.effect !== 'swap_enemy_future_rounds' || cancelled) return;
-        const targetSide = isPlayerSide ? enemyAssignment : playerAssignment;
-        const futureRounds = targetSide.map((s, idx) => idx).filter(idx => idx > i && targetSide[idx]);
-        const preChoice = choices.mystiqueSwapRounds?.[passage.round];
-        let r1, r2;
-        if (preChoice && futureRounds.includes(preChoice[0] - 1) && futureRounds.includes(preChoice[1] - 1)) {
-          r1 = preChoice[0] - 1; r2 = preChoice[1] - 1;
-        } else if (futureRounds.length >= 2) {
-          const shuffled = [...futureRounds].sort(() => Math.random() - 0.5);
-          r1 = shuffled[0]; r2 = shuffled[1];
-        }
-        if (r1 !== undefined && r2 !== undefined) {
-          const tmp = targetSide[r1]; targetSide[r1] = targetSide[r2]; targetSide[r2] = tmp;
-          pushEvt(`🪄 ${talent.name} (${isPlayerSide ? 'toi' : 'adversaire'}) — passages ${r1 + 1} et ${r2 + 1} adverses échangés`);
-        }
-      }
-      resolveMystique(true, pTalent, pTalentCancelled);
-      resolveMystique(false, eTalent, eTalentCancelled);
 
       // Diva : si la stat jugée est la stat la PLUS ÉLEVÉE de l'adversaire,
       // elle est automatiquement remplacée par sa stat jugée la plus FAIBLE
@@ -259,15 +282,17 @@ const CWDefileEngine = (() => {
       // Passion : augmente sa propre stat jugée
       if (pTalent?.effect === 'self_stats_boost' && !pTalentCancelled) {
         const boost = cfg.defileTalentPassionBoost ?? 20;
-        const delta = pStatValue * (boost / 100) * (consumeReversal() ? -1 : 1);
+        const reversed = consumeReversal('player');
+        const delta = pStatValue * (boost / 100) * (reversed ? -1 : 1);
         pStatValue += delta;
-        pushEvt(`🔥 ${pTalent.name} (toi) — +${Math.ceil(delta)} ${STAT_LABEL[statForPlayer]} (stat)`);
+        pushEvt(`🔥 ${pTalent.name} (toi) — ${delta>=0?'+':''}${Math.ceil(delta)} ${STAT_LABEL[statForPlayer]} (stat) ${reversed ? '(retourné !)' : ''}`, reversed);
       }
       if (eTalent?.effect === 'self_stats_boost' && !eTalentCancelled) {
         const boost = cfg.defileTalentPassionBoost ?? 20;
-        const delta = eStatValue * (boost / 100) * (consumeReversal() ? -1 : 1);
+        const reversed = consumeReversal('enemy');
+        const delta = eStatValue * (boost / 100) * (reversed ? -1 : 1);
         eStatValue += delta;
-        pushEvt(`🔥 ${eTalent.name} (adversaire) — +${Math.ceil(delta)} ${STAT_LABEL[statForEnemy]} (stat)`);
+        pushEvt(`🔥 ${eTalent.name} (adversaire) — ${delta>=0?'+':''}${Math.ceil(delta)} ${STAT_LABEL[statForEnemy]} (stat) ${reversed ? '(retourné !)' : ''}`, reversed);
       }
 
       // Idole : transfère un % de sa stat la plus haute (hors stat jugée) dans sa stat jugée
@@ -276,36 +301,38 @@ const CWDefileEngine = (() => {
         const sorted = Object.keys(vals).sort((a, b) => vals[b] - vals[a]);
         const highestKey = sorted[0] === statForPlayer ? sorted[1] : sorted[0];
         const pct = cfg.defileTalentIdoleTransfer ?? 20;
-        const delta = vals[highestKey] * (pct / 100) * (consumeReversal() ? -1 : 1);
+        const reversed = consumeReversal('player');
+        const delta = vals[highestKey] * (pct / 100) * (reversed ? -1 : 1);
         pStatValue += delta;
-        pushEvt(`⭐ ${pTalent.name} (toi) — +${Math.ceil(delta)} ${STAT_LABEL[statForPlayer]} (transféré depuis ${STAT_LABEL[highestKey]})`);
+        pushEvt(`⭐ ${pTalent.name} (toi) — ${delta>=0?'+':''}${Math.ceil(delta)} ${STAT_LABEL[statForPlayer]} (transféré depuis ${STAT_LABEL[highestKey]}) ${reversed ? '(retourné !)' : ''}`, reversed);
       }
       if (eTalent?.effect === 'self_stat_transfer' && !eTalentCancelled && eFighter) {
         const vals = { atk: eFighter.atk, def: eFighter.def, spd: eFighter.spd };
         const sorted = Object.keys(vals).sort((a, b) => vals[b] - vals[a]);
         const highestKey = sorted[0] === statForEnemy ? sorted[1] : sorted[0];
         const pct = cfg.defileTalentIdoleTransfer ?? 20;
-        const delta = vals[highestKey] * (pct / 100) * (consumeReversal() ? -1 : 1);
+        const reversed = consumeReversal('enemy');
+        const delta = vals[highestKey] * (pct / 100) * (reversed ? -1 : 1);
         eStatValue += delta;
-        pushEvt(`⭐ ${eTalent.name} (adversaire) — +${Math.ceil(delta)} ${STAT_LABEL[statForEnemy]} (transféré depuis ${STAT_LABEL[highestKey]})`);
+        pushEvt(`⭐ ${eTalent.name} (adversaire) — ${delta>=0?'+':''}${Math.ceil(delta)} ${STAT_LABEL[statForEnemy]} (transféré depuis ${STAT_LABEL[highestKey]}) ${reversed ? '(retourné !)' : ''}`, reversed);
       }
 
       // Enchanteresse : vole un % de la stat jugée adverse (valeur courante, après ses éventuels autres bonus)
       if (pTalent?.effect === 'steal_enemy_same_round_stat' && !pTalentCancelled && eFighter) {
         const pct = cfg.defileTalentEnchantSteal ?? 20;
-        const reversed = consumeReversal();
+        const reversed = consumeReversal('player');
         const stolen = Math.max(0, eStatValue) * (pct / 100);
         if (reversed) { pStatValue -= stolen; eStatValue += stolen; }
         else          { eStatValue -= stolen; pStatValue += stolen; }
-        pushEvt(`🧚‍♀️ ${pTalent.name} (toi) — ${reversed ? 'perd' : 'vole'} ${Math.ceil(stolen)} de ${STAT_LABEL[statForEnemy]} ${reversed ? 'au profit de l\'adversaire' : 'à l\'adversaire'}`);
+        pushEvt(`🧚‍♀️ ${pTalent.name} (toi) — ${reversed ? 'perd' : 'vole'} ${Math.ceil(stolen)} de ${STAT_LABEL[statForEnemy]} ${reversed ? "au profit de l'adversaire" : "à l'adversaire"}`, reversed);
       }
       if (eTalent?.effect === 'steal_enemy_same_round_stat' && !eTalentCancelled && pFighter) {
         const pct = cfg.defileTalentEnchantSteal ?? 20;
-        const reversed = consumeReversal();
+        const reversed = consumeReversal('enemy');
         const stolen = Math.max(0, pStatValue) * (pct / 100);
         if (reversed) { eStatValue -= stolen; pStatValue += stolen; }
         else          { pStatValue -= stolen; eStatValue += stolen; }
-        pushEvt(`🧚‍♀️ ${eTalent.name} (adversaire) — ${reversed ? 'perd' : 'vole'} ${Math.ceil(stolen)} de ${STAT_LABEL[statForPlayer]} ${reversed ? 'à ton profit' : 'à toi'}`);
+        pushEvt(`🧚‍♀️ ${eTalent.name} (adversaire) — ${reversed ? 'perd' : 'vole'} ${Math.ceil(stolen)} de ${STAT_LABEL[statForPlayer]} ${reversed ? 'à ton profit' : 'à toi'}`, reversed);
       }
 
       pStatValue = Math.max(0, Math.ceil(pStatValue));
@@ -323,46 +350,36 @@ const CWDefileEngine = (() => {
 
       if (pTalent?.effect === 'self_score_bonus_flat' && !pTalentCancelled) {
         const bonus = cfg.defileTalentCharmeBonus ?? 50;
-        const reversed = consumeReversal();
+        const reversed = consumeReversal('player');
         const delta = pScore * (bonus / 100);
         pScore += reversed ? -delta : delta;
-        pushEvt(`✨ ${pTalent.name} (toi) — ${reversed ? '-' : '+'}${Math.ceil(delta)} points ${reversed ? '(retourné !)' : ''}`);
+        pushEvt(`✨ ${pTalent.name} (toi) — ${reversed ? '-' : '+'}${Math.ceil(delta)} points ${reversed ? '(retourné !)' : ''}`, reversed);
       }
       if (eTalent?.effect === 'self_score_bonus_flat' && !eTalentCancelled) {
         const bonus = cfg.defileTalentCharmeBonus ?? 50;
-        const reversed = consumeReversal();
+        const reversed = consumeReversal('enemy');
         const delta = eScore * (bonus / 100);
         eScore += reversed ? -delta : delta;
-        pushEvt(`✨ ${eTalent.name} (adversaire) — ${reversed ? '-' : '+'}${Math.ceil(delta)} points ${reversed ? '(retourné !)' : ''}`);
+        pushEvt(`✨ ${eTalent.name} (adversaire) — ${reversed ? '-' : '+'}${Math.ceil(delta)} points ${reversed ? '(retourné !)' : ''}`, reversed);
       }
       if (pTalent?.effect === 'enemy_next_round_malus' && !pTalentCancelled) {
         const malus = cfg.defileTalentRebelleMalus ?? 50;
-        const reversed = consumeReversal();
+        const reversed = consumeReversal('player');
         const delta = (reversed ? pScore : eScore) * (malus / 100);
         if (reversed) pScore -= delta; else eScore -= delta;
-        pushEvt(`😈 ${pTalent.name} (toi) — ${reversed ? 'tu perds' : "l'adversaire perd"} ${Math.ceil(delta)} points ${reversed ? '(retourné !)' : ''}`);
+        pushEvt(`😈 ${pTalent.name} (toi) — ${reversed ? 'tu perds' : "l'adversaire perd"} ${Math.ceil(delta)} points ${reversed ? '(retourné !)' : ''}`, reversed);
       }
       if (eTalent?.effect === 'enemy_next_round_malus' && !eTalentCancelled) {
         const malus = cfg.defileTalentRebelleMalus ?? 50;
-        const reversed = consumeReversal();
+        const reversed = consumeReversal('enemy');
         const delta = (reversed ? eScore : pScore) * (malus / 100);
         if (reversed) eScore -= delta; else pScore -= delta;
-        pushEvt(`😈 ${eTalent.name} (adversaire) — ${reversed ? "l'adversaire perd" : 'tu perds'} ${Math.ceil(delta)} points ${reversed ? '(retourné !)' : ''}`);
+        pushEvt(`😈 ${eTalent.name} (adversaire) — ${reversed ? "l'adversaire perd" : 'tu perds'} ${Math.ceil(delta)} points ${reversed ? '(retourné !)' : ''}`, reversed);
       }
 
       pScore = Math.max(0, Math.ceil(pScore));
       eScore = Math.max(0, Math.ceil(eScore));
       const pScoreBeforeForme = pScore, eScoreBeforeForme = eScore;
-
-      // Amazone : arme le retournement pour le PROCHAIN effet numérique (n'importe quel camp)
-      if (pTalent?.effect === 'next_talent_reversal' && !pTalentCancelled) {
-        reversalArmed = true;
-        pushEvt(`🥊 ${pTalent.name} (toi) — le prochain Talent activé sera inversé`);
-      }
-      if (eTalent?.effect === 'next_talent_reversal' && !eTalentCancelled) {
-        reversalArmed = true;
-        pushEvt(`🥊 ${eTalent.name} (adversaire) — le prochain Talent activé sera inversé`);
-      }
 
       // ═══ ÉTAPE 4 — Bonus Forme (Endurance restante) ═════════════════════════
 

@@ -691,6 +691,65 @@
     opacity:0 !important;
   }
 
+  /* ── Chorégraphie du Retournement d'Amazone ── */
+  .dpb-screen-flash{
+    position:fixed; inset:0; background:#fff; z-index:200; pointer-events:none;
+    animation:dpbAmazoneFlash 220ms ease-out forwards;
+  }
+  @keyframes dpbAmazoneFlash{ 0%{ opacity:0; } 15%{ opacity:.95; } 100%{ opacity:0; } }
+  .dpb-amazone-original{ z-index:70; }
+  .dpb-amazone-overlay{ z-index:80; background:linear-gradient(135deg,#dc2626,#7f1d1d) !important; }
+  .dpb-amazone-spin-icon{
+    position:absolute; top:-14px; right:-14px; font-size:1.6rem;
+    animation:dpbAmazoneSpinPulse 500ms ease-in-out 3;
+  }
+  @keyframes dpbAmazoneSpinPulse{
+    0%   { transform:rotate(0deg) scale(1); }
+    50%  { transform:rotate(180deg) scale(1.5); }
+    100% { transform:rotate(360deg) scale(1); }
+  }
+
+  /* ── Modale interactive de Mystique (Substitution) ── */
+  .defile-modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:500;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+    backdrop-filter:blur(3px);
+  }
+  .defile-modal{
+    background:var(--surface, #150f24); border:1px solid rgba(167,139,250,.4);
+    border-radius:16px; padding:18px; max-width:480px; width:100%;
+    max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px -10px rgba(0,0,0,.7);
+  }
+  .defile-modal-title{
+    font-family:'Playfair Display', serif; font-style:italic; font-size:1.1rem;
+    color:#f3d9a8; margin-bottom:8px;
+  }
+  .defile-modal-help{ font-size:.78rem; color:var(--text-dim); line-height:1.5; margin-bottom:14px; }
+  .defile-modal-list{ display:flex; flex-direction:column; gap:8px; }
+  .defile-modal-option{
+    display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px 12px;
+    cursor:pointer; transition:border-color 150ms ease, background 150ms ease;
+  }
+  .defile-modal-option:hover{ border-color:#a78bfa; background:rgba(167,139,250,.1); }
+  .defile-modal-option-num{
+    font-family:var(--font-mono); font-size:.7rem; font-weight:800; color:#c4b5fd;
+    flex-shrink:0; width:70px;
+  }
+  .defile-modal-option-info{ display:flex; flex-direction:column; gap:2px; font-size:.76rem; }
+  .defile-modal-option-stats{ font-family:var(--font-mono); font-size:.68rem; color:var(--text-dim); }
+
+  .defile-mystique-indicator{
+    display:flex; align-items:center; justify-content:space-between; gap:6px;
+    font-size:.64rem; color:#c4b5fd; background:rgba(167,139,250,.1);
+    border:1px solid rgba(167,139,250,.3); border-radius:7px; padding:4px 6px; margin-top:4px;
+  }
+  .defile-mystique-edit-btn{
+    background:rgba(167,139,250,.2); border:1px solid rgba(167,139,250,.4);
+    color:#c4b5fd; font-size:.6rem; font-weight:700; padding:2px 8px; border-radius:6px;
+    flex-shrink:0;
+  }
+
   /* ── MODE PERFORMANCE ── */
   .record-home-card{
     background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.1);

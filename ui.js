@@ -6081,15 +6081,18 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         return fighter;
       });
       const enemyTeam = _buildDefileEnemyTeam(playerTeam, cfg, state);
+      const enemyAssignment = CWDefileEngine.autoAssign(programme, enemyTeam, state.typeMatrix, cfg.defileUsesPerChar ?? 3);
       _defileState = {
         programme,
         playerTeam,
-        enemyTeam,                                           // générée une fois pour toute la planification (nécessaire pour le choix de Légende)
+        enemyTeam,        // générée une fois pour toute la planification (nécessaire pour Légende et Mystique)
+        enemyAssignment,  // idem — son programme complet doit être connu pour Mystique
         assignment: new Array(programme.length).fill(null), // { instanceId } — qui défile
         talentPlacement: {},                                 // { round: { instanceId, typeId } } — Talent placé (libre, par personnage + type)
         usesPerChar: cfg.defileUsesPerChar ?? 3,
         legendeCopyTypeId: null,       // choix de Légende (Polyvalence), tranché avant la planification
         legendeChoicePending: playerTeam.some(f => f.type1 === 'Legende' || f.type2 === 'Legende'),
+        mystiqueSwapRounds: {},        // { round (1-based) du talent Mystique : [round1, round2] adverses échangés }
       };
     }
 
@@ -6151,6 +6154,62 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     });
   }
 
+  /**
+   * Ouvre une fenêtre modale montrant le programme adverse (personnages,
+   * stats, thème de chaque passage — SANS les Talents), et laisse le joueur
+   * choisir un passage adverse ULTÉRIEUR à échanger avec celui où Mystique
+   * vient d'être placée.
+   */
+  function _openDefileMystiquePicker(mystiqueRound) {
+    const state = CWGameState.get();
+    const { programme, enemyTeam, enemyAssignment } = _defileState;
+
+    const eligible = enemyAssignment
+      .map((slot, idx) => ({ idx, slot }))
+      .filter(({ idx, slot }) => idx > mystiqueRound && slot);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'defile-modal-overlay';
+    overlay.innerHTML = `
+      <div class="defile-modal">
+        <h3 class="defile-modal-title">🪄 Substitution — choisis un passage adverse</h3>
+        <p class="defile-modal-help">
+          Voici le programme complet de l'adversaire (ses Talents restent secrets).
+          Choisis un passage <strong>ultérieur</strong> à échanger avec le Tournage ${mystiqueRound + 1},
+          où ta Mystique est programmée : les deux personnages adverses concernées seront échangées.
+        </p>
+        <div class="defile-modal-list">
+          ${eligible.map(({ idx, slot }) => {
+            const f = enemyTeam.find(x => x.instanceId === slot.instanceId);
+            const p = programme[idx];
+            const t = state.types.find(tt => tt.id === p.typeId);
+            return `
+              <div class="defile-modal-option" data-round="${idx}">
+                <div class="defile-modal-option-num">Tournage ${idx + 1}</div>
+                <div class="defile-modal-option-info">
+                  <strong>${f?.name || '?'}</strong>
+                  <span>${STAT_LABELS_SHORT[p.stat]} · <span style="color:${t?.color}">${t?.icon} ${t?.name}</span></span>
+                  <span class="defile-modal-option-stats">✨${f?.atk ?? '?'} 🌹${f?.def ?? '?'} 🕊️${f?.spd ?? '?'}</span>
+                </div>
+              </div>`;
+          }).join('') || `<p class="empty-msg">Aucun passage ultérieur disponible pour l'adversaire.</p>`}
+        </div>
+        ${eligible.length ? '' : '<button class="btn-secondary" id="btn-mystique-cancel" style="width:100%;">Fermer</button>'}
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.querySelectorAll('.defile-modal-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const targetIdx = parseInt(opt.dataset.round);
+        _defileState.mystiqueSwapRounds[mystiqueRound + 1] = [mystiqueRound + 1, targetIdx + 1];
+        _showToast(`🪄 Substitution programmée : Tournage ${mystiqueRound + 1} ↔ Tournage ${targetIdx + 1} (côté adverse)`, 'success');
+        overlay.remove();
+      });
+    });
+    overlay.querySelector('#btn-mystique-cancel')?.addEventListener('click', () => overlay.remove());
+  }
+
   function _defileUsesLeft(instanceId) {
     const used = _defileState.assignment.filter(a => a && a.instanceId === instanceId).length;
     return _defileState.usesPerChar - used;
@@ -6173,7 +6232,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     if (!el) return;
     const state = CWGameState.get();
     const types = state.types;
-    const { programme, playerTeam, assignment, talentPlacement } = _defileState;
+    const { programme, playerTeam, assignment, talentPlacement, mystiqueSwapRounds } = _defileState;
 
     const allFilled = assignment.every(a => a);
     const maxTalents = state.config.combat.defileTalentsCount ?? 3;
@@ -6238,6 +6297,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                     ? `<span>⭐ ${talent.name} <small>(${talentOwner?.name || ''})</small></span><button class="defile-talent-remove" data-round="${idx}" title="Retirer">✕</button>`
                     : `<span class="defile-slot-empty">Dépose un Talent ici</span>`}
                 </div>
+                ${talentSlot?.typeId === 'Mystique' ? `
+                  <div class="defile-mystique-indicator">
+                    ${mystiqueSwapRounds[idx + 1]
+                      ? `🪄 Échange avec le Tournage ${mystiqueSwapRounds[idx + 1][1]} adverse`
+                      : `⚠️ Aucun passage choisi`}
+                    <button class="defile-mystique-edit-btn" data-round="${idx}">Modifier</button>
+                  </div>
+                ` : ''}
               </div>
             </div>`;
         }).join('')}
@@ -6319,6 +6386,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         const round = parseInt(btn.dataset.round);
         _defileState.assignment[round] = null;
         delete _defileState.talentPlacement[round]; // plus personne pour porter un Talent ici
+        delete _defileState.mystiqueSwapRounds[round + 1];
         _renderDefilePlanningDOM();
       });
     });
@@ -6328,8 +6396,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         e.stopPropagation();
         const round = parseInt(btn.dataset.round);
         delete _defileState.talentPlacement[round];
+        delete _defileState.mystiqueSwapRounds[round + 1];
         _renderDefilePlanningDOM();
       });
+    });
+
+    el.querySelectorAll('.defile-mystique-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => _openDefileMystiquePicker(parseInt(btn.dataset.round)));
     });
 
     document.getElementById('btn-defile-validate')?.addEventListener('click', _runDefileDuel);
@@ -6391,9 +6464,16 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         if (alreadyPlacedThisChip) {
           const prevRound = _defileTalentChipRound(payload.instanceId, payload.typeId);
           delete _defileState.talentPlacement[prevRound];
+          delete _defileState.mystiqueSwapRounds[prevRound + 1]; // le round Mystique change, son choix précédent n'a plus de sens
         }
         _defileState.talentPlacement[round] = { instanceId: payload.instanceId, typeId: payload.typeId };
         _renderDefilePlanningDOM();
+
+        // Mystique (Substitution) : demande immédiatement quel passage adverse
+        // ultérieur échanger avec celui-ci
+        if (payload.typeId === 'Mystique') {
+          _openDefileMystiquePicker(round);
+        }
       }
     };
     document.addEventListener('pointermove', onMove);
@@ -6570,8 +6650,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         if (_dpbSkip) break;
         const text = String(evt.text || evt).replace(/<[^>]+>/g, '');
         _setDefilePhaseCaption(text);
-        CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTalent);
-        await _showDefileTalentBanner(text);
+        if (evt.reversed && l.reversalInfo) {
+          await _showDefileAmazoneReversal(text, l.reversalInfo.beneficiaryName);
+        } else {
+          CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTalent);
+          await _showDefileTalentBanner(text);
+        }
         if (evt.playerScoreAfter != null) _setScorePop('dpb-score-player', evt.playerScoreAfter);
         if (evt.enemyScoreAfter  != null) _setScorePop('dpb-score-enemy',  evt.enemyScoreAfter);
         await _sleep(700);
@@ -6790,6 +6874,55 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     });
   }
 
+  /**
+   * Chorégraphie du Retournement d'Amazone : la bannière du Talent contré
+   * reste affichée, un flash apparaît, la bannière "Retournement" s'affiche
+   * PAR-DESSUS, puis à sa disparition une icône rotative pulse 2-3 fois sur
+   * la bannière contrée, avant d'afficher qui en bénéficie réellement.
+   */
+  async function _showDefileAmazoneReversal(text, beneficiaryName) {
+    const stage = document.querySelector('.dpb-stage');
+    if (!stage) return;
+    const amazoneName = CWGameDatabase.getDefileTalentDisplay('Amazone', CWGameState.get().config.combat)?.name || 'Retournement';
+
+    // 1. La bannière du Talent contré apparaît normalement (reste affichée)
+    const original = document.createElement('div');
+    original.className = 'passive-banner-big dpb-talent-banner-big dpb-amazone-original';
+    original.innerHTML = `<span class="passive-banner-big-icon">⭐</span>${text}`;
+    stage.appendChild(original);
+    CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTalent);
+    await _sleep(500);
+
+    // 2. Flash à l'écran
+    const flash = document.createElement('div');
+    flash.className = 'dpb-screen-flash';
+    stage.appendChild(flash);
+    await _sleep(220);
+    flash.remove();
+
+    // 3. La bannière "Retournement" s'affiche PAR-DESSUS la bannière contrée
+    const overlay = document.createElement('div');
+    overlay.className = 'passive-banner-big dpb-talent-banner-big dpb-amazone-overlay';
+    overlay.innerHTML = `<span class="passive-banner-big-icon">🥊</span>${amazoneName} !`;
+    stage.appendChild(overlay);
+    CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTalent);
+    await _sleep(1300);
+    overlay.remove();
+
+    // 4. Icône rotative en zoom/dézoom répété, superposée sur la bannière contrée
+    const spin = document.createElement('div');
+    spin.className = 'dpb-amazone-spin-icon';
+    spin.textContent = '🔄';
+    original.appendChild(spin);
+    await _sleep(1500); // le temps que le pulse (2-3 répétitions) se joue
+
+    // 5. Message final sur qui bénéficie réellement de l'effet
+    _setDefilePhaseCaption(`Talent contré, il s'active pour ${beneficiaryName} !`);
+    await _sleep(1000);
+
+    original.remove();
+  }
+
   /** Met à jour un score avec un petit effet de "pop" pour bien marquer le changement */
   /** Anime un score en le faisant défiler rapidement jusqu'à sa valeur finale (façon compteur) */
   function _setScorePop(elId, value) {
@@ -6832,9 +6965,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const state = CWGameState.get();
     const cfg = state.config.combat;
     const matrix = state.typeMatrix;
-    const enemyTeam = _defileState.enemyTeam; // générée dès l'entrée dans l'écran (cf. renderDefilePlanning)
-
-    const enemyAssignment = CWDefileEngine.autoAssign(_defileState.programme, enemyTeam, matrix, cfg.defileUsesPerChar ?? 3);
+    const enemyTeam = _defileState.enemyTeam;             // générée dès l'entrée dans l'écran
+    const enemyAssignment = _defileState.enemyAssignment; // idem — connue dès la planification pour Mystique
 
     // Fusionne les 2 structures séparées de planification (qui défile / où
     // sont placés les Talents) dans le format attendu par le moteur.
@@ -6846,7 +6978,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const result = CWDefileEngine.resolveDuel(
       _defileState.programme, playerAssignment, enemyAssignment,
       _defileState.playerTeam, enemyTeam, cfg, matrix,
-      { legendeCopyTypeId: _defileState.legendeCopyTypeId || null }
+      {
+        legendeCopyTypeId: _defileState.legendeCopyTypeId || null,
+        mystiqueSwapRounds: _defileState.mystiqueSwapRounds || {},
+      }
     );
 
     _applyDefileStats(result, playerAssignment);
