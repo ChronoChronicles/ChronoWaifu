@@ -1756,8 +1756,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const matrix = state.typeMatrix;
     const dealt = [], received = [];
     state.types.forEach(t => {
-      const dealtMult    = CWGameDatabase.getTypeEffectiveness(type1, type2, t.id, null, matrix);
-      const receivedMult = CWGameDatabase.getTypeEffectiveness(t.id, null, type1, type2, matrix);
+      const dealtMult    = CWGameDatabase.getBestTypeEffectiveness(type1, type2, t.id, null, matrix);
+      const receivedMult = CWGameDatabase.getBestTypeEffectiveness(t.id, null, type1, type2, matrix);
       if (dealtMult !== 1)    dealt.push({ type: t, mult: dealtMult });
       if (receivedMult !== 1) received.push({ type: t, mult: receivedMult });
     });
