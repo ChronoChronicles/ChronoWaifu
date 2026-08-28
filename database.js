@@ -67,12 +67,12 @@ const CWGameDatabase = (() => {
       // arrondi au supérieur) — plus de facteur configurable ici, pour éviter
       // toute confusion avec une ancienne valeur restée sauvegardée.
       // Ampleur de chaque Talent (tous exprimés en %)
-      defileTalentCharmeBonus: 15,       // Grand Sourire : + points garantis
-      defileTalentRebelleMalus: 20,      // Sale Rumeur : − points prochain passage adverse
+      defileTalentCharmeBonus: 50,        // Grand Sourire : + points garantis (avant le Bonus Forme)
+      defileTalentRebelleMalus: 50,       // Sale Rumeur : − points au tournage en cours de l'adversaire (avant son Bonus Forme)
       defileTalentNatureRegen: 10,       // Second Souffle : + Endurance à toute l'équipe
       defileTalentPassionBoost: 20,      // Montée en Puissance : + stats sur soi ce passage
-      defileTalentIdoleTransfer: 10,     // Sous les Projecteurs : % de la stat la + haute transférée
-      defileTalentEnchantSteal: 10,      // Vol de Vedette : % de stat volée à l'adversaire
+      defileTalentIdoleTransfer: 20,     // Sous les Projecteurs : % de la stat la + haute transférée
+      defileTalentEnchantSteal: 20,      // Vol de Vedette : % de stat volée à l'adversaire
       // ── Système d'affinité (remplace le Gacha) ──────────────────────────────
       // Gain d'affinité par tournage GAGNÉ contre une adversaire, par lignée :
       // base selon sa rareté (une commune, très fréquente, rapporte peu ; une

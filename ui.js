@@ -6485,10 +6485,24 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     $('dpb-endurance-enemy').textContent  = (l.enemyEnduranceRemaining  != null && l.enemyEnduranceMax  != null) ? `Forme : ${l.enemyEnduranceRemaining}/${l.enemyEnduranceMax}`   : '';
 
     const statLabel = STAT_LABELS_SHORT[l.stat].replace(/^[^\s]+\s/, ''); // enlève l'icône, garde le mot
+    const pSide = $('dpb-side-player'), eSide = $('dpb-side-enemy');
+
+    /** Affiche un par un les événements d'une étape donnée (jamais 2 en même temps) */
+    async function playStageEvents(stage) {
+      for (const evt of l.events.filter(e => e.stage === stage)) {
+        if (_dpbSkip) break;
+        const text = String(evt.text || evt).replace(/<[^>]+>/g, '');
+        _setDefilePhaseCaption(text);
+        CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTalent);
+        await _showDefileTalentBanner(text);
+        if (evt.playerScoreAfter != null) _setScorePop('dpb-score-player', evt.playerScoreAfter);
+        if (evt.enemyScoreAfter  != null) _setScorePop('dpb-score-enemy',  evt.enemyScoreAfter);
+        await _sleep(700);
+      }
+    }
 
     // Phase 1 — présentation : zoom rapide sur chaque participante, l'une
     // après l'autre (jamais simultané, pour rester lisible)
-    const pSide = $('dpb-side-player'), eSide = $('dpb-side-enemy');
     pSide.classList.remove('reveal'); eSide.classList.remove('reveal');
     void pSide.offsetWidth; // force le rejeu de l'animation à chaque tournage
     _setDefilePhaseCaption(`Présentation — ${l.playerFighter || '?'}`);
@@ -6500,73 +6514,74 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     eSide.classList.add('reveal');
     await _sleep(1400);
 
-    // Phase 2 — la stat jugée apparaît sous chaque participante
-    $('dpb-stat-player').textContent = STAT_LABELS_SHORT[l.stat];
-    $('dpb-stat-enemy').textContent  = STAT_LABELS_SHORT[l.stat];
+    // Phase 1b — événements de tout DÉBUT de tournage (Naturelle, Élégance,
+    // Mystique, Diva...) : ils se produisent AVANT toute stat/score, donc
+    // affichés en tout premier, dans l'ordre chronologique réel du moteur.
+    await playStageEvents(0);
+
+    // Phase 2 — la stat jugée apparaît sous chaque participante (peut
+    // différer d'un côté à l'autre si Diva a changé celle de l'adversaire)
+    $('dpb-stat-player').textContent = STAT_LABELS_SHORT[l.playerJudgedStat || l.stat];
+    $('dpb-stat-enemy').textContent  = STAT_LABELS_SHORT[l.enemyJudgedStat  || l.stat];
     _setDefilePhaseCaption(`Épreuve de ce tournage : ${statLabel}`);
     await _sleep(1600);
 
-    // Phase 3 — score de base (valeur brute de la stat), révélé pour l'alliée
-    // D'ABORD, puis pour l'adversaire — jamais les deux en même temps
-    _setDefilePhaseCaption(`Score de base (${statLabel}) — ${l.playerFighter || '?'}`);
+    // Phase 3 — score de base (valeur BRUTE, avant tout Talent), révélé pour
+    // l'alliée D'ABORD, puis pour l'adversaire — jamais les deux en même temps
+    _setDefilePhaseCaption(`Score de base (${STAT_LABELS_SHORT[l.playerJudgedStat || l.stat].replace(/^[^\s]+\s/, '')}) — ${l.playerFighter || '?'}`);
     _setScorePop('dpb-score-player', l.playerStatValue ?? 0);
     CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileScoreTick);
-    await _sleep(2600);
-    _setDefilePhaseCaption(`Score de base (${statLabel}) — ${l.enemyFighter || '?'}`);
+    await _sleep(2000);
+    _setDefilePhaseCaption(`Score de base (${STAT_LABELS_SHORT[l.enemyJudgedStat || l.stat].replace(/^[^\s]+\s/, '')}) — ${l.enemyFighter || '?'}`);
     _setScorePop('dpb-score-enemy', l.enemyStatValue ?? 0);
     CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileScoreTick);
-    await _sleep(2600);
+    await _sleep(2000);
+
+    // Phase 3b — modificateurs de STAT (Passion, Idole, Enchanteresse),
+    // chacun affiché avec son montant exact, AVANT le multiplicateur de type
+    await playStageEvents(1);
+    if (l.playerStatAfterMods != null) _setScorePop('dpb-score-player', l.playerStatAfterMods);
+    if (l.enemyStatAfterMods  != null) _setScorePop('dpb-score-enemy',  l.enemyStatAfterMods);
 
     // Phase 4 — bonus/malus de type révélé, score recalculé en direct
-    const pAfterType = l.playerAfterType ?? l.playerStatValue;
-    const eAfterType = l.enemyAfterType  ?? l.enemyStatValue;
     _setDefilePhaseCaption(`Multiplicateur de type ${l.playerMult != null ? _formatAffinityMult(l.playerMult) : ''} — ${l.playerFighter || '?'}`);
     _showDefileTypeBadge('dpb-type-badge-player', l.playerMult);
-    _setScorePop('dpb-score-player', pAfterType);
+    _setScorePop('dpb-score-player', l.playerAfterType ?? l.playerStatValue);
     if (l.playerMult != null) CWAudioSystem.playSfx(l.playerMult >= 2 ? CWAudioSystem.SFX_KEYS.defileTypeGood : l.playerMult <= 0.5 ? CWAudioSystem.SFX_KEYS.defileTypeBad : null);
-    await _sleep(2600);
+    await _sleep(2200);
     _setDefilePhaseCaption(`Multiplicateur de type ${l.enemyMult != null ? _formatAffinityMult(l.enemyMult) : ''} — ${l.enemyFighter || '?'}`);
     _showDefileTypeBadge('dpb-type-badge-enemy', l.enemyMult);
-    _setScorePop('dpb-score-enemy', eAfterType);
+    _setScorePop('dpb-score-enemy', l.enemyAfterType ?? l.enemyStatValue);
     if (l.enemyMult != null) CWAudioSystem.playSfx(l.enemyMult >= 2 ? CWAudioSystem.SFX_KEYS.defileTypeGood : l.enemyMult <= 0.5 ? CWAudioSystem.SFX_KEYS.defileTypeBad : null);
-    await _sleep(2600);
+    await _sleep(2200);
+
+    // Phase 4c — modificateurs de SCORE (Charme, Sale Rumeur, Retournement
+    // d'Amazone), chacun affiché avec son montant exact, AVANT le Bonus Forme
+    await playStageEvents(3);
+    if (l.playerScoreBeforeForme != null) _setScorePop('dpb-score-player', l.playerScoreBeforeForme);
+    if (l.enemyScoreBeforeForme  != null) _setScorePop('dpb-score-enemy',  l.enemyScoreBeforeForme);
 
     // Phase 4b — bonus de Forme (Endurance restante), révélé alliée puis adversaire
     if (l.playerEnduranceBonusPct != null) {
       _setDefilePhaseCaption(`Bonus Forme +${l.playerEnduranceBonusPct}% — ${l.playerFighter || '?'}`);
-      _setScorePop('dpb-score-player', l.playerAfterEndurance ?? pAfterType);
+      _setScorePop('dpb-score-player', l.playerAfterEndurance ?? l.playerScoreBeforeForme);
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileEndurance);
-      await _sleep(2600);
+      await _sleep(2200);
     }
     if (l.enemyEnduranceBonusPct != null) {
       _setDefilePhaseCaption(`Bonus Forme +${l.enemyEnduranceBonusPct}% — ${l.enemyFighter || '?'}`);
-      _setScorePop('dpb-score-enemy', l.enemyAfterEndurance ?? eAfterType);
+      _setScorePop('dpb-score-enemy', l.enemyAfterEndurance ?? l.enemyScoreBeforeForme);
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileEndurance);
-      await _sleep(2600);
-    }
-
-    // Phase 5 — les Talents s'activent un par un (jamais deux en même temps),
-    // avec la même grande bannière que celle utilisée en combat classique
-    for (const evt of l.events) {
-      if (_dpbSkip) break;
-      const text = String(evt.text || evt).replace(/<[^>]+>/g, '');
-      _setDefilePhaseCaption(`Talent activé : ${text}`);
-      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTalent);
-      await _showDefileTalentBanner(text);
-      // Met à jour le score affiché EN MÊME TEMPS que le texte — plus aucun
-      // changement invisible révélé seulement au score final.
-      if (evt.playerScoreAfter != null) _setScorePop('dpb-score-player', evt.playerScoreAfter);
-      if (evt.enemyScoreAfter  != null) _setScorePop('dpb-score-enemy',  evt.enemyScoreAfter);
-      await _sleep(600);
+      await _sleep(2200);
     }
 
     // Phase 6 — score final du tournage, révélé alliée d'abord puis adversaire
     _setDefilePhaseCaption(`Score final du tournage — ${l.playerFighter || '?'}`);
     _setScorePop('dpb-score-player', l.playerScore);
-    await _sleep(2600);
+    await _sleep(2200);
     _setDefilePhaseCaption(`Score final du tournage — ${l.enemyFighter || '?'}`);
     _setScorePop('dpb-score-enemy', l.enemyScore);
-    await _sleep(2600);
+    await _sleep(2200);
     pSide.classList.toggle('winner', l.playerScore > l.enemyScore);
     eSide.classList.toggle('winner', l.enemyScore > l.playerScore);
     CWAudioSystem.playSfx(l.playerScore > l.enemyScore ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose);
@@ -7229,7 +7244,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           const pDef = l.playerCharId ? CWGameState.getCharDef(l.playerCharId) : null;
           const eDef = l.enemyCharId  ? CWGameState.getCharDef(l.enemyCharId)  : null;
           const multClass = (m) => m == null ? '' : m >= 2 ? 'defile-stat-good' : m <= 0.5 ? 'defile-stat-bad' : '';
-          const side = (def, name, score, mult, mirrored, isWinner) => `
+          const side = (def, name, score, mult, mirrored, isWinner, judgedStat) => `
             <div class="defile-result-side ${mirrored ? 'mirrored' : ''}">
               <div class="fighter-portrait defile-result-portrait">
                 ${def ? _combatPortraitImgHtml(def) : ''}
@@ -7238,16 +7253,16 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                 <div class="defile-result-side-name">${name || '—'}</div>
                 <div class="defile-result-side-issue ${isWinner ? 'is-victory' : 'is-defeat'}">${isWinner ? 'VICTOIRE' : 'DÉFAITE'}</div>
                 <div class="defile-result-side-score">${score}</div>
-                <div class="defile-result-side-stat ${multClass(mult)}">${STAT_LABELS_SHORT[l.stat]} ${mult != null ? _formatAffinityMult(mult) : ''}</div>
+                <div class="defile-result-side-stat ${multClass(mult)}">${STAT_LABELS_SHORT[judgedStat || l.stat]} ${mult != null ? _formatAffinityMult(mult) : ''}</div>
               </div>
             </div>`;
           return `
           <div class="defile-result-round">
             <div class="defile-result-round-num">Tournage ${l.round} — ${STAT_LABELS_SHORT[l.stat]}</div>
             <div class="defile-result-round-mirror">
-              ${side(pDef, l.playerFighter, l.playerScore, l.playerMult, false, l.playerScore > l.enemyScore)}
+              ${side(pDef, l.playerFighter, l.playerScore, l.playerMult, false, l.playerScore > l.enemyScore, l.playerJudgedStat)}
               <div class="defile-result-round-vs">VS</div>
-              ${side(eDef, l.enemyFighter, l.enemyScore, l.enemyMult, true, l.enemyScore > l.playerScore)}
+              ${side(eDef, l.enemyFighter, l.enemyScore, l.enemyMult, true, l.enemyScore > l.playerScore, l.enemyJudgedStat)}
             </div>
             ${l.events.length ? `<div class="defile-result-round-events">${l.events.map(e => e.text || e).join('<br>')}</div>` : ''}
           </div>`;
