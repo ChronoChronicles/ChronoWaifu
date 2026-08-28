@@ -6482,8 +6482,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     $('dpb-type-badge-enemy').textContent = '';
     $('dpb-side-player').classList.remove('winner');
     $('dpb-side-enemy').classList.remove('winner');
-    $('dpb-endurance-player').textContent = l.playerEndurancePercent != null ? `Forme : ${l.playerEndurancePercent}%` : '';
-    $('dpb-endurance-enemy').textContent  = l.enemyEndurancePercent  != null ? `Forme : ${l.enemyEndurancePercent}%`  : '';
+    $('dpb-endurance-player').textContent = (l.playerEnduranceRemaining != null && l.playerEnduranceMax != null) ? `Forme : ${l.playerEnduranceRemaining}/${l.playerEnduranceMax}` : '';
+    $('dpb-endurance-enemy').textContent  = (l.enemyEnduranceRemaining  != null && l.enemyEnduranceMax  != null) ? `Forme : ${l.enemyEnduranceRemaining}/${l.enemyEnduranceMax}`   : '';
 
     const statLabel = STAT_LABELS_SHORT[l.stat].replace(/^[^\s]+\s/, ''); // enlève l'icône, garde le mot
 

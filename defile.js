@@ -147,16 +147,19 @@ const CWDefileEngine = (() => {
     function computeSideScore(fighter, passage) {
       const statValue = fighter[passage.stat];
       const mult = CWGameDatabase.getBestTypeEffectiveness(fighter.type1, fighter.type2, passage.typeId, null, matrix);
-      const afterType = statValue * mult;
+      const variance = 1 + (Math.random() * 0.1 - 0.05); // ±5%, appliquée ICI (avant le Bonus Forme affiché)
+      const afterType = statValue * mult * variance;
       const endurancePercent = fighter.endurance;
       // "Forme restante" = valeur ABSOLUE (comme les PV), pas un pourcentage :
-      // enduranceMax × (endurancePercent/100). Le bonus = 1% de cette valeur
-      // absolue (ex: 785 de Forme restante → +7,85%, arrondi à l'unité supérieure).
+      // enduranceMax × (endurancePercent/100). Bonus = ce facteur × cette
+      // valeur absolue, arrondi à l'unité supérieure (ex: 785 → +8%).
       const enduranceRemaining = fighter.enduranceMax * (endurancePercent / 100);
-      const enduranceBonusPct = enduranceRemaining * enduranceFactor; // valeur décimale précise (ex: 0,32%), pas arrondie ici
+      const enduranceBonusPct = Math.ceil(enduranceRemaining * enduranceFactor);
       const afterEndurance = afterType * (1 + enduranceBonusPct / 100);
-      const variance = 1 + (Math.random() * 0.1 - 0.05); // ±5%, comme en combat classique
-      const final = afterEndurance * variance;
+      // Plus aucun calcul après ceci : ce qui est affiché comme "Bonus Forme"
+      // EST la valeur utilisée pour le score final (sauf Talent, qui a sa
+      // propre étape explicite et donc justifiée aux yeux du joueur).
+      const final = afterEndurance;
       return { statValue, mult, afterType, endurancePercent, enduranceRemaining: Math.round(enduranceRemaining), enduranceBonusPct, afterEndurance, final };
     }
 
@@ -189,6 +192,10 @@ const CWDefileEngine = (() => {
       let eScore = eDetail ? eDetail.final : 0;
       entry.playerEndurancePercent  = pDetail?.endurancePercent  ?? null;
       entry.enemyEndurancePercent   = eDetail?.endurancePercent  ?? null;
+      entry.playerEnduranceRemaining = pDetail?.enduranceRemaining ?? null;
+      entry.enemyEnduranceRemaining  = eDetail?.enduranceRemaining ?? null;
+      entry.playerEnduranceMax = pFighter ? Math.round(pFighter.enduranceMax) : null;
+      entry.enemyEnduranceMax  = eFighter ? Math.round(eFighter.enduranceMax) : null;
       entry.playerEnduranceBonusPct = pDetail?.enduranceBonusPct ?? null;
       entry.enemyEnduranceBonusPct  = eDetail?.enduranceBonusPct ?? null;
       entry.playerAfterType = pDetail ? Math.round(pDetail.afterType) : null;
