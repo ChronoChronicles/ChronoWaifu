@@ -4576,10 +4576,6 @@ const CWAdminPanel = (() => {
             <label>Multiplicateur global d'affinité</label>
             <input type="number" id="defile-affinity-mult" value="${cCfg.affinityGainMultiplier ?? 1}" min="0" step="0.1" />
           </div>
-          <div class="admin-field">
-            <label>Facteur Bonus Forme (0,01 = 1% de la Forme restante ABSOLUE)</label>
-            <input type="number" id="defile-endurance-factor" value="${cCfg.defileEnduranceScoreFactor ?? 0.01}" min="0" step="0.001" />
-          </div>
         </div>
       </div>
       <hr class="admin-sep" />
@@ -6605,7 +6601,6 @@ const CWAdminPanel = (() => {
         defilePlayerXpPercent:   parseFloat(document.getElementById('defile-player-xp-pct')?.value || '5'),
         defileGoldPercent:       parseFloat(document.getElementById('defile-gold-pct')?.value || '1'),
         affinityGainMultiplier:  parseFloat(document.getElementById('defile-affinity-mult')?.value || '1'),
-        defileEnduranceScoreFactor: parseFloat(document.getElementById('defile-endurance-factor')?.value || '0.01'),
         recordMaxTurns:          parseInt(document.getElementById('record-max-turns')?.value || '15'),
         recordEnemyCount:        parseInt(document.getElementById('record-enemy-count')?.value || '3'),
         recordKillBonus:         parseInt(document.getElementById('record-kill-bonus')?.value || '100'),

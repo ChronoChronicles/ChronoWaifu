@@ -134,7 +134,7 @@ const CWDefileEngine = (() => {
 
     const enduranceLoss = cfg.defileEnduranceLossPct ?? 15;
     const enduranceGain = cfg.defileEnduranceGainPct ?? 15;
-    const enduranceFactor = cfg.defileEnduranceScoreFactor ?? 0.01;
+    // (plus de facteur configurable ici — formule fixée en dur, cf. computeSideScore)
 
     // Talent copié par une éventuelle Légende (choisi AVANT toute planification)
     const legendeCopy = choices.legendeCopyTypeId || null;
@@ -154,7 +154,7 @@ const CWDefileEngine = (() => {
       // enduranceMax × (endurancePercent/100). Bonus = ce facteur × cette
       // valeur absolue, arrondi à l'unité supérieure (ex: 785 → +8%).
       const enduranceRemaining = fighter.enduranceMax * (endurancePercent / 100);
-      const enduranceBonusPct = Math.ceil(enduranceRemaining * enduranceFactor);
+      const enduranceBonusPct = Math.ceil(enduranceRemaining / 100);
       const afterEndurance = afterType * (1 + enduranceBonusPct / 100);
       // Plus aucun calcul après ceci : ce qui est affiché comme "Bonus Forme"
       // EST la valeur utilisée pour le score final (sauf Talent, qui a sa
