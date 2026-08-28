@@ -80,6 +80,12 @@ const CWGameDatabase = (() => {
         common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5, mythic: 6,
       },
       affinityStageMultiplier: [1, 2, 3, 4], // index = evolutionStage (0 à 3)
+      affinityGainMultiplier: 1, // multiplicateur global appliqué par-dessus le calcul ci-dessus
+      // ── Récompenses de fin de Défilé (toutes réglables) ─────────────────────
+      defileCharXpPercent:   10, // % du score marqué par CHAQUE personnage → XP perso
+      defilePlayerXpPercent:  5, // % du score total du défilé → XP joueur
+      defileGoldPercent:      1, // % du score total du défilé → dollars
+      // Diamants : à définir plus tard
       // ── Équilibrage joueur / ennemi ────────────────────────────────────────
       playerDmgBonus:  1.15, // Multiplicateur de dégâts joueur → ennemi (+15%)
       enemyDmgPenalty: 0.80, // Multiplicateur de dégâts ennemi → joueur (−20%)

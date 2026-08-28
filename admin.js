@@ -4553,6 +4553,33 @@ const CWAdminPanel = (() => {
       </div>
       <hr class="admin-sep" />
       <div class="admin-section">
+        <div class="admin-section-title">🎁 Récompenses de fin de Défilé</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Calculées à la fin de chaque défilé : XP et dollars en % du score
+          marqué, affinité selon la rareté/le stade de l'adversaire rencontrée
+          (× ce multiplicateur global).
+        </p>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>XP perso (% du score DE la personnage)</label>
+            <input type="number" id="defile-char-xp-pct" value="${cCfg.defileCharXpPercent ?? 10}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>XP joueur (% du score total)</label>
+            <input type="number" id="defile-player-xp-pct" value="${cCfg.defilePlayerXpPercent ?? 5}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Dollars (% du score total)</label>
+            <input type="number" id="defile-gold-pct" value="${cCfg.defileGoldPercent ?? 1}" min="0" step="0.5" />
+          </div>
+          <div class="admin-field">
+            <label>Multiplicateur global d'affinité</label>
+            <input type="number" id="defile-affinity-mult" value="${cCfg.affinityGainMultiplier ?? 1}" min="0" step="0.1" />
+          </div>
+        </div>
+      </div>
+      <hr class="admin-sep" />
+      <div class="admin-section">
         <div class="admin-section-title">📊 Mode Performance</div>
         <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
           Combat où le joueur inflige un maximum de dégâts à une vague d'ennemis
@@ -6570,6 +6597,10 @@ const CWAdminPanel = (() => {
         critDivisor:             parseFloat(document.getElementById('combat-crit-divisor')?.value || '200'),
         critMultiplier:          parseFloat(document.getElementById('combat-crit-mult')?.value || '1.5'),
         scoreDefReference:       parseFloat(document.getElementById('combat-score-def-ref')?.value || '10'),
+        defileCharXpPercent:     parseFloat(document.getElementById('defile-char-xp-pct')?.value || '10'),
+        defilePlayerXpPercent:   parseFloat(document.getElementById('defile-player-xp-pct')?.value || '5'),
+        defileGoldPercent:       parseFloat(document.getElementById('defile-gold-pct')?.value || '1'),
+        affinityGainMultiplier:  parseFloat(document.getElementById('defile-affinity-mult')?.value || '1'),
         recordMaxTurns:          parseInt(document.getElementById('record-max-turns')?.value || '15'),
         recordEnemyCount:        parseInt(document.getElementById('record-enemy-count')?.value || '3'),
         recordKillBonus:         parseInt(document.getElementById('record-kill-bonus')?.value || '100'),

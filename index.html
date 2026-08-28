@@ -546,6 +546,36 @@
     transition:width 400ms ease;
   }
   .affinity-percent{ font-family:var(--font-mono); font-size:.75rem; font-weight:700; color:#c4b5fd; text-align:right; }
+
+  /* ── ÉCRAN RÉCOMPENSES (XP + Affinité) ── */
+  .reward-section-title{
+    font-family:'Playfair Display', serif; font-style:italic; font-size:.95rem;
+    color:#f3d9a8; margin:16px 0 8px;
+  }
+  .reward-row{
+    display:flex; gap:12px; background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:10px; margin-bottom:8px;
+  }
+  .reward-row-portrait{
+    width:56px; aspect-ratio:1/1.3; flex-shrink:0; border-radius:8px; overflow:hidden;
+    position:relative; background:var(--surface-2); display:flex; align-items:center; justify-content:center;
+  }
+  .reward-row-info{ flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:5px; }
+  .reward-row-name{ font-size:.82rem; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px; }
+  .reward-row-level{ font-family:var(--font-mono); font-size:.7rem; color:#a78bfa; font-weight:700; }
+  .reward-row-level.reward-pop{ animation:dpbScorePop 400ms cubic-bezier(.22,.68,0,1.2); }
+  .reward-bar-track{ height:9px; background:rgba(255,255,255,.08); border-radius:5px; overflow:hidden; }
+  .reward-bar-fill{
+    height:100%; border-radius:5px; background:linear-gradient(90deg,#4ade80,#22d3ee);
+    transition:width 650ms ease;
+  }
+  .affinity-reward-fill{ background:linear-gradient(90deg,#f472b6,#a78bfa); }
+  .reward-row-gain{ font-family:var(--font-mono); font-size:.68rem; color:var(--text-dim); text-align:right; }
+  .rewards-money{
+    text-align:center; font-family:var(--font-mono); font-size:1.5rem; font-weight:800;
+    color:#4ade80; margin-top:10px; opacity:0; animation:broFadeIn 400ms ease forwards;
+  }
+  .rewards-money.reward-pop{ animation:dpbScorePop 450ms cubic-bezier(.22,.68,0,1.2), broFadeIn 400ms ease forwards; }
   .dpb-skip-btn{
     position:fixed; top:14px; right:14px; z-index:60;
     background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2);
@@ -3906,6 +3936,7 @@
       <section id="screen-defile-planning" class="screen"></section>
       <section id="screen-defile-playback" class="screen"></section>
       <section id="screen-defile-result" class="screen"></section>
+      <section id="screen-defile-rewards" class="screen"></section>
       <section id="screen-affinity" class="screen"></section>
     </main>
 

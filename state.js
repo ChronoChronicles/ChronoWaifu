@@ -1343,7 +1343,8 @@ const CWGameState = (() => {
     const cfg = _state.config.combat;
     const baseIncrement = cfg.affinityRarityIncrement?.[rarity] ?? 1;
     const stageMult     = cfg.affinityStageMultiplier?.[evolutionStage] ?? 1;
-    const gain = baseIncrement * stageMult;
+    const globalMult    = cfg.affinityGainMultiplier ?? 1;
+    const gain = baseIncrement * stageMult * globalMult;
 
     const current = getAffinityPercent(evolutionLine);
     const next = Math.min(100, current + gain);

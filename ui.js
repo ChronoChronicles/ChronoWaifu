@@ -943,6 +943,7 @@ const CWGameUI = (() => {
       'defile-planning': renderDefilePlanning,
       'defile-playback': renderDefilePlayback,
       affinity: renderAffinity,
+      'defile-rewards': renderDefileRewards,
       'defile-result':   renderDefileResult,
     };
     renderers[screenId]?.();
@@ -6623,11 +6624,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     );
 
     _applyDefileStats(result, playerAssignment);
+    _defileRewardsPlan = _computeDefileRewardsPlan(result, playerAssignment);
 
     _defileLastResult = result;
     _defileState = null; // repart de zéro pour le prochain défilé
     showScreen('defile-playback');
   }
+
+  let _defileRewardsPlan = null;
 
   /**
    * Met à jour les stats joueur ET personnage après un défilé : Défilés
@@ -6641,20 +6645,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     if (result.winner === 'player') stats.totalDefilesWon = (stats.totalDefilesWon || 0) + 1;
 
     const charactersWhoWalked = new Set();
-    const unlockedByAffinity = [];
     result.log.forEach((l, idx) => {
       stats.totalDefilePoints = (stats.totalDefilePoints || 0) + l.playerScore;
       const passageWon = l.playerScore > l.enemyScore;
       if (passageWon) stats.totalPassagesWon = (stats.totalPassagesWon || 0) + 1;
-
-      // Gain d'affinité envers la lignée de l'adversaire à chaque tournage gagné
-      if (passageWon && l.enemyCharId) {
-        const enemyDef = CWGameState.getCharDef(l.enemyCharId);
-        if (enemyDef) {
-          const affResult = CWGameState.registerAffinityGain(enemyDef.evolutionLine, enemyDef.rarity, enemyDef.evolutionStage);
-          if (affResult?.unlocked) unlockedByAffinity.push(enemyDef.name);
-        }
-      }
 
       const slot = playerAssignment[idx];
       if (slot) {
@@ -6667,33 +6661,204 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       }
     });
 
-    unlockedByAffinity.forEach(name => {
-      _showToast(`💞 L'affinité avec ${name} a atteint 100% — elle rejoint ta collection !`, 'success');
-    });
-
     // Défilés gagnés : une fois par personnage ayant défilé, si le défilé est remporté
     if (result.winner === 'player') {
       charactersWhoWalked.forEach(instanceId => {
         const inst = CWGameState.getPlayerChar(instanceId);
         if (inst) inst.defilesWon = (inst.defilesWon || 0) + 1;
       });
-
-      // Récompenses de base à la victoire (or/diamants/XP) — générique pour
-      // l'instant, en attendant de rebrancher les mécaniques propres à
-      // chaque mode d'origine (progression Histoire/Tournée, capture
-      // Caprice, classement Grand Gala, quêtes d'Event).
-      const goldReward     = 50 + Math.round(result.playerTotal / 20);
-      const crystalsReward = 5  + Math.round(result.playerTotal / 200);
-      CWGameState.modifyResources({ gold: goldReward, crystals: crystalsReward });
-      charactersWhoWalked.forEach(instanceId => {
-        CWGameState.addXpToCharacter?.(instanceId, 15);
-      });
     }
 
     CWGameState.updatePlayer({ stats });
   }
 
+  /**
+   * Calcule (sans encore rien appliquer) les récompenses de fin de défilé :
+   * XP par personnage (% de SON score marqué ce défilé), XP joueur et
+   * dollars (% du score total), et la liste des gains d'affinité à venir.
+   * L'application réelle se fait progressivement sur l'écran de récompenses,
+   * pour que les jauges animées reflètent fidèlement chaque étape.
+   */
+  function _computeDefileRewardsPlan(result, playerAssignment) {
+    const cfg = CWGameState.get().config.combat;
+
+    // Score personnel cumulé de CHAQUE personnage sur CE défilé uniquement
+    const scoreByInstance = {};
+    const enemyRoundsWon = [];
+    result.log.forEach((l, idx) => {
+      const slot = playerAssignment[idx];
+      if (slot) scoreByInstance[slot.instanceId] = (scoreByInstance[slot.instanceId] || 0) + l.playerScore;
+      if (l.playerScore > l.enemyScore && l.enemyCharId) {
+        const enemyDef = CWGameState.getCharDef(l.enemyCharId);
+        if (enemyDef) enemyRoundsWon.push({ evolutionLine: enemyDef.evolutionLine, rarity: enemyDef.rarity, evolutionStage: enemyDef.evolutionStage, enemyName: enemyDef.name });
+      }
+    });
+
+    const charXpPercent = cfg.defileCharXpPercent ?? 10;
+    const charXp = Object.entries(scoreByInstance).map(([instanceId, score]) => {
+      const inst = CWGameState.getPlayerChar(instanceId);
+      const def  = inst ? CWGameState.getCharDef(inst.charId) : null;
+      return {
+        instanceId,
+        name: def?.name || '?',
+        xpAmount: Math.round(score * (charXpPercent / 100)),
+      };
+    }).filter(c => c.xpAmount > 0);
+
+    const playerXp = Math.round(result.playerTotal * ((cfg.defilePlayerXpPercent ?? 5) / 100));
+    const gold     = Math.round(result.playerTotal * ((cfg.defileGoldPercent ?? 1) / 100));
+
+    return { charXp, playerXp, gold, affinityGains: enemyRoundsWon };
+  }
+
   // ─── ÉCRAN AFFINITÉS (remplace le Gacha) ────────────────────────────────────
+
+  const _rewardSleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  async function renderDefileRewards() {
+    const el = document.getElementById('screen-defile-rewards');
+    if (!el || !_defileRewardsPlan) { _showCombatSelect(); return; }
+    const plan = _defileRewardsPlan;
+    const state = CWGameState.get();
+
+    el.innerHTML = `
+      <div class="screen-header"><h2>🎁 Récompenses</h2></div>
+      ${plan.charXp.length ? `
+        <div class="reward-section-title">✨ Expérience</div>
+        <div id="rewards-xp-list">
+          ${plan.charXp.map(c => {
+            const inst = CWGameState.getPlayerChar(c.instanceId);
+            const def  = inst ? CWGameState.getCharDef(inst.charId) : null;
+            return `
+              <div class="reward-row">
+                <div class="reward-row-portrait">${def ? _combatPortraitImgHtml(def) : ''}</div>
+                <div class="reward-row-info">
+                  <div class="reward-row-name">${c.name} <span class="reward-row-level" id="reward-level-${c.instanceId}">Niv. ${inst?.level ?? '?'}</span></div>
+                  <div class="reward-bar-track"><div class="reward-bar-fill" id="reward-bar-${c.instanceId}" style="width:0%"></div></div>
+                  <div class="reward-row-gain">+${c.xpAmount} XP</div>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+      ` : ''}
+      <div class="reward-section-title" id="rewards-affinity-title" style="display:none;">💞 Affinité</div>
+      <div id="rewards-affinity-list"></div>
+      <div class="rewards-money" id="rewards-money" style="display:none;"></div>
+      <button class="btn-primary" id="btn-rewards-done" style="display:none;width:100%;margin-top:16px;">Terminer</button>
+    `;
+
+    await _rewardSleep(400);
+
+    // Phase 1 — XP, une personnage après l'autre, jauge façon Pokémon
+    for (const c of plan.charXp) {
+      await _animateDefileCharXp(c, state.config.level);
+      await _rewardSleep(350);
+    }
+
+    // Phase 2 — affinité, une lignée après l'autre
+    if (plan.affinityGains.length) {
+      document.getElementById('rewards-affinity-title').style.display = '';
+      await _animateDefileAffinityGains(plan.affinityGains);
+    }
+
+    // Phase 3 — argent + XP joueur (discrets, appliqués en une fois)
+    if (plan.gold > 0) CWGameState.modifyResources({ gold: plan.gold });
+    if (plan.playerXp > 0) CWGameState.addXpToPlayer(plan.playerXp);
+    if (plan.gold > 0) {
+      const moneyEl = document.getElementById('rewards-money');
+      moneyEl.style.display = '';
+      moneyEl.textContent = `💵 +${plan.gold.toLocaleString('fr-FR')}`;
+      moneyEl.classList.add('reward-pop');
+    }
+
+    const doneBtn = document.getElementById('btn-rewards-done');
+    doneBtn.style.display = '';
+    doneBtn.addEventListener('click', () => _showCombatSelect());
+  }
+
+  /** Anime la jauge d'XP d'une personnage façon Pokémon (remplissage → niveau → reset → suite) */
+  async function _animateDefileCharXp(c, levelCfg) {
+    const inst = CWGameState.getPlayerChar(c.instanceId);
+    const barEl = document.getElementById(`reward-bar-${c.instanceId}`);
+    const levelEl = document.getElementById(`reward-level-${c.instanceId}`);
+    if (!inst || !barEl) return;
+
+    const startLevel = inst.level, startXp = inst.xp;
+    const startNeeded = CWGameDatabase.xpForLevel(startLevel + 1, levelCfg);
+    barEl.style.transition = 'none';
+    barEl.style.width = `${Math.min(100, (startXp / startNeeded) * 100)}%`;
+    void barEl.offsetWidth;
+    barEl.style.transition = 'width 650ms ease';
+    await _rewardSleep(150);
+
+    const result = CWGameState.addXpToCharacter(c.instanceId, c.xpAmount); // applique réellement le gain
+
+    let level = startLevel;
+    for (const newLevel of result.levelUps) {
+      barEl.style.width = '100%';
+      await _rewardSleep(600);
+      level = newLevel;
+      levelEl.textContent = `Niv. ${level}`;
+      levelEl.classList.add('reward-pop');
+      barEl.style.transition = 'none';
+      barEl.style.width = '0%';
+      void barEl.offsetWidth;
+      barEl.style.transition = 'width 650ms ease';
+      await _rewardSleep(150);
+    }
+    const finalNeeded = CWGameDatabase.xpForLevel(level + 1, levelCfg);
+    barEl.style.width = `${Math.min(100, (inst.xp / finalNeeded) * 100)}%`;
+    await _rewardSleep(600);
+  }
+
+  /** Anime les jauges d'affinité gagnées, lignée par lignée */
+  async function _animateDefileAffinityGains(affinityGains) {
+    const grouped = {};
+    affinityGains.forEach(g => {
+      if (!grouped[g.evolutionLine]) grouped[g.evolutionLine] = { ...g, occurrences: 0 };
+      grouped[g.evolutionLine].occurrences++;
+    });
+
+    const listEl = document.getElementById('rewards-affinity-list');
+    for (const lineageId of Object.keys(grouped)) {
+      const g = grouped[lineageId];
+      const rd = CWGameDatabase.RARITIES[g.rarity] || {};
+      const startPercent = CWGameState.getAffinityPercent(lineageId);
+
+      const row = document.createElement('div');
+      row.className = 'reward-row';
+      row.innerHTML = `
+        <div class="reward-row-portrait affinity-reward-portrait" id="affinity-reward-portrait-${lineageId}">
+          <div class="unknown-silhouette">?</div>
+        </div>
+        <div class="reward-row-info">
+          <div class="reward-row-name">${g.enemyName} <span class="affinity-rarity-badge" style="background:${rd.color}">${rd.name}</span></div>
+          <div class="reward-bar-track"><div class="reward-bar-fill affinity-reward-fill" id="affinity-reward-bar-${lineageId}" style="width:${startPercent}%"></div></div>
+          <div class="reward-row-gain" id="affinity-reward-pct-${lineageId}">${startPercent}%</div>
+        </div>
+      `;
+      listEl.appendChild(row);
+      await _rewardSleep(250);
+
+      let unlocked = null;
+      for (let i = 0; i < g.occurrences; i++) {
+        const res = CWGameState.registerAffinityGain(g.evolutionLine, g.rarity, g.evolutionStage);
+        if (!res) break;
+        if (res.unlocked) unlocked = res.unlocked;
+        document.getElementById(`affinity-reward-bar-${lineageId}`).style.width = `${res.current}%`;
+        document.getElementById(`affinity-reward-pct-${lineageId}`).textContent = `${res.current}%`;
+        await _rewardSleep(450);
+      }
+
+      if (unlocked) {
+        const baseChar = CWGameState.get().characters.find(c => c.evolutionLine === lineageId && c.evolutionStage === 0);
+        const portraitEl = document.getElementById(`affinity-reward-portrait-${lineageId}`);
+        if (portraitEl && baseChar) portraitEl.innerHTML = _combatPortraitImgHtml(baseChar);
+        _showToast(`💞 L'affinité avec ${g.enemyName} a atteint 100% — elle rejoint ta collection !`, 'success');
+        await _rewardSleep(700);
+      }
+    }
+  }
 
   function renderAffinity() {
     const el = document.getElementById('screen-affinity');
@@ -6785,9 +6950,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           </div>`;
         }).join('')}
       </div>
-      <button class="btn-primary" id="btn-defile-back" style="width:100%;margin-top:14px;">Retour</button>
+      <button class="btn-primary" id="btn-defile-continue" style="width:100%;margin-top:14px;">Voir les récompenses ›</button>
     `;
-    document.getElementById('btn-defile-back')?.addEventListener('click', () => _showCombatSelect());
+    document.getElementById('btn-defile-continue')?.addEventListener('click', () => showScreen('defile-rewards'));
   }
 
 
