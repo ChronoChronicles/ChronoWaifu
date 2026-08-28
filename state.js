@@ -1066,22 +1066,24 @@ const CWGameState = (() => {
 
   // Vérifie si une feature est déverrouillée selon la progression mode histoire
   function isFeatureUnlocked(featureId) {
-    const prog = _state.player.storyMode || {};
-    // Helper : stages complétés dans un chapitre
-    const stagesInChapter = (ci) => prog[ci]?.completedStages?.length || 0;
-    const chapterDone     = (ci) => stagesInChapter(ci) >= 10;
-
-    switch (featureId) {
-      case 'gacha':    return stagesInChapter(1) >= 5;  // Chap.2 Stage 5
-      case 'shop':     return stagesInChapter(1) >= 5;  // Chap.2 Stage 5 (même condition que le Gacha)
-      case 'caprice':  return chapterDone(1);            // Fin Chap.2
-      case 'saga':     return chapterDone(3);            // Fin Chap.4
-      case 'tournee':  return chapterDone(2);            // Fin Chap.3
-      case 'grandgala':return chapterDone(4);            // Fin Chap.5
-      case 'record':   return chapterDone(5);            // Fin Chap.6
-      case 'defile':   return chapterDone(6);            // Fin Chap.7 (à ajuster si besoin)
-      default:         return true;
-    }
+    // Conditions de déblocage désactivées (tout est accessible immédiatement).
+    // Ancien code conservé en commentaire pour un rétablissement facile :
+    //
+    // const prog = _state.player.storyMode || {};
+    // const stagesInChapter = (ci) => prog[ci]?.completedStages?.length || 0;
+    // const chapterDone     = (ci) => stagesInChapter(ci) >= 10;
+    // switch (featureId) {
+    //   case 'gacha':    return stagesInChapter(1) >= 5;  // Chap.2 Stage 5
+    //   case 'shop':     return stagesInChapter(1) >= 5;  // Chap.2 Stage 5 (même condition que le Gacha)
+    //   case 'caprice':  return chapterDone(1);            // Fin Chap.2
+    //   case 'saga':     return chapterDone(3);            // Fin Chap.4
+    //   case 'tournee':  return chapterDone(2);            // Fin Chap.3
+    //   case 'grandgala':return chapterDone(4);            // Fin Chap.5
+    //   case 'record':   return chapterDone(5);            // Fin Chap.6
+    //   case 'defile':   return chapterDone(6);            // Fin Chap.7 (à ajuster si besoin)
+    //   default:         return true;
+    // }
+    return true;
   }
   function getStoryChapterProgress(chapterIdx) {
     const prog = _state.player.storyMode?.[chapterIdx] || { completedStages: [], highestStage: 0 };
