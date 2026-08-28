@@ -6038,6 +6038,18 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   const STAT_LABELS_SHORT = { atk: '✨ Charisme', def: '🌹 Prestance', spd: '🕊️ Grâce' };
 
   /** Génère l'équipe adverse d'un défilé, niveau calqué sur la moyenne du joueur */
+  /**
+   * Comme getDefileTalentDisplay, mais résout Légende vers le Talent qu'elle
+   * a effectivement copié (une fois le choix fait) — affiche donc "Grand
+   * Sourire" et non "Polyvalence" partout dans l'écran de planification.
+   */
+  function _getPlanningTalentDisplay(typeId, cfg) {
+    if (typeId === 'Legende' && _defileState?.legendeCopyTypeId) {
+      return CWGameDatabase.getDefileTalentDisplay(_defileState.legendeCopyTypeId, cfg);
+    }
+    return CWGameDatabase.getDefileTalentDisplay(typeId, cfg);
+  }
+
   function _buildDefileEnemyTeam(playerTeam, cfg, state) {
     const avgLevel = Math.max(1, Math.round(
       playerTeam.reduce((s, f) => s + (f.level || 1), 0) / playerTeam.length
@@ -6267,7 +6279,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           const fighter = slot ? playerTeam.find(f => f.instanceId === slot.instanceId) : null;
           const t = types.find(tt => tt.id === p.typeId);
           const talentSlot = talentPlacement[idx];
-          const talent = talentSlot ? CWGameDatabase.getDefileTalentDisplay(talentSlot.typeId, state.config.combat) : null;
+          const talent = talentSlot ? _getPlanningTalentDisplay(talentSlot.typeId, state.config.combat) : null;
           const talentOwner = talentSlot ? playerTeam.find(f => f.instanceId === talentSlot.instanceId) : null;
 
           // Modificateur en direct de CETTE personnage face au type du passage
@@ -6339,7 +6351,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       </div>
       <div class="defile-roster" id="defile-talents">
         ${talentChips.map(chip => {
-          const talent = CWGameDatabase.getDefileTalentDisplay(chip.typeId, state.config.combat);
+          const talent = _getPlanningTalentDisplay(chip.typeId, state.config.combat);
           const ownRound = _defileTalentChipRound(chip.instanceId, chip.typeId);
           const placed = ownRound >= 0;
           const limitReached = talentsPlaced >= maxTalents && !placed;
@@ -6420,7 +6432,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     e.preventDefault();
     const label = kind === 'char'
       ? _defileState.playerTeam.find(f => f.instanceId === payload.instanceId)?.name
-      : CWGameDatabase.getDefileTalentDisplay(payload.typeId, CWGameState.get().config.combat)?.name;
+      : _getPlanningTalentDisplay(payload.typeId, CWGameState.get().config.combat)?.name;
     if (!label) return;
 
     const ghost = document.createElement('div');
@@ -6470,9 +6482,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         _renderDefilePlanningDOM();
 
         // Mystique (Substitution) : demande immédiatement quel passage adverse
-        // ultérieur échanger avec celui-ci
+        // ultérieur échanger avec celui-ci — léger délai pour laisser
+        // l'événement tactile actuel se terminer avant de créer la modale
+        // (sinon le premier tap dessus peut ne pas être pris en compte).
         if (payload.typeId === 'Mystique') {
-          _openDefileMystiquePicker(round);
+          setTimeout(() => _openDefileMystiquePicker(round), 60);
         }
       }
     };
@@ -6656,8 +6670,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTalent);
           await _showDefileTalentBanner(text);
         }
-        if (evt.playerScoreAfter != null) _setScorePop('dpb-score-player', evt.playerScoreAfter);
-        if (evt.enemyScoreAfter  != null) _setScorePop('dpb-score-enemy',  evt.enemyScoreAfter);
+        if (evt.playerScoreAfter != null) await _setScorePop('dpb-score-player', evt.playerScoreAfter);
+        if (evt.enemyScoreAfter  != null) await _setScorePop('dpb-score-enemy',  evt.enemyScoreAfter);
         await _sleep(700);
       }
     }
@@ -6694,59 +6708,51 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     // Phase 3 — score de base (valeur BRUTE, avant tout Talent), révélé pour
     // l'alliée D'ABORD, puis pour l'adversaire — jamais les deux en même temps
     _setDefilePhaseCaption(`Score de base (${STAT_LABELS_SHORT[l.playerJudgedStat || l.stat].replace(/^[^\s]+\s/, '')}) — ${l.playerFighter || '?'}`);
-    _setScorePop('dpb-score-player', l.playerStatValue ?? 0);
     CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileScoreTick);
-    await _sleep(2000);
+    await _setScorePop('dpb-score-player', l.playerStatValue ?? 0);
     _setDefilePhaseCaption(`Score de base (${STAT_LABELS_SHORT[l.enemyJudgedStat || l.stat].replace(/^[^\s]+\s/, '')}) — ${l.enemyFighter || '?'}`);
-    _setScorePop('dpb-score-enemy', l.enemyStatValue ?? 0);
     CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileScoreTick);
-    await _sleep(2000);
+    await _setScorePop('dpb-score-enemy', l.enemyStatValue ?? 0);
 
     // Phase 3b — modificateurs de STAT (Passion, Idole, Enchanteresse),
     // chacun affiché avec son montant exact, AVANT le multiplicateur de type
     await playStageEvents(1);
-    if (l.playerStatAfterMods != null) _setScorePop('dpb-score-player', l.playerStatAfterMods);
-    if (l.enemyStatAfterMods  != null) _setScorePop('dpb-score-enemy',  l.enemyStatAfterMods);
+    if (l.playerStatAfterMods != null) await _setScorePop('dpb-score-player', l.playerStatAfterMods);
+    if (l.enemyStatAfterMods  != null) await _setScorePop('dpb-score-enemy',  l.enemyStatAfterMods);
 
     // Phase 4 — bonus/malus de type révélé, score recalculé en direct
     _setDefilePhaseCaption(`Multiplicateur de type ${l.playerMult != null ? _formatAffinityMult(l.playerMult) : ''} — ${l.playerFighter || '?'}`);
     _showDefileTypeBadge('dpb-type-badge-player', l.playerMult);
-    _setScorePop('dpb-score-player', l.playerAfterType ?? l.playerStatValue);
     if (l.playerMult != null) CWAudioSystem.playSfx(l.playerMult >= 2 ? CWAudioSystem.SFX_KEYS.defileTypeGood : l.playerMult <= 0.5 ? CWAudioSystem.SFX_KEYS.defileTypeBad : null);
-    await _sleep(2200);
+    await _setScorePop('dpb-score-player', l.playerAfterType ?? l.playerStatValue);
     _setDefilePhaseCaption(`Multiplicateur de type ${l.enemyMult != null ? _formatAffinityMult(l.enemyMult) : ''} — ${l.enemyFighter || '?'}`);
     _showDefileTypeBadge('dpb-type-badge-enemy', l.enemyMult);
-    _setScorePop('dpb-score-enemy', l.enemyAfterType ?? l.enemyStatValue);
     if (l.enemyMult != null) CWAudioSystem.playSfx(l.enemyMult >= 2 ? CWAudioSystem.SFX_KEYS.defileTypeGood : l.enemyMult <= 0.5 ? CWAudioSystem.SFX_KEYS.defileTypeBad : null);
-    await _sleep(2200);
+    await _setScorePop('dpb-score-enemy', l.enemyAfterType ?? l.enemyStatValue);
 
     // Phase 4c — modificateurs de SCORE (Charme, Sale Rumeur, Retournement
     // d'Amazone), chacun affiché avec son montant exact, AVANT le Bonus Forme
     await playStageEvents(3);
-    if (l.playerScoreBeforeForme != null) _setScorePop('dpb-score-player', l.playerScoreBeforeForme);
-    if (l.enemyScoreBeforeForme  != null) _setScorePop('dpb-score-enemy',  l.enemyScoreBeforeForme);
+    if (l.playerScoreBeforeForme != null) await _setScorePop('dpb-score-player', l.playerScoreBeforeForme);
+    if (l.enemyScoreBeforeForme  != null) await _setScorePop('dpb-score-enemy',  l.enemyScoreBeforeForme);
 
     // Phase 4b — bonus de Forme (Endurance restante), révélé alliée puis adversaire
     if (l.playerEnduranceBonusPct != null) {
       _setDefilePhaseCaption(`Bonus Forme +${l.playerEnduranceBonusPct}% — ${l.playerFighter || '?'}`);
-      _setScorePop('dpb-score-player', l.playerAfterEndurance ?? l.playerScoreBeforeForme);
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileEndurance);
-      await _sleep(2200);
+      await _setScorePop('dpb-score-player', l.playerAfterEndurance ?? l.playerScoreBeforeForme);
     }
     if (l.enemyEnduranceBonusPct != null) {
       _setDefilePhaseCaption(`Bonus Forme +${l.enemyEnduranceBonusPct}% — ${l.enemyFighter || '?'}`);
-      _setScorePop('dpb-score-enemy', l.enemyAfterEndurance ?? l.enemyScoreBeforeForme);
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileEndurance);
-      await _sleep(2200);
+      await _setScorePop('dpb-score-enemy', l.enemyAfterEndurance ?? l.enemyScoreBeforeForme);
     }
 
     // Phase 6 — score final du tournage, révélé alliée d'abord puis adversaire
     _setDefilePhaseCaption(`Score final du tournage — ${l.playerFighter || '?'}`);
-    _setScorePop('dpb-score-player', l.playerScore);
-    await _sleep(2200);
+    await _setScorePop('dpb-score-player', l.playerScore);
     _setDefilePhaseCaption(`Score final du tournage — ${l.enemyFighter || '?'}`);
-    _setScorePop('dpb-score-enemy', l.enemyScore);
-    await _sleep(2200);
+    await _setScorePop('dpb-score-enemy', l.enemyScore);
     pSide.classList.toggle('winner', l.playerScore > l.enemyScore);
     eSide.classList.toggle('winner', l.enemyScore > l.playerScore);
     CWAudioSystem.playSfx(l.playerScore > l.enemyScore ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose);
@@ -6817,8 +6823,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   function _spotlightDefileWinner(sideEl) {
     return new Promise(resolve => {
       const cardFrame = sideEl?.querySelector('.dpb-card-frame');
-      if (!cardFrame) { resolve(); return; }
+      const shell = document.querySelector('.app-shell');
+      if (!cardFrame || !shell) { resolve(); return; }
       const rect = cardFrame.getBoundingClientRect();
+      const shellRect = shell.getBoundingClientRect();
 
       const clone = cardFrame.cloneNode(true);
       clone.className = 'dpb-card-frame dpb-spotlight-clone';
@@ -6827,16 +6835,24 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       clone.style.top = `${rect.top}px`;
       clone.style.width = `${rect.width}px`;
       clone.style.margin = '0';
+      // Le centre CIBLE est celui de l'interface (.app-shell), pas du viewport entier
+      clone.style.setProperty('--dpb-target-left', `${shellRect.left + shellRect.width / 2}px`);
+      clone.style.setProperty('--dpb-target-top', `${shellRect.top + shellRect.height / 2}px`);
       document.body.appendChild(clone);
 
+      const arrivalDelay = 550; // durée de la transition CSS de rapprochement
       requestAnimationFrame(() => requestAnimationFrame(() => {
         clone.classList.add('active');
       }));
 
-      setTimeout(() => {
+      setTimeout(async () => {
+        // Le portrait est maintenant au centre — on attend 500ms de plus,
+        // PUIS on lance le son, PUIS on attend sa vraie fin avant de repartir.
+        await _sleep(500);
+        await CWAudioSystem.playSfxAwait(CWAudioSystem.SFX_KEYS.defileRoundWin);
         clone.classList.remove('active');
         setTimeout(() => { clone.remove(); resolve(); }, 300);
-      }, 1300);
+      }, arrivalDelay);
     });
   }
 
@@ -6923,17 +6939,33 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     original.remove();
   }
 
-  /** Met à jour un score avec un petit effet de "pop" pour bien marquer le changement */
-  /** Anime un score en le faisant défiler rapidement jusqu'à sa valeur finale (façon compteur) */
+  /**
+   * Anime un score en le faisant défiler jusqu'à sa valeur finale (façon
+   * compteur), puis attend 1000ms une fois le bon chiffre affiché avant de
+   * se résoudre — pour laisser le temps de le lire avant la suite.
+   */
   function _setScorePop(elId, value) {
-    const el = document.getElementById(elId);
-    if (!el) return;
-    // Affichage direct et instantané — l'ancienne animation "compteur qui
-    // défile" (via requestAnimationFrame) pouvait être lue par le joueur
-    // AVANT la fin des 500ms, montrant une valeur intermédiaire au lieu de
-    // la vraie valeur finale. Retirée pour éliminer toute ambiguïté.
-    el.textContent = Math.round(value);
-    el.classList.remove('score-pop'); void el.offsetWidth; el.classList.add('score-pop');
+    return new Promise(resolve => {
+      const el = document.getElementById(elId);
+      if (!el) { resolve(); return; }
+      const target = Math.round(value);
+      const from = parseInt(el.textContent, 10) || 0;
+      const duration = _dpbSkip ? 0 : 550;
+      const start = performance.now();
+      el.classList.remove('score-pop'); void el.offsetWidth; el.classList.add('score-pop');
+      function step(now) {
+        const t = duration === 0 ? 1 : Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 2); // ease-out : rapide au début, se stabilise à la fin
+        el.textContent = Math.round(from + (target - from) * eased);
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          el.textContent = target;
+          setTimeout(resolve, _dpbSkip ? 0 : 1000);
+        }
+      }
+      requestAnimationFrame(step);
+    });
   }
 
   function _showDefileTypeBadge(elId, mult) {
@@ -7071,7 +7103,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const playerXp = Math.round(result.playerTotal * ((cfg.defilePlayerXpPercent ?? 5) / 100));
     const gold     = Math.round(result.playerTotal * ((cfg.defileGoldPercent ?? 1) / 100));
 
-    return { charXp, playerXp, gold, affinityGains: enemyRoundsWon, reputationScore: result.playerTotal };
+    // Réputation : bonus à la victoire, malus à la défaite (aucun ajustement en cas d'égalité)
+    const winBonusPct  = cfg.defileReputationWinBonusPct  ?? 75;
+    const loseMalusPct = cfg.defileReputationLoseMalusPct ?? 30;
+    let reputationScore = result.playerTotal;
+    if (result.winner === 'player') reputationScore = Math.round(reputationScore * (1 + winBonusPct / 100));
+    else if (result.winner === 'enemy') reputationScore = Math.round(reputationScore * (1 - loseMalusPct / 100));
+
+    return { charXp, playerXp, gold, affinityGains: enemyRoundsWon, reputationScore };
   }
 
   // ─── ÉCRAN AFFINITÉS (remplace le Gacha) ────────────────────────────────────
@@ -7280,7 +7319,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           <div class="casting-rep-value">🎬 ${(player.reputation || 0).toLocaleString('fr-FR')}</div>
           <div class="casting-countdown">${remaining} Défilé${remaining > 1 ? 's' : ''} avant le prochain Casting</div>
         </div>
+        <button class="btn-secondary" id="btn-debug-force-casting" style="width:100%;margin-top:14px;">
+          🧪 [TEST] +10 000 Réputation et ouvrir un Casting
+        </button>
       `;
+      document.getElementById('btn-debug-force-casting')?.addEventListener('click', () => {
+        CWGameState.debugForceCasting();
+        renderCasting();
+      });
       return;
     }
 

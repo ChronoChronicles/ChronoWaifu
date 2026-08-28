@@ -4639,6 +4639,14 @@ const CWAdminPanel = (() => {
             <input type="number" id="casting-rep-pct" value="${cCfg.reputationPercentOfScore ?? 10}" min="0" step="1" />
           </div>
           <div class="admin-field">
+            <label>Bonus Réputation si Défilé gagné (%)</label>
+            <input type="number" id="casting-rep-win-bonus" value="${cCfg.defileReputationWinBonusPct ?? 75}" min="0" step="5" />
+          </div>
+          <div class="admin-field">
+            <label>Malus Réputation si Défilé perdu (%)</label>
+            <input type="number" id="casting-rep-lose-malus" value="${cCfg.defileReputationLoseMalusPct ?? 30}" min="0" step="5" />
+          </div>
+          <div class="admin-field">
             <label>Défilés avant Casting — minimum</label>
             <input type="number" id="casting-threshold-min" value="${cCfg.castingThresholdMin ?? 25}" min="1" step="1" />
           </div>
@@ -6755,6 +6763,8 @@ const CWAdminPanel = (() => {
         defileTalentIdoleTransfer: parseFloat(document.getElementById('talent-param-Idole')?.value        || '10'),
         defileTalentEnchantSteal:  parseFloat(document.getElementById('talent-param-Enchant')?.value      || '10'),
         reputationPercentOfScore: parseFloat(document.getElementById('casting-rep-pct')?.value || '10'),
+        defileReputationWinBonusPct:  parseFloat(document.getElementById('casting-rep-win-bonus')?.value  || '75'),
+        defileReputationLoseMalusPct: parseFloat(document.getElementById('casting-rep-lose-malus')?.value || '30'),
         castingThresholdMin:     parseInt(document.getElementById('casting-threshold-min')?.value || '25'),
         castingThresholdMax:     parseInt(document.getElementById('casting-threshold-max')?.value || '30'),
         castingCandidateCount:   parseInt(document.getElementById('casting-candidate-count')?.value || '4'),

@@ -232,6 +232,32 @@ const CWAudioSystem = (() => {
   }
 
   /**
+   * Comme playSfx, mais renvoie une Promise résolue quand le son est
+   * RÉELLEMENT terminé (utile pour caler une animation dessus). Se résout
+   * immédiatement si aucun bruitage n'est configuré pour cette clé.
+   */
+  function playSfxAwait(key) {
+    return new Promise(resolve => {
+      const cfg = CWGameState.get() ? CWGameState.getConfig() : null;
+      if (cfg?.audio?.enabled === false) { resolve(); return; }
+      if (!key) { resolve(); return; }
+      const fieldName = FIELD_MAP[key];
+      const url = fieldName ? cfg?.audio?.[fieldName] : null;
+      if (!url) { resolve(); return; }
+
+      const shouldDuck = !NON_DUCKING_KEYS.has(key);
+      if (shouldDuck) _duck();
+
+      const sfxEl = new Audio(url);
+      sfxEl.muted = _muted;
+      const finish = () => { if (shouldDuck) _unduck(); resolve(); };
+      sfxEl.addEventListener('ended', finish);
+      sfxEl.addEventListener('error', finish);
+      sfxEl.play().catch(finish);
+    });
+  }
+
+  /**
    * Joue le bruitage de coup adapté au multiplicateur d'efficacité de type
    * (normal / résistance-immunité / faiblesse), selon les mêmes seuils que
    * l'indicateur visuel déjà affiché en combat.
@@ -292,6 +318,6 @@ const CWAudioSystem = (() => {
 
   return {
     init, saveTrack, removeTrack, hasTrack, playGlobal, playCombat, stop, toggleMute, isMuted, setVolume,
-    playSfx, playHitSfx, playResultSfx, SFX_KEYS, enableSound,
+    playSfx, playSfxAwait, playHitSfx, playResultSfx, SFX_KEYS, enableSound,
   };
 })();

@@ -1185,7 +1185,7 @@ const CWGameState = (() => {
     if (!inst) return 0;
     const finalStats = getCharacterFinalStats(inst);
     if (!finalStats) return 0;
-    return CWGameDatabase.computeAuraScore(finalStats, _state.config.combat);
+    return CWGameDatabase.computeAuraScore(finalStats);
   }
 
   function _computeAuraTotals() {
@@ -1464,6 +1464,14 @@ const CWGameState = (() => {
     _state.player.castingThreshold = _rollCastingThreshold();
   }
 
+  /** [TEST] Crédite 10 000 Réputation et force l'ouverture immédiate d'un Casting */
+  function debugForceCasting() {
+    _state.player.reputation = (_state.player.reputation || 0) + 10000;
+    _openNewCasting();
+    _notify('castingUpdated');
+    _autoSave();
+  }
+
   /**
    * Bonus de conviction : réduit le coût EFFECTIF d'une enchère du joueur si
    * sa collection possède déjà au moins une personnage partageant un Tag
@@ -1531,10 +1539,13 @@ const CWGameState = (() => {
       }
     });
 
-    // Résolution : la candidate est attribuée dès qu'il ne reste qu'une seule partie en lice
+    // Résolution : la candidate est attribuée dès qu'il ne reste qu'une seule
+    // partie en lice — ou immédiatement à une rivale si le joueur a passé
+    // (l'enchère entre rivales seules ne nous concerne plus, pas besoin de
+    // la faire durer indéfiniment).
     const playerStillIn = !candidate.playerPassed;
     const rivalsStillIn = candidate.activeRivals.length;
-    if (!playerStillIn && rivalsStillIn <= 1) {
+    if (!playerStillIn && rivalsStillIn >= 1) {
       candidate.status = 'won_rival';
     } else if (playerStillIn && rivalsStillIn === 0 && candidate.currentLeader === 'player') {
       candidate.status = 'won_player';
@@ -1542,6 +1553,16 @@ const CWGameState = (() => {
       _state.player.reputation = Math.max(0, _state.player.reputation - cost);
       const baseChar = _state.characters.find(c => c.id === candidate.charId);
       if (baseChar) addCharacterToCollection(baseChar.id, 'casting');
+    } else if (!playerStillIn && rivalsStillIn === 0) {
+      // Personne ne la remporte (cas limite) — on referme quand même la candidate
+      candidate.status = 'won_rival';
+    }
+
+    // Une fois TOUTES les candidates traitées, referme le Casting pour de bon
+    // — sans ça, le compteur de défilés vers le prochain Casting resterait
+    // bloqué indéfiniment (il ne progresse jamais tant qu'un Casting est ouvert).
+    if (casting.candidates.every(c => c.status !== 'active')) {
+      _state.player.currentCasting = null;
     }
 
     _notify('castingUpdated');
@@ -2258,7 +2279,7 @@ const CWGameState = (() => {
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
     getAffinityPercent, registerAffinityGain, getAllAffinityProgress,
-    registerReputationGain, placeCastingBid, getCastingConvictionBonus: _getCastingConvictionBonus,
+    registerReputationGain, placeCastingBid, getCastingConvictionBonus: _getCastingConvictionBonus, debugForceCasting,
     getStoryChapterProgress, completeStoryStage, isFeatureUnlocked,
     addDailyLoginCycle, updateDailyLoginCycle, removeDailyLoginCycle, getDailyLoginClaimable, claimDailyLoginReward,
     addDailyQuest, updateDailyQuest, removeDailyQuest, checkDailyQuests, trackQuestProgress, claimDailyQuest,
