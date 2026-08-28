@@ -36,6 +36,16 @@ const CWAudioSystem = (() => {
     sfx_levelup:    'sfxLevelUpName',
     sfx_evolution:  'sfxEvolutionName',
     sfx_gacha_pull: 'sfxGachaPullName',
+    sfx_defile_reveal:     'sfxDefileRevealName',
+    sfx_defile_score_tick: 'sfxDefileScoreTickName',
+    sfx_defile_type_good:  'sfxDefileTypeGoodName',
+    sfx_defile_type_bad:   'sfxDefileTypeBadName',
+    sfx_defile_endurance:  'sfxDefileEnduranceName',
+    sfx_defile_talent:     'sfxDefileTalentName',
+    sfx_defile_round_win:  'sfxDefileRoundWinName',
+    sfx_defile_round_lose: 'sfxDefileRoundLoseName',
+    sfx_defile_victory:    'sfxDefileVictoryName',
+    sfx_defile_defeat:     'sfxDefileDefeatName',
   };
 
   function _storageClient() {
