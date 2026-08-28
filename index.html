@@ -676,6 +676,20 @@
     position:absolute; top:50%; left:50%;
     white-space:normal !important; max-width:85vw; text-align:center; line-height:1.4;
   }
+  .dpb-cancelled-banner{
+    background:linear-gradient(135deg,#7f1d1d,#450a0a) !important;
+    animation:passiveBannerBigPopStatic .3s ease forwards !important;
+  }
+  @keyframes passiveBannerBigPopStatic{
+    0%   { opacity:0; transform:translate(-50%,-50%) scale(.6); }
+    100% { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  }
+  .dpb-cancelled-banner.fading-down{
+    animation:none !important;
+    transition:transform 500ms ease-in, opacity 500ms ease-in;
+    transform:translate(-50%,120%) !important;
+    opacity:0 !important;
+  }
 
   /* ── MODE PERFORMANCE ── */
   .record-home-card{

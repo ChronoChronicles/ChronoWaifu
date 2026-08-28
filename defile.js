@@ -182,10 +182,12 @@ const CWDefileEngine = (() => {
       if (pTalent?.effect === 'cancel_enemy_talent_same_round' && eTalentId) {
         eTalentCancelled = true;
         pushEvt(`🚫 ${pTalent.name} (toi) — Talent adverse annulé ce passage`);
+        entry.cancelledTalent = { side: 'enemy', name: eTalent.name };
       }
       if (eTalent?.effect === 'cancel_enemy_talent_same_round' && pTalentId && !pTalentCancelled) {
         pTalentCancelled = true;
         pushEvt(`🚫 ${eTalent.name} (adversaire) — Talent annulé ce passage`);
+        entry.cancelledTalent = { side: 'player', name: pTalent.name };
       }
 
       // Naturelle : soigne toute l'équipe du camp qui l'active

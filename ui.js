@@ -6037,6 +6037,24 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
   const STAT_LABELS_SHORT = { atk: '✨ Charisme', def: '🌹 Prestance', spd: '🕊️ Grâce' };
 
+  /** Génère l'équipe adverse d'un défilé, niveau calqué sur la moyenne du joueur */
+  function _buildDefileEnemyTeam(playerTeam, cfg, state) {
+    const avgLevel = Math.max(1, Math.round(
+      playerTeam.reduce((s, f) => s + (f.level || 1), 0) / playerTeam.length
+    ));
+    const enemyDefs = [];
+    for (let i = 0; i < 3; i++) {
+      const pool = state.characters.filter(c => c.evolutionStage === 0);
+      enemyDefs.push(pool[Math.floor(Math.random() * pool.length)]);
+    }
+    return enemyDefs.map((def, i) => {
+      const baseStats = CWGameDatabase.computeStats(def, avgLevel, 0, state.config.awakening, def.rarity, state.config.level);
+      const fighter = CWDefileEngine.buildFighter({ instanceId: `enemy_${i}` }, def, baseStats, cfg);
+      fighter.level = avgLevel;
+      return fighter;
+    });
+  }
+
   function renderDefilePlanning() {
     const el = document.getElementById('screen-defile-planning');
     if (!el) return;
@@ -6062,16 +6080,75 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         fighter.level = inst.level;      // pour calquer le niveau de l'équipe adverse
         return fighter;
       });
+      const enemyTeam = _buildDefileEnemyTeam(playerTeam, cfg, state);
       _defileState = {
         programme,
         playerTeam,
+        enemyTeam,                                           // générée une fois pour toute la planification (nécessaire pour le choix de Légende)
         assignment: new Array(programme.length).fill(null), // { instanceId } — qui défile
         talentPlacement: {},                                 // { round: { instanceId, typeId } } — Talent placé (libre, par personnage + type)
         usesPerChar: cfg.defileUsesPerChar ?? 3,
+        legendeCopyTypeId: null,       // choix de Légende (Polyvalence), tranché avant la planification
+        legendeChoicePending: playerTeam.some(f => f.type1 === 'Legende' || f.type2 === 'Legende'),
       };
     }
 
+    // Légende (Polyvalence) : si l'équipe du joueur en possède une, elle doit
+    // choisir AVANT toute planification quel Talent adverse copier.
+    if (_defileState.legendeChoicePending && !_defileState.legendeCopyTypeId) {
+      _renderDefileLegendeChoice();
+      return;
+    }
+
     _renderDefilePlanningDOM();
+  }
+
+  /** Écran de choix de Légende : révèle les Talents adverses, le joueur en copie un */
+  function _renderDefileLegendeChoice() {
+    const el = document.getElementById('screen-defile-planning');
+    if (!el) return;
+    const state = CWGameState.get();
+    const { enemyTeam } = _defileState;
+
+    // Un Talent par type possédé par chaque adversaire (comme pour le joueur)
+    const seen = new Set();
+    const choices = [];
+    enemyTeam.forEach(f => {
+      [f.type1, f.type2].filter(Boolean).forEach(typeId => {
+        if (seen.has(typeId)) return;
+        seen.add(typeId);
+        const talent = CWGameDatabase.getDefileTalentDisplay(typeId, state.config.combat);
+        if (talent) choices.push({ typeId, talent, ownerName: f.name });
+      });
+    });
+
+    el.innerHTML = `
+      <div class="screen-header"><h2>👑 Polyvalence</h2></div>
+      <p class="defile-help">
+        Une de tes personnages est de type Légende — avant toute planification,
+        choisis lequel des Talents adverses elle copiera pour tout ce défilé.
+      </p>
+      <div class="affinity-list">
+        ${choices.map(c => `
+          <div class="affinity-card legende-choice-card" data-type="${c.typeId}" style="cursor:pointer;">
+            <div class="affinity-portrait" style="display:flex;align-items:center;justify-content:center;font-size:1.4rem;">⭐</div>
+            <div class="affinity-info">
+              <div class="affinity-name-row">
+                <span class="affinity-name">${c.talent.name}</span>
+                <span class="affinity-rarity-badge" style="background:#8c00ff;">${c.ownerName}</span>
+              </div>
+              <div style="font-size:.74rem;color:var(--text-dim);">${c.talent.description}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    el.querySelectorAll('.legende-choice-card').forEach(card => {
+      card.addEventListener('click', () => {
+        _defileState.legendeCopyTypeId = card.dataset.type;
+        renderDefilePlanning();
+      });
+    });
   }
 
   function _defileUsesLeft(instanceId) {
@@ -6518,6 +6595,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     // Mystique, Diva...) : ils se produisent AVANT toute stat/score, donc
     // affichés en tout premier, dans l'ordre chronologique réel du moteur.
     await playStageEvents(0);
+    if (l.cancelledTalent) {
+      await _showDefileCancelledTalentBanner(l.cancelledTalent.name, l.cancelledTalent.side);
+      await _sleep(400);
+    }
 
     // Phase 2 — la stat jugée apparaît sous chaque participante (peut
     // différer d'un côté à l'autre si Diva a changé celle de l'adversaire)
@@ -6687,6 +6768,28 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     });
   }
 
+  /**
+   * Bannière spéciale pour un Talent CONTRÉ par Élégance (Rectification) :
+   * apparaît normalement, puis s'efface vers le BAS (au lieu du fondu
+   * classique) avec le son de défaite d'un tournage, pour bien marquer
+   * visuellement l'annulation.
+   */
+  function _showDefileCancelledTalentBanner(name, side) {
+    return new Promise(resolve => {
+      const stage = document.querySelector('.dpb-stage');
+      if (!stage) { resolve(); return; }
+      const big = document.createElement('div');
+      big.className = 'passive-banner-big dpb-talent-banner-big dpb-cancelled-banner';
+      big.innerHTML = `<span class="passive-banner-big-icon">🚫</span>${name} (${side === 'player' ? 'toi' : 'adversaire'}) — annulé`;
+      stage.appendChild(big);
+      setTimeout(() => {
+        big.classList.add('fading-down');
+        CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileRoundLose);
+        setTimeout(() => { big.remove(); resolve(); }, 500);
+      }, 1200);
+    });
+  }
+
   /** Met à jour un score avec un petit effet de "pop" pour bien marquer le changement */
   /** Anime un score en le faisant défiler rapidement jusqu'à sa valeur finale (façon compteur) */
   function _setScorePop(elId, value) {
@@ -6729,24 +6832,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const state = CWGameState.get();
     const cfg = state.config.combat;
     const matrix = state.typeMatrix;
-
-    // Niveau adverse calqué sur le niveau MOYEN de l'équipe du joueur (arrondi)
-    const avgLevel = Math.max(1, Math.round(
-      _defileState.playerTeam.reduce((s, f) => s + (f.level || 1), 0) / _defileState.playerTeam.length
-    ));
-
-    // Équipe adverse : générée dans les mêmes conditions qu'un combat classique
-    const enemyDefs = [];
-    for (let i = 0; i < 3; i++) {
-      const pool = state.characters.filter(c => c.evolutionStage === 0);
-      enemyDefs.push(pool[Math.floor(Math.random() * pool.length)]);
-    }
-    const enemyTeam = enemyDefs.map((def, i) => {
-      const baseStats = CWGameDatabase.computeStats(def, avgLevel, 0, state.config.awakening, def.rarity, state.config.level);
-      const fighter = CWDefileEngine.buildFighter({ instanceId: `enemy_${i}` }, def, baseStats, cfg);
-      fighter.level = avgLevel;
-      return fighter;
-    });
+    const enemyTeam = _defileState.enemyTeam; // générée dès l'entrée dans l'écran (cf. renderDefilePlanning)
 
     const enemyAssignment = CWDefileEngine.autoAssign(_defileState.programme, enemyTeam, matrix, cfg.defileUsesPerChar ?? 3);
 
@@ -6759,7 +6845,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     const result = CWDefileEngine.resolveDuel(
       _defileState.programme, playerAssignment, enemyAssignment,
-      _defileState.playerTeam, enemyTeam, cfg, matrix
+      _defileState.playerTeam, enemyTeam, cfg, matrix,
+      { legendeCopyTypeId: _defileState.legendeCopyTypeId || null }
     );
 
     _applyDefileStats(result, playerAssignment);
