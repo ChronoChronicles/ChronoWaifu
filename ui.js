@@ -832,21 +832,11 @@ const CWGameUI = (() => {
     const cfg   = state.config?.combat?.costs || {};
 
     const modes = [
-      // Histoire — featured, toujours disponible
-      { id:'storyMode',    icon:'📖', name:'Mode Histoire',    desc:'Suivez la trame narrative du Nexus Glamour',          featured:true,  unlocked:true,  lockedDesc:'' },
-      // Ordre de déblocage
-      { id:'fullRandom',   icon:'🎲', name:'Caprice',          desc:'Équipe aléatoire, ennemies aléatoires',               featured:false, unlocked:CWGameState.isFeatureUnlocked?.('caprice')   ?? true, lockedDesc:'🔒 Disponible à la fin du Chapitre 2' },
-      { id:'story',        icon:'🌍', name:'Tournée',          desc:'Progressez monde par monde',                          featured:false, unlocked:CWGameState.isFeatureUnlocked?.('tournee')   ?? true, lockedDesc:'🔒 Disponible à la fin du Chapitre 3' },
-      { id:'byLine',       icon:'🎬', name:'Saga',             desc:'Affrontez toute une lignée',                          featured:false, unlocked:CWGameState.isFeatureUnlocked?.('saga')      ?? true, lockedDesc:'🔒 Disponible au Chapitre 3, Stage 5' },
-      { id:'arena',        icon:'🏆', name:'Grand Gala',       desc:'Mode compétitif',                                     featured:false, unlocked:CWGameState.isFeatureUnlocked?.('grandgala') ?? true, lockedDesc:'🔒 Disponible à la fin du Chapitre 5' },
-      { id:'record',       icon:'📊', name:'Performance',      desc:'Battez vos propres records',                          featured:false, unlocked:CWGameState.isFeatureUnlocked?.('record') ?? true, lockedDesc:'🔒 Disponible à la fin du Chapitre 6' },
-      { id:'defile',       icon:'💃', name:'Défilé',           desc:'Duel de popularité en 9 passages',                    featured:false, unlocked:CWGameState.isFeatureUnlocked?.('defile') ?? true, lockedDesc:'🔒 Disponible à la fin du Chapitre 7' },
-      { id:'challenge',    icon:'🌀', name:'???',              desc:'Un nouveau défi vous attend...',                      featured:false, unlocked:false, lockedDesc:'🔒 Bientôt disponible' },
-      // Événement — blingbling, pleine largeur
-      { id:'event',        icon:'⭐', name:'Événement',        desc:'Des histoires exclusives aux actrices de l\'Event',   featured:false, unlocked:false, lockedDesc:'🔒 Bientôt disponible', eventFeatured:true },
-      // Sous-modes Event
-      { id:'capriceEvent', icon:'🎲', name:'Caprice Event',    desc:'Équipe aléatoire — ennemies de l\'Event',             featured:false, unlocked:false, lockedDesc:'🔒 Bientôt disponible', eventSub:true },
-      { id:'combatTag',    icon:'👗', name:'Défilé Event',     desc:'Actrices et ennemies du Tag Event uniquement',        featured:false, unlocked:false, lockedDesc:'🔒 Bientôt disponible', eventSub:true },
+      // Retiré temporairement pour les tests : tous les autres modes de combat
+      // (Histoire, Caprice, Tournée, Saga, Grand Gala, Performance...) — le
+      // code reste intact, il suffit de les remettre dans ce tableau.
+      { id:'defile',       icon:'💃', name:'Défilé',           desc:'Duel de popularité en 9 passages',                    featured:true, unlocked:true, lockedDesc:'' },
+      { id:'casting',      icon:'🎬', name:'Grand Casting',    desc:'Recrute de nouvelles actrices par enchères',          featured:false, unlocked:true, lockedDesc:'' },
     ];
 
     const grid = document.getElementById('cs-grid');
@@ -873,6 +863,7 @@ const CWGameUI = (() => {
         if (mode === 'story' || mode === 'byLine') { showScreen('combat'); return; }
         if (mode === 'record') { showScreen('record'); return; }
         if (mode === 'defile') { showScreen('defile-planning'); return; }
+        if (mode === 'casting') { showScreen('casting'); return; }
         showScreen('combat');
         setTimeout(() => _launchCombat({ mode: mode === 'fullRandom' ? 'fullRandom' : mode }), 100);
       });
@@ -943,6 +934,7 @@ const CWGameUI = (() => {
       'defile-planning': renderDefilePlanning,
       'defile-playback': renderDefilePlayback,
       affinity: renderAffinity,
+      casting: renderCasting,
       'defile-rewards': renderDefileRewards,
       'defile-result':   renderDefileResult,
     };
@@ -6805,7 +6797,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const playerXp = Math.round(result.playerTotal * ((cfg.defilePlayerXpPercent ?? 5) / 100));
     const gold     = Math.round(result.playerTotal * ((cfg.defileGoldPercent ?? 1) / 100));
 
-    return { charXp, playerXp, gold, affinityGains: enemyRoundsWon };
+    return { charXp, playerXp, gold, affinityGains: enemyRoundsWon, reputationScore: result.playerTotal };
   }
 
   // ─── ÉCRAN AFFINITÉS (remplace le Gacha) ────────────────────────────────────
@@ -6868,6 +6860,20 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       moneyEl.style.display = '';
       moneyEl.textContent = `💵 +${plan.gold.toLocaleString('fr-FR')}`;
       moneyEl.classList.add('reward-pop');
+    }
+
+    // Phase 4 — Réputation (ressource du Grand Casting)
+    const repResult = CWGameState.registerReputationGain(plan.reputationScore || 0);
+    if (repResult.gain > 0) {
+      await _rewardSleep(300);
+      const repEl = document.createElement('div');
+      repEl.className = 'rewards-money reward-pop';
+      repEl.style.color = '#c4b5fd';
+      repEl.textContent = `🎬 +${repResult.gain.toLocaleString('fr-FR')} Réputation`;
+      document.getElementById('rewards-money')?.insertAdjacentElement('afterend', repEl);
+    }
+    if (repResult.castingOpened) {
+      _showToast('🎬 Un nouveau Grand Casting vient de s\'ouvrir !', 'success');
     }
 
     const doneBtn = document.getElementById('btn-rewards-done');
@@ -6954,6 +6960,109 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     }
   }
 
+  // ─── ÉCRAN GRAND CASTING ─────────────────────────────────────────────────────
+
+  function renderCasting() {
+    const el = document.getElementById('screen-casting');
+    if (!el) return;
+    const state = CWGameState.get();
+    const player = state.player;
+    const casting = player.currentCasting;
+
+    if (!casting) {
+      const remaining = Math.max(0, (player.castingThreshold || 0) - (player.defilesSinceLastCasting || 0));
+      el.innerHTML = `
+        <div class="screen-header"><h2>🎬 Grand Casting</h2></div>
+        <p class="defile-help">
+          Des agences rivales et toi disputez le recrutement des prochaines
+          candidates. Un nouveau Casting s'ouvre tous les 25 à 30 Défilés.
+        </p>
+        <div class="casting-progress-card">
+          <div class="casting-rep-label">Réputation accumulée</div>
+          <div class="casting-rep-value">🎬 ${(player.reputation || 0).toLocaleString('fr-FR')}</div>
+          <div class="casting-countdown">${remaining} Défilé${remaining > 1 ? 's' : ''} avant le prochain Casting</div>
+        </div>
+      `;
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="screen-header"><h2>🎬 Grand Casting</h2></div>
+      <div class="casting-rep-bar">
+        <span>Réputation disponible</span>
+        <strong>🎬 ${(player.reputation || 0).toLocaleString('fr-FR')}</strong>
+      </div>
+      <div class="casting-candidates">
+        ${casting.candidates.map(c => _renderCastingCandidateCard(c, casting)).join('')}
+      </div>
+    `;
+
+    el.querySelectorAll('.casting-bid-btn').forEach(btn => {
+      btn.addEventListener('click', () => _handleCastingBid(btn.dataset.candidate, true));
+    });
+    el.querySelectorAll('.casting-pass-btn').forEach(btn => {
+      btn.addEventListener('click', () => _handleCastingBid(btn.dataset.candidate, false));
+    });
+  }
+
+  function _renderCastingCandidateCard(c, casting) {
+    const state = CWGameState.get();
+    const def = CWGameState.getCharDef(c.charId);
+    const rd = CWGameDatabase.RARITIES[c.rarity] || {};
+    const conviction = CWGameState.getCastingConvictionBonus(c.charId);
+    const effectiveCost = Math.round(c.currentBid * (1 - conviction / 100));
+    const leaderName = c.currentLeader === 'player' ? 'Toi'
+      : c.currentLeader ? (casting.rivals.find(r => r.id === c.currentLeader)?.name || '?')
+      : 'Personne encore';
+    const resolved = c.status !== 'active';
+
+    return `
+      <div class="casting-candidate-card ${resolved ? 'resolved' : ''}">
+        <div class="casting-candidate-portrait">${def ? _combatPortraitImgHtml(def) : ''}</div>
+        <div class="casting-candidate-info">
+          <div class="casting-candidate-name-row">
+            <span class="casting-candidate-name">${def?.name || '?'}</span>
+            <span class="affinity-rarity-badge" style="background:${rd.color}">${rd.name}</span>
+          </div>
+          ${resolved ? `
+            <div class="casting-candidate-result ${c.status === 'won_player' ? 'is-won' : 'is-lost'}">
+              ${c.status === 'won_player' ? '✅ Signée par ton agence !' : `❌ Recrutée par ${leaderName}`}
+            </div>
+          ` : `
+            <div class="casting-candidate-bid">Enchère actuelle : <strong>${c.currentBid.toLocaleString('fr-FR')}</strong> — meneuse : ${leaderName}</div>
+            ${conviction > 0 ? `<div class="casting-conviction">💞 Bonus de conviction : -${conviction}% (Tag partagé)</div>` : ''}
+            ${c.playerPassed ? `
+              <div class="casting-candidate-passed">Tu as laissé passer cette candidate.</div>
+            ` : `
+              <div class="casting-candidate-actions">
+                <button class="btn-primary casting-bid-btn" data-candidate="${c.id}" style="flex:1;">
+                  Enchérir (${effectiveCost.toLocaleString('fr-FR')} 🎬)
+                </button>
+                <button class="btn-secondary casting-pass-btn" data-candidate="${c.id}">Passer</button>
+              </div>
+            `}
+          `}
+        </div>
+      </div>
+    `;
+  }
+
+  function _handleCastingBid(candidateId, playerBids) {
+    const result = CWGameState.placeCastingBid(candidateId, playerBids);
+    if (!result) return;
+    if (result.error === 'insufficient') {
+      _showToast('⚠️ Réputation insuffisante pour cette enchère.', 'error');
+      return;
+    }
+    if (result.candidate.status === 'won_player') {
+      const def = CWGameState.getCharDef(result.candidate.charId);
+      _showToast(`🎉 ${def?.name || 'La candidate'} rejoint ton agence !`, 'success');
+    } else if (result.candidate.status === 'won_rival') {
+      _showToast('😔 Une agence rivale a remporté cette candidate.', 'error');
+    }
+    renderCasting();
+  }
+
   function renderAffinity() {
     const el = document.getElementById('screen-affinity');
     if (!el) return;
@@ -6962,6 +7071,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     el.innerHTML = `
       <div class="screen-header"><h2>💞 Affinités</h2></div>
+      <button class="btn-primary" id="btn-goto-casting" style="width:100%;margin-bottom:12px;">
+        🎬 Voir le Grand Casting ${state.player.currentCasting ? '— Casting ouvert !' : ''}
+      </button>
       <p class="defile-help">
         Chaque tournage de Défilé gagné contre une personnage augmente ton
         affinité avec sa lignée. À 100%, elle rejoint ta collection.
@@ -6995,6 +7107,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         </div>
       `}
     `;
+    document.getElementById('btn-goto-casting')?.addEventListener('click', () => showScreen('casting'));
   }
 
   function renderDefileResult() {

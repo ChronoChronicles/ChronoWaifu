@@ -1378,6 +1378,177 @@ const CWGameState = (() => {
     return Object.values(lines);
   }
 
+  // ─── GRAND CASTING (recrutement, remplace le Gacha) ────────────────────────
+
+  function _rollCastingThreshold() {
+    const cfg = _state.config.combat;
+    const min = cfg.castingThresholdMin ?? 25, max = cfg.castingThresholdMax ?? 30;
+    return min + Math.floor(Math.random() * (max - min + 1));
+  }
+
+  /**
+   * Enregistre le gain de Réputation d'un Défilé (proportionnel au score),
+   * fait avancer le compteur vers le prochain Casting, et l'ouvre
+   * automatiquement dès que le seuil (25-30, tiré aléatoirement) est atteint.
+   * @returns {{gain:number, castingOpened:boolean}}
+   */
+  function registerReputationGain(score) {
+    const cfg = _state.config.combat;
+    const gain = Math.round(score * ((cfg.reputationPercentOfScore ?? 10) / 100));
+    _state.player.reputation = (_state.player.reputation || 0) + gain;
+
+    let castingOpened = false;
+    if (!_state.player.currentCasting) {
+      _state.player.defilesSinceLastCasting = (_state.player.defilesSinceLastCasting || 0) + 1;
+      if (_state.player.castingThreshold == null) _state.player.castingThreshold = _rollCastingThreshold();
+
+      if (_state.player.defilesSinceLastCasting >= _state.player.castingThreshold) {
+        _openNewCasting();
+        castingOpened = true;
+      }
+    }
+
+    _notify('reputationChanged');
+    _autoSave();
+    return { gain, castingOpened };
+  }
+
+  /** Génère un nouveau Casting : candidates (tirage pondéré par rareté, façon gacha) + agences rivales */
+  function _openNewCasting() {
+    const cfg = _state.config.combat;
+    const candidateCount = cfg.castingCandidateCount ?? 4;
+    const rivalCount = cfg.castingRivalCount ?? 3;
+    const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+    const weights = _state.config.gacha?.dropRates || {};
+
+    let unowned = _state.characters.filter(c => c.evolutionStage === 0 && !_isLineageOwned(c.evolutionLine));
+    const candidates = [];
+
+    for (let i = 0; i < candidateCount && unowned.length > 0; i++) {
+      const byRarity = {};
+      unowned.forEach(c => { (byRarity[c.rarity] = byRarity[c.rarity] || []).push(c); });
+      const totalW = RARITY_ORDER.reduce((s, r) => s + Math.max(0, weights[r] || 0), 0);
+      let rolled = RARITY_ORDER[0], roll = Math.random() * totalW;
+      for (const r of RARITY_ORDER) { roll -= Math.max(0, weights[r] || 0); if (roll <= 0) { rolled = r; break; } }
+      let pool = byRarity[rolled];
+      if (!pool || !pool.length) pool = unowned; // repli si la rareté tirée n'a personne de disponible
+      const picked = pool[Math.floor(Math.random() * pool.length)];
+      const basePrice = cfg.castingBasePriceByRarity?.[picked.rarity] ?? 100;
+
+      candidates.push({
+        id: `cand_${Date.now()}_${i}`,
+        charId: picked.id,
+        rarity: picked.rarity,
+        basePrice,
+        currentBid: basePrice,
+        currentLeader: null, // 'player' | id d'une rivale | null
+        status: 'active',    // 'active' | 'won_player' | 'won_rival'
+      });
+
+      unowned = unowned.filter(c => c.id !== picked.id); // jamais 2 fois la même dans un Casting
+    }
+
+    const RIVAL_NAMES = ['Agence Étoile', 'Maison Prestige', 'Studio Lumière', 'Agence Zénith', 'Collectif Aurore'];
+    const aggrMin = cfg.castingRivalAggressionMin ?? 0.6, aggrMax = cfg.castingRivalAggressionMax ?? 1.2;
+    const rivals = [];
+    for (let i = 0; i < rivalCount; i++) {
+      rivals.push({
+        id: `rival_${i}`,
+        name: RIVAL_NAMES[i % RIVAL_NAMES.length],
+        aggression: aggrMin + Math.random() * (aggrMax - aggrMin),
+      });
+    }
+
+    _state.player.currentCasting = { id: `casting_${Date.now()}`, openedAt: Date.now(), candidates, rivals };
+    _state.player.defilesSinceLastCasting = 0;
+    _state.player.castingThreshold = _rollCastingThreshold();
+  }
+
+  /**
+   * Bonus de conviction : réduit le coût EFFECTIF d'une enchère du joueur si
+   * sa collection possède déjà au moins une personnage partageant un Tag
+   * avec la candidate visée ("notre agence connaît déjà ce profil").
+   */
+  function _getCastingConvictionBonus(candidateCharId) {
+    const cfg = _state.config.combat;
+    const candidateDef = getCharDef(candidateCharId);
+    if (!candidateDef || !candidateDef.tags?.length) return 0;
+
+    const ownedTags = new Set();
+    _state.player.collection.forEach(inst => {
+      const def = getCharDef(inst.charId);
+      def?.tags?.forEach(t => ownedTags.add(t));
+    });
+
+    const sharesTag = candidateDef.tags.some(t => ownedTags.has(t));
+    return sharesTag ? (cfg.castingConvictionBonus ?? 15) : 0;
+  }
+
+  /**
+   * Joue UN tour d'enchère sur une candidate du Casting en cours : le joueur
+   * mise (ou passe), puis chaque agence rivale encore en lice décide à son
+   * tour de suivre ou d'abandonner. Répété jusqu'à ce qu'une seule partie
+   * reste (le joueur, ou une rivale qui remporte alors la candidate).
+   *
+   * @param {string} candidateId
+   * @param {boolean} playerBids - true = le joueur mise ce tour, false = il passe
+   * @returns {{candidate:object, playerReputation:number}|null}
+   */
+  function placeCastingBid(candidateId, playerBids) {
+    const casting = _state.player.currentCasting;
+    if (!casting) return null;
+    const candidate = casting.candidates.find(c => c.id === candidateId);
+    if (!candidate || candidate.status !== 'active') return null;
+
+    const cfg = _state.config.combat;
+    const increment = (cfg.castingBidIncrement ?? 10) / 100;
+    const conviction = _getCastingConvictionBonus(candidate.charId);
+
+    // Le joueur passe définitivement sur cette candidate
+    if (!playerBids) {
+      candidate.playerPassed = true;
+    } else {
+      const effectiveCost = Math.round(candidate.currentBid * (1 - conviction / 100));
+      if (effectiveCost > _state.player.reputation) return { candidate, playerReputation: _state.player.reputation, error: 'insufficient' };
+      candidate.currentBid = Math.ceil(candidate.currentBid * (1 + increment));
+      candidate.currentLeader = 'player';
+      candidate.lastBidCost = effectiveCost;
+    }
+
+    // Chaque rivale encore active décide de suivre ou d'abandonner
+    (candidate.activeRivals ??= casting.rivals.map(r => r.id)).slice().forEach(rivalId => {
+      if (candidate.currentLeader === rivalId) return; // déjà meneuse, ne remise pas contre elle-même
+      const rival = casting.rivals.find(r => r.id === rivalId);
+      if (!rival) return;
+      // Une rivale abandonne si l'enchère dépasse ce que son agressivité tolère pour cette rareté
+      const rarityCeiling = (cfg.castingBasePriceByRarity?.[candidate.rarity] ?? 100) * 3 * rival.aggression;
+      const follows = candidate.currentBid <= rarityCeiling && Math.random() < rival.aggression;
+      if (!follows) {
+        candidate.activeRivals = candidate.activeRivals.filter(id => id !== rivalId);
+      } else if (candidate.currentLeader !== 'player' || Math.random() < rival.aggression * 0.5) {
+        candidate.currentBid = Math.ceil(candidate.currentBid * (1 + increment));
+        candidate.currentLeader = rivalId;
+      }
+    });
+
+    // Résolution : la candidate est attribuée dès qu'il ne reste qu'une seule partie en lice
+    const playerStillIn = !candidate.playerPassed;
+    const rivalsStillIn = candidate.activeRivals.length;
+    if (!playerStillIn && rivalsStillIn <= 1) {
+      candidate.status = 'won_rival';
+    } else if (playerStillIn && rivalsStillIn === 0 && candidate.currentLeader === 'player') {
+      candidate.status = 'won_player';
+      const cost = candidate.lastBidCost ?? candidate.currentBid;
+      _state.player.reputation = Math.max(0, _state.player.reputation - cost);
+      const baseChar = _state.characters.find(c => c.id === candidate.charId);
+      if (baseChar) addCharacterToCollection(baseChar.id, 'casting');
+    }
+
+    _notify('castingUpdated');
+    _autoSave();
+    return { candidate, playerReputation: _state.player.reputation };
+  }
+
   // ─── CLASSEMENTS ────────────────────────────────────────────────────────────
 
   /**
@@ -2087,6 +2258,7 @@ const CWGameState = (() => {
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
     getAffinityPercent, registerAffinityGain, getAllAffinityProgress,
+    registerReputationGain, placeCastingBid, getCastingConvictionBonus: _getCastingConvictionBonus,
     getStoryChapterProgress, completeStoryStage, isFeatureUnlocked,
     addDailyLoginCycle, updateDailyLoginCycle, removeDailyLoginCycle, getDailyLoginClaimable, claimDailyLoginReward,
     addDailyQuest, updateDailyQuest, removeDailyQuest, checkDailyQuests, trackQuestProgress, claimDailyQuest,

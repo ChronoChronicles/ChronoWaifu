@@ -4580,6 +4580,61 @@ const CWAdminPanel = (() => {
       </div>
       <hr class="admin-sep" />
       <div class="admin-section">
+        <div class="admin-section-title">🎬 Grand Casting</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Recrutement par enchères face à des agences rivales, alimenté par la
+          Réputation gagnée en Défilé. Remplace le Gacha.
+        </p>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>Réputation (% du score total du Défilé)</label>
+            <input type="number" id="casting-rep-pct" value="${cCfg.reputationPercentOfScore ?? 10}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Défilés avant Casting — minimum</label>
+            <input type="number" id="casting-threshold-min" value="${cCfg.castingThresholdMin ?? 25}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Défilés avant Casting — maximum</label>
+            <input type="number" id="casting-threshold-max" value="${cCfg.castingThresholdMax ?? 30}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Nombre de candidates par Casting</label>
+            <input type="number" id="casting-candidate-count" value="${cCfg.castingCandidateCount ?? 4}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Nombre d'agences rivales</label>
+            <input type="number" id="casting-rival-count" value="${cCfg.castingRivalCount ?? 3}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Incrément d'enchère (% par tour)</label>
+            <input type="number" id="casting-bid-increment" value="${cCfg.castingBidIncrement ?? 10}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Bonus de conviction (% si Tag partagé)</label>
+            <input type="number" id="casting-conviction" value="${cCfg.castingConvictionBonus ?? 15}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Agressivité rivales — minimum</label>
+            <input type="number" id="casting-aggr-min" value="${cCfg.castingRivalAggressionMin ?? 0.6}" min="0" step="0.05" />
+          </div>
+          <div class="admin-field">
+            <label>Agressivité rivales — maximum</label>
+            <input type="number" id="casting-aggr-max" value="${cCfg.castingRivalAggressionMax ?? 1.2}" min="0" step="0.05" />
+          </div>
+        </div>
+        <p style="font-size:.78rem;color:#888;margin:14px 0 8px;">Prix de départ aux enchères, par rareté (en Réputation) :</p>
+        <div class="admin-grid">
+          ${['common','uncommon','rare','epic','legendary','mythic'].map(r => `
+            <div class="admin-field">
+              <label>${CWGameDatabase.RARITIES[r]?.name || r}</label>
+              <input type="number" id="casting-price-${r}" value="${cCfg.castingBasePriceByRarity?.[r] ?? 100}" min="0" step="10" />
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <hr class="admin-sep" />
+      <div class="admin-section">
         <div class="admin-section-title">📊 Mode Performance</div>
         <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
           Combat où le joueur inflige un maximum de dégâts à une vague d'ennemis
@@ -6629,6 +6684,23 @@ const CWAdminPanel = (() => {
         defilePlayerXpPercent:   parseFloat(document.getElementById('defile-player-xp-pct')?.value || '5'),
         defileGoldPercent:       parseFloat(document.getElementById('defile-gold-pct')?.value || '1'),
         affinityGainMultiplier:  parseFloat(document.getElementById('defile-affinity-mult')?.value || '1'),
+        reputationPercentOfScore: parseFloat(document.getElementById('casting-rep-pct')?.value || '10'),
+        castingThresholdMin:     parseInt(document.getElementById('casting-threshold-min')?.value || '25'),
+        castingThresholdMax:     parseInt(document.getElementById('casting-threshold-max')?.value || '30'),
+        castingCandidateCount:   parseInt(document.getElementById('casting-candidate-count')?.value || '4'),
+        castingRivalCount:       parseInt(document.getElementById('casting-rival-count')?.value || '3'),
+        castingBidIncrement:     parseFloat(document.getElementById('casting-bid-increment')?.value || '10'),
+        castingConvictionBonus:  parseFloat(document.getElementById('casting-conviction')?.value || '15'),
+        castingRivalAggressionMin: parseFloat(document.getElementById('casting-aggr-min')?.value || '0.6'),
+        castingRivalAggressionMax: parseFloat(document.getElementById('casting-aggr-max')?.value || '1.2'),
+        castingBasePriceByRarity: {
+          common:    parseFloat(document.getElementById('casting-price-common')?.value    || '50'),
+          uncommon:  parseFloat(document.getElementById('casting-price-uncommon')?.value  || '120'),
+          rare:      parseFloat(document.getElementById('casting-price-rare')?.value      || '300'),
+          epic:      parseFloat(document.getElementById('casting-price-epic')?.value      || '700'),
+          legendary: parseFloat(document.getElementById('casting-price-legendary')?.value || '1500'),
+          mythic:    parseFloat(document.getElementById('casting-price-mythic')?.value    || '3500'),
+        },
         recordMaxTurns:          parseInt(document.getElementById('record-max-turns')?.value || '15'),
         recordEnemyCount:        parseInt(document.getElementById('record-enemy-count')?.value || '3'),
         recordKillBonus:         parseInt(document.getElementById('record-kill-bonus')?.value || '100'),
