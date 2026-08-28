@@ -6571,7 +6571,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     pSide.classList.toggle('winner', l.playerScore > l.enemyScore);
     eSide.classList.toggle('winner', l.enemyScore > l.playerScore);
     CWAudioSystem.playSfx(l.playerScore > l.enemyScore ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose);
-    await _sleep(1200);
+    await _sleep(400);
+
+    // Phase 6b — zoom sur la gagnante du tournage, mise en avant au centre de l'écran
+    if (l.playerScore !== l.enemyScore) {
+      _setDefilePhaseCaption(`${l.playerScore > l.enemyScore ? l.playerFighter : l.enemyFighter} remporte le tournage !`);
+      await _spotlightDefileWinner(l.playerScore > l.enemyScore ? pSide : eSide);
+    }
+    await _sleep(600);
 
     // Phase 7 — le score du tournage rejoint le total cumulé (compteur animé)
     _setDefilePhaseCaption('Ajout au score total cumulé');
@@ -6587,6 +6594,38 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
    * passifs en combat classique (pilule dégradée, avec rebond), le temps
    * qu'un Talent s'active — attend sa disparition avant de continuer.
    */
+  /**
+   * Zoom sur la carte gagnante du tournage : clone sa carte à l'identique,
+   * l'anime depuis sa position actuelle jusqu'au centre de l'écran en
+   * l'agrandissant, puis la retire (l'original reste affiché en dessous,
+   * déjà mis en valeur par le halo doré ".winner").
+   */
+  function _spotlightDefileWinner(sideEl) {
+    return new Promise(resolve => {
+      const cardFrame = sideEl?.querySelector('.dpb-card-frame');
+      if (!cardFrame) { resolve(); return; }
+      const rect = cardFrame.getBoundingClientRect();
+
+      const clone = cardFrame.cloneNode(true);
+      clone.className = 'dpb-card-frame dpb-spotlight-clone';
+      clone.style.position = 'fixed';
+      clone.style.left = `${rect.left}px`;
+      clone.style.top = `${rect.top}px`;
+      clone.style.width = `${rect.width}px`;
+      clone.style.margin = '0';
+      document.body.appendChild(clone);
+
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        clone.classList.add('active');
+      }));
+
+      setTimeout(() => {
+        clone.classList.remove('active');
+        setTimeout(() => { clone.remove(); resolve(); }, 300);
+      }, 1300);
+    });
+  }
+
   function _showDefileTalentBanner(text) {
     return new Promise(resolve => {
       const stage = document.querySelector('.dpb-stage');
@@ -6983,13 +7022,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           const pDef = l.playerCharId ? CWGameState.getCharDef(l.playerCharId) : null;
           const eDef = l.enemyCharId  ? CWGameState.getCharDef(l.enemyCharId)  : null;
           const multClass = (m) => m == null ? '' : m >= 2 ? 'defile-stat-good' : m <= 0.5 ? 'defile-stat-bad' : '';
-          const side = (def, name, score, mult, mirrored) => `
+          const side = (def, name, score, mult, mirrored, isWinner) => `
             <div class="defile-result-side ${mirrored ? 'mirrored' : ''}">
               <div class="fighter-portrait defile-result-portrait">
                 ${def ? _combatPortraitImgHtml(def) : ''}
               </div>
               <div class="defile-result-side-info">
                 <div class="defile-result-side-name">${name || '—'}</div>
+                <div class="defile-result-side-issue ${isWinner ? 'is-victory' : 'is-defeat'}">${isWinner ? 'VICTOIRE' : 'DÉFAITE'}</div>
                 <div class="defile-result-side-score">${score}</div>
                 <div class="defile-result-side-stat ${multClass(mult)}">${STAT_LABELS_SHORT[l.stat]} ${mult != null ? _formatAffinityMult(mult) : ''}</div>
               </div>
@@ -6998,9 +7038,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           <div class="defile-result-round">
             <div class="defile-result-round-num">Tournage ${l.round} — ${STAT_LABELS_SHORT[l.stat]}</div>
             <div class="defile-result-round-mirror">
-              ${side(pDef, l.playerFighter, l.playerScore, l.playerMult, false)}
+              ${side(pDef, l.playerFighter, l.playerScore, l.playerMult, false, l.playerScore > l.enemyScore)}
               <div class="defile-result-round-vs">VS</div>
-              ${side(eDef, l.enemyFighter, l.enemyScore, l.enemyMult, true)}
+              ${side(eDef, l.enemyFighter, l.enemyScore, l.enemyMult, true, l.enemyScore > l.playerScore)}
             </div>
             ${l.events.length ? `<div class="defile-result-round-events">${l.events.map(e => e.text || e).join('<br>')}</div>` : ''}
           </div>`;
