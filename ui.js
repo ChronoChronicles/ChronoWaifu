@@ -1320,7 +1320,7 @@ const CWGameUI = (() => {
       { label: '💃 Défilés',            value: (stats.totalDefiles||0).toLocaleString('fr-FR'), highlight: false },
       { label: '🏆 Défilés Remportés',  value: (stats.totalDefilesWon||0).toLocaleString('fr-FR'), highlight: false },
       { label: '🎬 Passages Remportés', value: (stats.totalPassagesWon||0).toLocaleString('fr-FR'), highlight: false },
-      { label: '✨ Points gagnés',      value: (stats.totalDefilePoints||0).toLocaleString('fr-FR'), highlight: true },
+      { label: '🌟 Popularité',         value: (stats.totalPopularity||0).toLocaleString('fr-FR'), highlight: true },
     ];
     const statsEl = document.getElementById('pm-stats-grid');
     if (statsEl) statsEl.innerHTML = statCards.map(s => `
@@ -2001,8 +2001,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                     <strong>${(inst.passagesWon || 0).toLocaleString('fr-FR')}</strong>
                   </div>
                   <div class="detail-history-row">
-                    <span>✨ Points gagnés</span>
-                    <strong>${(inst.defilePointsEarned || 0).toLocaleString('fr-FR')}</strong>
+                    <span>🌟 Popularité</span>
+                    <strong>${(inst.popularityEarned || 0).toLocaleString('fr-FR')}</strong>
                   </div>
                 </div>
               </div>
@@ -6397,16 +6397,30 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         </div>
         <div class="dpb-phase-caption" id="dpb-phase-caption"></div>
         <div class="dpb-event-log" id="dpb-event-log"></div>
-        <button class="dpb-speed-btn" id="btn-dpb-speed">×1</button>
-        <button class="dpb-skip-btn" id="btn-dpb-skip">Passer ›</button>
       </div>
     `;
 
-    document.getElementById('btn-dpb-skip')?.addEventListener('click', () => { _dpbSkip = true; });
-    document.getElementById('btn-dpb-speed')?.addEventListener('click', (e) => {
+    // Créés directement sur document.body (pas dans .screen, dont l'animation
+    // d'entrée utilise "transform" — ce qui piège tout élément position:fixed
+    // à l'intérieur : il se cale alors sur .screen au lieu de l'écran entier,
+    // et disparaît dès qu'on scrolle. Ici, ils restent toujours visibles.)
+    document.querySelectorAll('.dpb-skip-btn, .dpb-speed-btn').forEach(b => b.remove());
+    const skipBtn = document.createElement('button');
+    skipBtn.className = 'dpb-skip-btn';
+    skipBtn.id = 'btn-dpb-skip';
+    skipBtn.textContent = 'Passer ›';
+    skipBtn.addEventListener('click', () => { _dpbSkip = true; });
+    document.body.appendChild(skipBtn);
+
+    const speedBtn = document.createElement('button');
+    speedBtn.className = 'dpb-speed-btn';
+    speedBtn.id = 'btn-dpb-speed';
+    speedBtn.textContent = '×1';
+    speedBtn.addEventListener('click', (e) => {
       _dpbSpeed = _dpbSpeed === 1 ? 2 : 1;
       e.currentTarget.textContent = `×${_dpbSpeed}`;
     });
+    document.body.appendChild(speedBtn);
 
     _runDefilePlaybackSequence();
   }
@@ -6422,6 +6436,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       totalE += log[i].enemyScore;
     }
 
+    document.querySelectorAll('.dpb-skip-btn, .dpb-speed-btn').forEach(b => b.remove());
     showScreen('defile-result');
   }
 
@@ -6729,6 +6744,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const charactersWhoWalked = new Set();
     result.log.forEach((l, idx) => {
       stats.totalDefilePoints = (stats.totalDefilePoints || 0) + l.playerScore;
+      stats.totalPopularity   = (stats.totalPopularity   || 0) + Math.floor(l.playerScore / 100);
       const passageWon = l.playerScore > l.enemyScore;
       if (passageWon) stats.totalPassagesWon = (stats.totalPassagesWon || 0) + 1;
 
@@ -6738,6 +6754,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         const inst = CWGameState.getPlayerChar(slot.instanceId);
         if (inst) {
           inst.defilePointsEarned = (inst.defilePointsEarned || 0) + l.playerScore;
+          inst.popularityEarned   = (inst.popularityEarned   || 0) + Math.floor(l.playerScore / 100);
           if (passageWon) inst.passagesWon = (inst.passagesWon || 0) + 1;
         }
       }

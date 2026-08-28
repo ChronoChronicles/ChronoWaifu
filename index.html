@@ -451,7 +451,7 @@
   .defile-result-round-events{ font-size:.66rem; color:var(--text-dim); margin-top:5px; line-height:1.5; }
 
   /* ── DÉFILÉ — DÉROULÉ ANIMÉ ── */
-  .dpb-screen{ display:flex; flex-direction:column; padding-top:6px; }
+  .dpb-screen{ display:flex; flex-direction:column; padding-top:6px; position:relative; }
   .dpb-totals{
     display:flex; align-items:center; justify-content:space-between; gap:8px;
     padding:0 4px 10px; border-bottom:1px solid rgba(255,255,255,.08); margin-bottom:16px;
@@ -638,12 +638,12 @@
   .casting-candidate-result.is-won{ color:#4ade80; }
   .casting-candidate-result.is-lost{ color:#f87171; }
   .dpb-skip-btn{
-    position:fixed; top:14px; right:14px; z-index:60;
+    position:absolute; top:0; right:0; z-index:60;
     background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2);
     color:#fff; font-size:.72rem; font-weight:700; padding:6px 14px; border-radius:999px;
   }
   .dpb-speed-btn{
-    position:fixed; top:14px; right:96px; z-index:60;
+    position:absolute; top:0; right:82px; z-index:60;
     background:rgba(167,139,250,.15); border:1px solid rgba(167,139,250,.4);
     color:#c4b5fd; font-size:.72rem; font-weight:800; padding:6px 12px; border-radius:999px;
     font-family:var(--font-mono);
