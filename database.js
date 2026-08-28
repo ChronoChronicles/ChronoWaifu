@@ -71,6 +71,15 @@ const CWGameDatabase = (() => {
       defileTalentPassionBoost: 20,      // Montée en Puissance : + stats sur soi ce passage
       defileTalentIdoleTransfer: 10,     // Sous les Projecteurs : % de la stat la + haute transférée
       defileTalentEnchantSteal: 10,      // Vol de Vedette : % de stat volée à l'adversaire
+      // ── Système d'affinité (remplace le Gacha) ──────────────────────────────
+      // Gain d'affinité par tournage GAGNÉ contre une adversaire, par lignée :
+      // base selon sa rareté (une commune, très fréquente, rapporte peu ; une
+      // mythique, quasi jamais rencontrée, rapporte gros) × multiplicateur
+      // selon le STADE d'évolution rencontré (plus évoluée = plus gros gain).
+      affinityRarityIncrement: {
+        common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5, mythic: 6,
+      },
+      affinityStageMultiplier: [1, 2, 3, 4], // index = evolutionStage (0 à 3)
       // ── Équilibrage joueur / ennemi ────────────────────────────────────────
       playerDmgBonus:  1.15, // Multiplicateur de dégâts joueur → ennemi (+15%)
       enemyDmgPenalty: 0.80, // Multiplicateur de dégâts ennemi → joueur (−20%)
@@ -825,6 +834,7 @@ const CWGameDatabase = (() => {
     },
     recordBest: 0,          // Meilleur score jamais atteint en mode Performance
     recordClaimedTierCount: 0, // Nombre de paliers du totem déjà réclamés
+    affinity: {},           // { [evolutionLine]: pourcentage 0-100 } — remplace le Gacha
     storyMode: {           // Progression Mode Histoire
       // { [chapterIdx]: { completedStages: [1,2,...], highestStage: 3 } }
     },

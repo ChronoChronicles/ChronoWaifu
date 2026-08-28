@@ -1314,6 +1314,67 @@ const CWGameState = (() => {
     return { count: claimable.length, gold: totalGold, crystals: totalCrystals };
   }
 
+  // ─── SYSTÈME D'AFFINITÉ (remplace le Gacha) ─────────────────────────────────
+
+  /** @returns {number} pourcentage d'affinité actuel d'une lignée (0-100) */
+  function getAffinityPercent(evolutionLine) {
+    return _state.player.affinity?.[evolutionLine] || 0;
+  }
+
+  /** @returns {boolean} true si au moins une forme de cette lignée est déjà possédée */
+  function _isLineageOwned(evolutionLine) {
+    return _state.player.collection.some(inst => {
+      const def = getCharDef(inst.charId);
+      return def && def.evolutionLine === evolutionLine;
+    });
+  }
+
+  /**
+   * Enregistre le gain d'affinité pour une lignée après un tournage GAGNÉ
+   * contre une adversaire de cette lignée. Ne fait rien si la lignée est
+   * déjà possédée. À 100%, la forme de BASE (stade 0) rejoint la collection.
+   * @returns {{gain:number, current:number, unlocked:object|null}|null}
+   */
+  function registerAffinityGain(evolutionLine, rarity, evolutionStage) {
+    if (!evolutionLine || _isLineageOwned(evolutionLine)) return null;
+
+    const cfg = _state.config.combat;
+    const baseIncrement = cfg.affinityRarityIncrement?.[rarity] ?? 1;
+    const stageMult     = cfg.affinityStageMultiplier?.[evolutionStage] ?? 1;
+    const gain = baseIncrement * stageMult;
+
+    const current = getAffinityPercent(evolutionLine);
+    const next = Math.min(100, current + gain);
+    _state.player.affinity = { ..._state.player.affinity, [evolutionLine]: next };
+
+    let unlocked = null;
+    if (next >= 100) {
+      const baseChar = _state.characters.find(c => c.evolutionLine === evolutionLine && c.evolutionStage === 0);
+      if (baseChar) unlocked = addCharacterToCollection(baseChar.id, 'affinity');
+    }
+
+    _notify('affinityChanged');
+    _autoSave();
+    return { gain, current: next, unlocked };
+  }
+
+  /**
+   * Liste toutes les lignées NON possédées avec leur affinité actuelle —
+   * pour l'écran dédié (remplace l'écran Gacha).
+   */
+  function getAllAffinityProgress() {
+    const lines = {};
+    _state.characters.forEach(c => {
+      if (c.evolutionStage !== 0) return; // une entrée par lignée, basée sur sa forme de base
+      if (_isLineageOwned(c.evolutionLine)) return;
+      lines[c.evolutionLine] = {
+        baseChar: c,
+        percent: getAffinityPercent(c.evolutionLine),
+      };
+    });
+    return Object.values(lines);
+  }
+
   // ─── CLASSEMENTS ────────────────────────────────────────────────────────────
 
   /**
@@ -2022,6 +2083,7 @@ const CWGameState = (() => {
     getCharacterAuraScore, getCharacterFinalStats, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
+    getAffinityPercent, registerAffinityGain, getAllAffinityProgress,
     getStoryChapterProgress, completeStoryStage, isFeatureUnlocked,
     addDailyLoginCycle, updateDailyLoginCycle, removeDailyLoginCycle, getDailyLoginClaimable, claimDailyLoginReward,
     addDailyQuest, updateDailyQuest, removeDailyQuest, checkDailyQuests, trackQuestProgress, claimDailyQuest,

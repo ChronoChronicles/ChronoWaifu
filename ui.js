@@ -715,8 +715,8 @@ const CWGameUI = (() => {
         <span class="nav-ico">⚔️</span>
         <span class="nav-lbl">COMBAT</span>
       </div>
-      <div class="nav-new-btn" id="nav-gacha-btn" data-screen="gacha">
-        <span class="nav-ico">📜</span><span class="nav-lbl">CONTRAT</span>
+      <div class="nav-new-btn" id="nav-gacha-btn" data-screen="affinity">
+        <span class="nav-ico">💞</span><span class="nav-lbl">AFFINITÉS</span>
       </div>
       <div class="nav-new-btn" id="nav-shop-btn" data-screen="shop">
         <span class="nav-ico">🛍️</span><span class="nav-lbl">SHOP</span>
@@ -726,7 +726,7 @@ const CWGameUI = (() => {
       </div>
     `;
 
-    // Bouton Contrat (gacha) — verrouillé si feature pas débloquée
+    // Bouton Affinités — remplace le Contrat (Gacha), même condition de déblocage
     const gachaBtn = document.getElementById('nav-gacha-btn');
     const gachaUnlocked = CWGameState.isFeatureUnlocked?.('gacha') ?? true;
     if (!gachaUnlocked && gachaBtn) {
@@ -735,11 +735,11 @@ const CWGameUI = (() => {
     }
     gachaBtn?.addEventListener('click', () => {
       if (!CWGameState.isFeatureUnlocked?.('gacha')) {
-        _showToast('🔒 Contrat disponible au Chapitre 2, Stage 5', 'info');
+        _showToast('🔒 Affinités disponibles au Chapitre 2, Stage 5', 'info');
         return;
       }
-      showScreen('gacha');
-      _setNavActive('gacha');
+      showScreen('affinity');
+      _setNavActive('affinity');
     });
 
     // Afficher/masquer le badge verrou sur la zone gacha du hub
@@ -942,6 +942,7 @@ const CWGameUI = (() => {
       'record-rewards': renderRecordRewards,
       'defile-planning': renderDefilePlanning,
       'defile-playback': renderDefilePlayback,
+      affinity: renderAffinity,
       'defile-result':   renderDefileResult,
     };
     renderers[screenId]?.();
@@ -1999,12 +2000,16 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                     <strong>${inst.obtainedAt ? new Date(inst.obtainedAt).toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' }) : '—'}</strong>
                   </div>
                   <div class="detail-history-row">
-                    <span>🏆 Combats gagnés</span>
-                    <strong>${(inst.battlesWon || 0).toLocaleString('fr-FR')}</strong>
+                    <span>🏆 Défilés gagnés</span>
+                    <strong>${(inst.defilesWon || 0).toLocaleString('fr-FR')}</strong>
                   </div>
                   <div class="detail-history-row">
-                    <span>⚔️ Ennemies vaincues</span>
-                    <strong>${(inst.enemiesDefeated || 0).toLocaleString('fr-FR')}</strong>
+                    <span>🎬 Tournages Remportés</span>
+                    <strong>${(inst.passagesWon || 0).toLocaleString('fr-FR')}</strong>
+                  </div>
+                  <div class="detail-history-row">
+                    <span>✨ Points gagnés</span>
+                    <strong>${(inst.defilePointsEarned || 0).toLocaleString('fr-FR')}</strong>
                   </div>
                 </div>
               </div>
@@ -6069,6 +6074,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         const finalStats = CWGameState.getCharacterFinalStats(inst);
         const fighter = CWDefileEngine.buildFighter(inst, def, finalStats, cfg);
         fighter.portrait = def.portrait; // pour l'affichage façon fiche Collection
+        fighter.level = inst.level;      // pour calquer le niveau de l'équipe adverse
         return fighter;
       });
       _defileState = {
@@ -6584,6 +6590,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const cfg = state.config.combat;
     const matrix = state.typeMatrix;
 
+    // Niveau adverse calqué sur le niveau MOYEN de l'équipe du joueur (arrondi)
+    const avgLevel = Math.max(1, Math.round(
+      _defileState.playerTeam.reduce((s, f) => s + (f.level || 1), 0) / _defileState.playerTeam.length
+    ));
+
     // Équipe adverse : générée dans les mêmes conditions qu'un combat classique
     const enemyDefs = [];
     for (let i = 0; i < 3; i++) {
@@ -6591,8 +6602,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       enemyDefs.push(pool[Math.floor(Math.random() * pool.length)]);
     }
     const enemyTeam = enemyDefs.map((def, i) => {
-      const baseStats = CWGameDatabase.computeStats(def, 1, 0, state.config.awakening, def.rarity, state.config.level);
-      return CWDefileEngine.buildFighter({ instanceId: `enemy_${i}` }, def, baseStats, cfg);
+      const baseStats = CWGameDatabase.computeStats(def, avgLevel, 0, state.config.awakening, def.rarity, state.config.level);
+      const fighter = CWDefileEngine.buildFighter({ instanceId: `enemy_${i}` }, def, baseStats, cfg);
+      fighter.level = avgLevel;
+      return fighter;
     });
 
     const enemyAssignment = CWDefileEngine.autoAssign(_defileState.programme, enemyTeam, matrix, cfg.defileUsesPerChar ?? 3);
@@ -6627,13 +6640,25 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     stats.totalDefiles = (stats.totalDefiles || 0) + 1;
     if (result.winner === 'player') stats.totalDefilesWon = (stats.totalDefilesWon || 0) + 1;
 
+    const charactersWhoWalked = new Set();
+    const unlockedByAffinity = [];
     result.log.forEach((l, idx) => {
       stats.totalDefilePoints = (stats.totalDefilePoints || 0) + l.playerScore;
       const passageWon = l.playerScore > l.enemyScore;
       if (passageWon) stats.totalPassagesWon = (stats.totalPassagesWon || 0) + 1;
 
+      // Gain d'affinité envers la lignée de l'adversaire à chaque tournage gagné
+      if (passageWon && l.enemyCharId) {
+        const enemyDef = CWGameState.getCharDef(l.enemyCharId);
+        if (enemyDef) {
+          const affResult = CWGameState.registerAffinityGain(enemyDef.evolutionLine, enemyDef.rarity, enemyDef.evolutionStage);
+          if (affResult?.unlocked) unlockedByAffinity.push(enemyDef.name);
+        }
+      }
+
       const slot = playerAssignment[idx];
       if (slot) {
+        charactersWhoWalked.add(slot.instanceId);
         const inst = CWGameState.getPlayerChar(slot.instanceId);
         if (inst) {
           inst.defilePointsEarned = (inst.defilePointsEarned || 0) + l.playerScore;
@@ -6642,7 +6667,75 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       }
     });
 
+    unlockedByAffinity.forEach(name => {
+      _showToast(`💞 L'affinité avec ${name} a atteint 100% — elle rejoint ta collection !`, 'success');
+    });
+
+    // Défilés gagnés : une fois par personnage ayant défilé, si le défilé est remporté
+    if (result.winner === 'player') {
+      charactersWhoWalked.forEach(instanceId => {
+        const inst = CWGameState.getPlayerChar(instanceId);
+        if (inst) inst.defilesWon = (inst.defilesWon || 0) + 1;
+      });
+
+      // Récompenses de base à la victoire (or/diamants/XP) — générique pour
+      // l'instant, en attendant de rebrancher les mécaniques propres à
+      // chaque mode d'origine (progression Histoire/Tournée, capture
+      // Caprice, classement Grand Gala, quêtes d'Event).
+      const goldReward     = 50 + Math.round(result.playerTotal / 20);
+      const crystalsReward = 5  + Math.round(result.playerTotal / 200);
+      CWGameState.modifyResources({ gold: goldReward, crystals: crystalsReward });
+      charactersWhoWalked.forEach(instanceId => {
+        CWGameState.addXpToCharacter?.(instanceId, 15);
+      });
+    }
+
     CWGameState.updatePlayer({ stats });
+  }
+
+  // ─── ÉCRAN AFFINITÉS (remplace le Gacha) ────────────────────────────────────
+
+  function renderAffinity() {
+    const el = document.getElementById('screen-affinity');
+    if (!el) return;
+    const state = CWGameState.get();
+    const progress = CWGameState.getAllAffinityProgress();
+
+    el.innerHTML = `
+      <div class="screen-header"><h2>💞 Affinités</h2></div>
+      <p class="defile-help">
+        Chaque tournage de Défilé gagné contre une personnage augmente ton
+        affinité avec sa lignée. À 100%, elle rejoint ta collection.
+      </p>
+      ${progress.length === 0 ? `
+        <p class="empty-msg">Toutes les lignées disponibles ont déjà rejoint ta collection !</p>
+      ` : `
+        <div class="affinity-list">
+          ${progress.map(p => {
+            const rd = CWGameDatabase.RARITIES[p.baseChar.rarity] || {};
+            const discovered = p.percent > 0;
+            return `
+              <div class="affinity-card">
+                <div class="affinity-portrait">
+                  ${discovered && p.baseChar.portrait
+                    ? `<img src="${p.baseChar.portrait}" alt="${p.baseChar.name}" style="width:100%;height:100%;object-fit:cover;object-position:center 15%;">`
+                    : `<div class="unknown-silhouette">?</div>`}
+                </div>
+                <div class="affinity-info">
+                  <div class="affinity-name-row">
+                    <span class="affinity-name">${discovered ? p.baseChar.name : '???'}</span>
+                    <span class="affinity-rarity-badge" style="background:${rd.color}">${rd.name}</span>
+                  </div>
+                  <div class="affinity-bar-track">
+                    <div class="affinity-bar-fill" style="width:${p.percent}%;"></div>
+                  </div>
+                  <div class="affinity-percent">${p.percent}%</div>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+      `}
+    `;
   }
 
   function renderDefileResult() {
