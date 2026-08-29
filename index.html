@@ -661,6 +661,47 @@
   .casting-candidate-result.is-lost{ color:#f87171; }
   .casting-candidate-card.locked{ opacity:.5; }
   .casting-candidate-locked-msg{ font-size:.72rem; color:var(--text-faint); font-style:italic; margin-top:4px; }
+
+  /* ── Mise en scène du Grand Casting ── */
+  .casting-candidate-card{ position:relative; overflow:hidden; }
+  .casting-candidate-card.is-live{
+    animation:castingLiveBreathe 3s ease-in-out infinite;
+  }
+  @keyframes castingLiveBreathe{
+    0%, 100%{ box-shadow:0 0 0 1px rgba(251,191,36,.15); }
+    50%{ box-shadow:0 0 0 1px rgba(251,191,36,.4), 0 0 18px 2px rgba(251,191,36,.15); }
+  }
+  .casting-gavel-hit{ animation:castingGavelShake 350ms ease; }
+  @keyframes castingGavelShake{
+    0%{ transform:translateX(0); }
+    20%{ transform:translateX(-3px) rotate(-.5deg); }
+    40%{ transform:translateX(3px) rotate(.5deg); }
+    60%{ transform:translateX(-2px); }
+    100%{ transform:translateX(0); }
+  }
+  .casting-bid-pulse{ color:#fbbf24 !important; transition:color 300ms ease; }
+  .casting-reaction-banner{
+    position:absolute; left:50%; bottom:10px; transform:translate(-50%,10px);
+    background:rgba(10,6,20,.92); border:1px solid rgba(255,255,255,.2);
+    border-radius:999px; padding:6px 14px; font-size:.72rem; font-weight:700;
+    white-space:nowrap; opacity:0; transition:opacity 250ms ease, transform 250ms ease;
+    z-index:20; pointer-events:none;
+  }
+  .casting-reaction-banner.visible{ opacity:1; transform:translate(-50%,0); }
+  .casting-reaction-tension{ border-color:rgba(251,191,36,.6); color:#fbbf24; }
+  .casting-reaction-drop{ border-color:rgba(248,113,113,.5); color:#f87171; }
+  .casting-reaction-neutral{ color:var(--text-dim); }
+  .casting-sold-banner{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    gap:8px; background:rgba(10,6,20,.9); font-family:'Playfair Display', serif;
+    font-style:italic; font-weight:700; font-size:1.1rem; text-align:center; padding:12px;
+    opacity:0; transform:scale(.85); transition:opacity 300ms ease, transform 300ms cubic-bezier(.22,.68,0,1.4);
+    z-index:30;
+  }
+  .casting-sold-banner.visible{ opacity:1; transform:scale(1); }
+  .casting-sold-banner.is-won{ color:#fbbf24; }
+  .casting-sold-banner.is-lost{ color:#f87171; }
+  .casting-sold-icon{ font-size:1.4rem; }
   .dpb-skip-btn{
     position:absolute; top:0; right:0; z-index:60;
     background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2);

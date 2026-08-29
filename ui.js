@@ -6054,11 +6054,26 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const avgLevel = Math.max(1, Math.round(
       playerTeam.reduce((s, f) => s + (f.level || 1), 0) / playerTeam.length
     ));
+
+    // Aucune lignée en commun avec le joueur, ni en double côté adverse —
+    // les 6 personnages du duel doivent toutes être des lignées différentes.
+    const playerLines = new Set(
+      playerTeam.map(f => CWGameState.getCharDef(f.charId)?.evolutionLine).filter(Boolean)
+    );
+    const usedEnemyLines = new Set();
     const enemyDefs = [];
     for (let i = 0; i < 3; i++) {
-      const pool = state.characters.filter(c => c.evolutionStage === 0);
-      enemyDefs.push(pool[Math.floor(Math.random() * pool.length)]);
+      const pool = state.characters.filter(c =>
+        c.evolutionStage === 0 &&
+        !playerLines.has(c.evolutionLine) &&
+        !usedEnemyLines.has(c.evolutionLine)
+      );
+      if (!pool.length) break; // plus aucune lignée disponible (roster trop petit) — repli silencieux
+      const picked = pool[Math.floor(Math.random() * pool.length)];
+      enemyDefs.push(picked);
+      usedEnemyLines.add(picked.evolutionLine);
     }
+
     return enemyDefs.map((def, i) => {
       const baseStats = CWGameDatabase.computeStats(def, avgLevel, 0, state.config.awakening, def.rarity, state.config.level);
       const fighter = CWDefileEngine.buildFighter({ instanceId: `enemy_${i}` }, def, baseStats, cfg);
@@ -7377,7 +7392,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const resolved = c.status !== 'active';
 
     return `
-      <div class="casting-candidate-card ${resolved ? 'resolved' : ''}">
+      <div class="casting-candidate-card ${resolved ? 'resolved' : 'is-live'}" data-candidate-card="${c.id}">
         <div class="casting-candidate-portrait">${def ? _combatPortraitImgHtml(def) : ''}</div>
         <div class="casting-candidate-info">
           <div class="casting-candidate-name-row">
@@ -7391,7 +7406,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                 : `❌ Recrutée par ${leaderName}`}
             </div>
           ` : `
-            <div class="casting-candidate-bid">Enchère actuelle : <strong>${c.currentBid.toLocaleString('fr-FR')}</strong> — meneuse : ${leaderName}</div>
+            <div class="casting-candidate-bid">
+              Enchère actuelle : <strong id="casting-bid-value-${c.id}">${c.currentBid.toLocaleString('fr-FR')}</strong>
+              — meneuse : <span id="casting-leader-${c.id}">${leaderName}</span>
+            </div>
             ${conviction > 0 ? `<div class="casting-conviction">💞 Bonus de conviction : -${conviction}% (Tags partagés)</div>` : ''}
             ${c.playerPassed ? `
               <div class="casting-candidate-passed">Tu as laissé passer cette candidate.</div>
@@ -7409,20 +7427,125 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     `;
   }
 
-  function _handleCastingBid(candidateId, playerBids) {
+  async function _handleCastingBid(candidateId, playerBids) {
+    // Désactive les boutons pendant que la séquence joue, pour éviter tout double-clic
+    document.querySelectorAll(`[data-candidate="${candidateId}"]`).forEach(b => b.disabled = true);
+
     const result = CWGameState.placeCastingBid(candidateId, playerBids);
     if (!result) return;
     if (result.error === 'insufficient') {
       _showToast('⚠️ Réputation insuffisante pour cette enchère.', 'error');
+      document.querySelectorAll(`[data-candidate="${candidateId}"]`).forEach(b => b.disabled = false);
       return;
     }
+
+    const cardEl = document.querySelector(`[data-candidate-card="${candidateId}"]`);
+    const bidEl = document.getElementById(`casting-bid-value-${candidateId}`);
+    const leaderEl = document.getElementById(`casting-leader-${candidateId}`);
+
+    // 1. Le coup de marteau de la mise du joueur (ou l'abandon)
+    const playerEvt = result.log.find(e => e.type === 'player_bid' || e.type === 'player_pass');
+    if (playerEvt?.type === 'player_bid') {
+      await _showCastingGavel(cardEl);
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileScoreTick);
+      if (bidEl) await _animateCastingBidNumber(bidEl, playerEvt.bid);
+      if (leaderEl) leaderEl.textContent = 'Toi';
+      await _sleep(500);
+    } else if (playerEvt?.type === 'player_pass') {
+      await _showCastingReactionBanner(cardEl, "Tu laisses passer...", 'neutral');
+      await _sleep(400);
+    }
+
+    // 2. Chaque rivale réagit, une par une — jamais deux en même temps
+    for (const evt of result.log) {
+      if (evt.type === 'rival_raises') {
+        await _showCastingReactionBanner(cardEl, `${evt.name} surenchérit !`, 'tension');
+        CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTypeGood);
+        if (bidEl) await _animateCastingBidNumber(bidEl, evt.bid);
+        if (leaderEl) leaderEl.textContent = evt.name;
+        await _sleep(400);
+      } else if (evt.type === 'rival_drops') {
+        await _showCastingReactionBanner(cardEl, `${evt.name} se retire...`, 'drop');
+        CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTypeBad);
+        await _sleep(400);
+      }
+      // 'rival_watches' : discret, pas de bannière pour ne pas surcharger le rythme
+    }
+
+    // 3. Dénouement — si la candidate est résolue, un vrai moment de conclusion
     if (result.candidate.status === 'won_player') {
       const def = CWGameState.getCharDef(result.candidate.charId);
+      await _showCastingSoldBanner(cardEl, `${def?.name || 'Elle'} — ADJUGÉ !`, true);
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileVictory);
       _showToast(`🎉 ${def?.name || 'La candidate'} rejoint ton agence !`, 'success');
+      await _sleep(600);
     } else if (result.candidate.status === 'won_rival') {
+      const leaderName = result.candidate.currentLeader
+        ? (CWGameState.get().player.currentCasting?.rivals.find(r => r.id === result.candidate.currentLeader)?.name || '?')
+        : '?';
+      await _showCastingSoldBanner(cardEl, `Recrutée par ${leaderName}`, false);
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileDefeat);
       _showToast('😔 Une agence rivale a remporté cette candidate.', 'error');
+      await _sleep(600);
     }
+
     renderCasting();
+  }
+
+  /** Effet de "coup de marteau" sur la carte : petit choc + flash discret */
+  function _showCastingGavel(cardEl) {
+    return new Promise(resolve => {
+      if (!cardEl) { resolve(); return; }
+      cardEl.classList.add('casting-gavel-hit');
+      setTimeout(() => { cardEl.classList.remove('casting-gavel-hit'); resolve(); }, 350);
+    });
+  }
+
+  /** Anime le chiffre de l'enchère en défilant jusqu'à la nouvelle valeur */
+  function _animateCastingBidNumber(el, target) {
+    return new Promise(resolve => {
+      const from = parseInt(el.textContent.replace(/\D/g, ''), 10) || 0;
+      const duration = 450;
+      const start = performance.now();
+      el.classList.add('casting-bid-pulse');
+      function step(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 2);
+        el.textContent = Math.round(from + (target - from) * eased).toLocaleString('fr-FR');
+        if (t < 1) requestAnimationFrame(step);
+        else { el.textContent = target.toLocaleString('fr-FR'); el.classList.remove('casting-bid-pulse'); resolve(); }
+      }
+      requestAnimationFrame(step);
+    });
+  }
+
+  /** Petite bannière de réaction (rivale qui surenchérit, se retire, ou joueur qui passe) */
+  function _showCastingReactionBanner(cardEl, text, tone) {
+    return new Promise(resolve => {
+      if (!cardEl) { resolve(); return; }
+      const banner = document.createElement('div');
+      banner.className = `casting-reaction-banner casting-reaction-${tone}`;
+      banner.textContent = text;
+      cardEl.appendChild(banner);
+      requestAnimationFrame(() => banner.classList.add('visible'));
+      setTimeout(() => {
+        banner.classList.remove('visible');
+        setTimeout(() => { banner.remove(); resolve(); }, 250);
+      }, 900);
+    });
+  }
+
+  /** Grande bannière de conclusion ("ADJUGÉ !" ou "Recrutée par ...") */
+  function _showCastingSoldBanner(cardEl, text, won) {
+    return new Promise(resolve => {
+      if (!cardEl) { resolve(); return; }
+      const banner = document.createElement('div');
+      banner.className = `casting-sold-banner ${won ? 'is-won' : 'is-lost'}`;
+      banner.innerHTML = `<span class="casting-sold-icon">${won ? '🔨' : '💔'}</span>${text}`;
+      cardEl.appendChild(banner);
+      requestAnimationFrame(() => banner.classList.add('visible'));
+      setTimeout(() => { banner.remove(); resolve(); }, 1400);
+    });
   }
 
   let _affinitySortMode = 'rarity'; // 'rarity' | 'name' | 'percent'

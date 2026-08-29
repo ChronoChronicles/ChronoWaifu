@@ -1515,16 +1515,19 @@ const CWGameState = (() => {
     const cfg = _state.config.combat;
     const increment = (cfg.castingBidIncrement ?? 10) / 100;
     const conviction = _getCastingConvictionBonus(candidate.charId);
+    const log = []; // { type:'player_bid'|'rival_drops'|'rival_raises'|'rival_watches', name?, bid? }
 
     // Le joueur passe définitivement sur cette candidate
     if (!playerBids) {
       candidate.playerPassed = true;
+      log.push({ type: 'player_pass' });
     } else {
       const effectiveCost = Math.round(candidate.currentBid * (1 - conviction / 100));
       if (effectiveCost > _state.player.reputation) return { candidate, playerReputation: _state.player.reputation, error: 'insufficient' };
       candidate.currentBid = Math.ceil(candidate.currentBid * (1 + increment));
       candidate.currentLeader = 'player';
       candidate.lastBidCost = effectiveCost;
+      log.push({ type: 'player_bid', bid: candidate.currentBid });
     }
 
     // Chaque rivale encore active décide de suivre ou d'abandonner
@@ -1537,9 +1540,13 @@ const CWGameState = (() => {
       const follows = candidate.currentBid <= rarityCeiling && Math.random() < rival.aggression;
       if (!follows) {
         candidate.activeRivals = candidate.activeRivals.filter(id => id !== rivalId);
+        log.push({ type: 'rival_drops', name: rival.name });
       } else if (candidate.currentLeader !== 'player' || Math.random() < rival.aggression * 0.5) {
         candidate.currentBid = Math.ceil(candidate.currentBid * (1 + increment));
         candidate.currentLeader = rivalId;
+        log.push({ type: 'rival_raises', name: rival.name, bid: candidate.currentBid });
+      } else {
+        log.push({ type: 'rival_watches', name: rival.name });
       }
     });
 
@@ -1577,7 +1584,7 @@ const CWGameState = (() => {
 
     _notify('castingUpdated');
     _autoSave();
-    return { candidate, playerReputation: _state.player.reputation };
+    return { candidate, playerReputation: _state.player.reputation, log };
   }
 
   // ─── CLASSEMENTS ────────────────────────────────────────────────────────────

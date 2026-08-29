@@ -1204,10 +1204,7 @@ const CWGameDatabase = (() => {
       const spd = Math.max(0, stats?.spd || 0);
       const hp  = Math.max(0, stats?.hp  || 0);
 
-      const geometricMean = Math.cbrt(Math.max(1, atk) * Math.max(1, def) * Math.max(1, spd));
-      const formeBonusMultiplier = 1 + (hp / 100) / 100; // ex: hp=7440 -> Bonus Forme max +74,4% -> ×1,744
-
-      return Math.round(geometricMean * formeBonusMultiplier);
+      return Math.round((atk + def + spd + (hp / 10)) * 5);
     },
 
     /**
