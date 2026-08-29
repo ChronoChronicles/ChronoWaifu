@@ -104,7 +104,8 @@ const CWGameDatabase = (() => {
         common: 50, uncommon: 120, rare: 300, epic: 700, legendary: 1500, mythic: 3500,
       },
       castingBidIncrement: 10,      // % d'augmentation minimum à chaque surenchère
-      castingConvictionBonus: 15,   // % de réduction du coût effectif si tag partagé avec la collection
+      castingConvictionBonus: 5,    // % de réduction du coût effectif, CUMULABLE par tag partagé avec la collection
+      castingConvictionMaxPct: 80,  // plafond de sécurité (jamais gratuit)
       castingRivalAggressionMin: 0.6, // Agressivité simulée des rivales (tirée entre min et max à chaque Casting)
       castingRivalAggressionMax: 1.2,
       // ── Équilibrage joueur / ennemi ────────────────────────────────────────

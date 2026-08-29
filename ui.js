@@ -7337,7 +7337,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         <strong>🎬 ${(player.reputation || 0).toLocaleString('fr-FR')}</strong>
       </div>
       <div class="casting-candidates">
-        ${casting.candidates.map(c => _renderCastingCandidateCard(c, casting)).join('')}
+        ${casting.candidates.map((c, index) => _renderCastingCandidateCard(c, casting, index)).join('')}
       </div>
     `;
 
@@ -7349,7 +7349,23 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     });
   }
 
-  function _renderCastingCandidateCard(c, casting) {
+  function _renderCastingCandidateCard(c, casting, index) {
+    const isLocked = index > (casting.activeIndex ?? 0);
+    if (isLocked) {
+      return `
+        <div class="casting-candidate-card locked">
+          <div class="casting-candidate-portrait"><div class="unknown-silhouette">?</div></div>
+          <div class="casting-candidate-info">
+            <div class="casting-candidate-name-row">
+              <span class="casting-candidate-name">???</span>
+              <span class="affinity-rarity-badge" style="background:#555;">???</span>
+            </div>
+            <div class="casting-candidate-locked-msg">🔒 Se révèle après la candidate précédente</div>
+          </div>
+        </div>
+      `;
+    }
+
     const state = CWGameState.get();
     const def = CWGameState.getCharDef(c.charId);
     const rd = CWGameDatabase.RARITIES[c.rarity] || {};
@@ -7370,11 +7386,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           </div>
           ${resolved ? `
             <div class="casting-candidate-result ${c.status === 'won_player' ? 'is-won' : 'is-lost'}">
-              ${c.status === 'won_player' ? '✅ Signée par ton agence !' : `❌ Recrutée par ${leaderName}`}
+              ${c.status === 'won_player'
+                ? `✅ ${def?.name || 'Elle'} a signé avec ton agence pour ${(c.finalCost || 0).toLocaleString('fr-FR')} Réputation !`
+                : `❌ Recrutée par ${leaderName}`}
             </div>
           ` : `
             <div class="casting-candidate-bid">Enchère actuelle : <strong>${c.currentBid.toLocaleString('fr-FR')}</strong> — meneuse : ${leaderName}</div>
-            ${conviction > 0 ? `<div class="casting-conviction">💞 Bonus de conviction : -${conviction}% (Tag partagé)</div>` : ''}
+            ${conviction > 0 ? `<div class="casting-conviction">💞 Bonus de conviction : -${conviction}% (Tags partagés)</div>` : ''}
             ${c.playerPassed ? `
               <div class="casting-candidate-passed">Tu as laissé passer cette candidate.</div>
             ` : `

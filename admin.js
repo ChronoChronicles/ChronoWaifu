@@ -4667,8 +4667,12 @@ const CWAdminPanel = (() => {
             <input type="number" id="casting-bid-increment" value="${cCfg.castingBidIncrement ?? 10}" min="1" step="1" />
           </div>
           <div class="admin-field">
-            <label>Bonus de conviction (% si Tag partagé)</label>
-            <input type="number" id="casting-conviction" value="${cCfg.castingConvictionBonus ?? 15}" min="0" step="1" />
+            <label>Bonus de conviction (% PAR Tag partagé, cumulable)</label>
+            <input type="number" id="casting-conviction" value="${cCfg.castingConvictionBonus ?? 5}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Plafond du bonus de conviction (%)</label>
+            <input type="number" id="casting-conviction-max" value="${cCfg.castingConvictionMaxPct ?? 80}" min="0" max="100" step="5" />
           </div>
           <div class="admin-field">
             <label>Agressivité rivales — minimum</label>
@@ -6770,7 +6774,8 @@ const CWAdminPanel = (() => {
         castingCandidateCount:   parseInt(document.getElementById('casting-candidate-count')?.value || '4'),
         castingRivalCount:       parseInt(document.getElementById('casting-rival-count')?.value || '3'),
         castingBidIncrement:     parseFloat(document.getElementById('casting-bid-increment')?.value || '10'),
-        castingConvictionBonus:  parseFloat(document.getElementById('casting-conviction')?.value || '15'),
+        castingConvictionBonus:  parseFloat(document.getElementById('casting-conviction')?.value || '5'),
+        castingConvictionMaxPct: parseFloat(document.getElementById('casting-conviction-max')?.value || '80'),
         castingRivalAggressionMin: parseFloat(document.getElementById('casting-aggr-min')?.value || '0.6'),
         castingRivalAggressionMax: parseFloat(document.getElementById('casting-aggr-max')?.value || '1.2'),
         castingBasePriceByRarity: {

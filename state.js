@@ -1459,7 +1459,7 @@ const CWGameState = (() => {
       });
     }
 
-    _state.player.currentCasting = { id: `casting_${Date.now()}`, openedAt: Date.now(), candidates, rivals };
+    _state.player.currentCasting = { id: `casting_${Date.now()}`, openedAt: Date.now(), candidates, rivals, activeIndex: 0 };
     _state.player.defilesSinceLastCasting = 0;
     _state.player.castingThreshold = _rollCastingThreshold();
   }
@@ -1488,8 +1488,10 @@ const CWGameState = (() => {
       def?.tags?.forEach(t => ownedTags.add(t));
     });
 
-    const sharesTag = candidateDef.tags.some(t => ownedTags.has(t));
-    return sharesTag ? (cfg.castingConvictionBonus ?? 15) : 0;
+    const matchingTagsCount = candidateDef.tags.filter(t => ownedTags.has(t)).length;
+    const perTagPct = cfg.castingConvictionBonus ?? 5;
+    const maxPct = cfg.castingConvictionMaxPct ?? 80; // plafond de sécurité (jamais gratuit)
+    return Math.min(maxPct, matchingTagsCount * perTagPct);
   }
 
   /**
@@ -1505,8 +1507,10 @@ const CWGameState = (() => {
   function placeCastingBid(candidateId, playerBids) {
     const casting = _state.player.currentCasting;
     if (!casting) return null;
-    const candidate = casting.candidates.find(c => c.id === candidateId);
+    const candidateIndex = casting.candidates.findIndex(c => c.id === candidateId);
+    const candidate = casting.candidates[candidateIndex];
     if (!candidate || candidate.status !== 'active') return null;
+    if (candidateIndex !== (casting.activeIndex ?? 0)) return null; // pas encore révélée, pas encore enchérissable
 
     const cfg = _state.config.combat;
     const increment = (cfg.castingBidIncrement ?? 10) / 100;
@@ -1550,12 +1554,18 @@ const CWGameState = (() => {
     } else if (playerStillIn && rivalsStillIn === 0 && candidate.currentLeader === 'player') {
       candidate.status = 'won_player';
       const cost = candidate.lastBidCost ?? candidate.currentBid;
+      candidate.finalCost = cost; // conservé pour l'affichage ("signée pour XXX Réputation")
       _state.player.reputation = Math.max(0, _state.player.reputation - cost);
       const baseChar = _state.characters.find(c => c.id === candidate.charId);
       if (baseChar) addCharacterToCollection(baseChar.id, 'casting');
     } else if (!playerStillIn && rivalsStillIn === 0) {
       // Personne ne la remporte (cas limite) — on referme quand même la candidate
       candidate.status = 'won_rival';
+    }
+
+    // Cette candidate est résolue : révèle la suivante dans l'ordre
+    if (candidate.status !== 'active' && candidateIndex === (casting.activeIndex ?? 0)) {
+      casting.activeIndex = candidateIndex + 1;
     }
 
     // Une fois TOUTES les candidates traitées, referme le Casting pour de bon
