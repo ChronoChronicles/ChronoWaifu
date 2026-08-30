@@ -6578,15 +6578,22 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       </div>
     `;
 
-    // Créés directement sur document.body (pas dans .screen, dont l'animation
-    // d'entrée utilise "transform" — ce qui piège tout élément position:fixed
-    // à l'intérieur : il se cale alors sur .screen au lieu de l'écran entier,
-    // et disparaît dès qu'on scrolle. Ici, ils restent toujours visibles.)
+    // position:fixed (jamais affecté par le défilement de l'écran), mais avec
+    // des coordonnées calculées à partir des vraies bornes de l'interface
+    // (.app-shell), pas des valeurs CSS fixes qui échapperaient vers tout le
+    // NAVIGATEUR sur un écran large. Placés sous le bandeau d'en-tête.
+    const shellEl = document.querySelector('.app-shell');
+    const shellRect = shellEl ? shellEl.getBoundingClientRect() : { top: 14, right: window.innerWidth - 14 };
+    const btnTop = shellRect.top + 78; // sous le bandeau d'en-tête (logo + HUD)
+    const btnRight = window.innerWidth - shellRect.right + 14;
+
     document.querySelectorAll('.dpb-skip-btn, .dpb-speed-btn').forEach(b => b.remove());
     const skipBtn = document.createElement('button');
     skipBtn.className = 'dpb-skip-btn';
     skipBtn.id = 'btn-dpb-skip';
     skipBtn.textContent = 'Passer ›';
+    skipBtn.style.top = `${btnTop}px`;
+    skipBtn.style.right = `${btnRight}px`;
     skipBtn.addEventListener('click', () => { _dpbSkip = true; });
     document.body.appendChild(skipBtn);
 
@@ -6594,6 +6601,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     speedBtn.className = 'dpb-speed-btn';
     speedBtn.id = 'btn-dpb-speed';
     speedBtn.textContent = '×1';
+    speedBtn.style.top = `${btnTop}px`;
+    speedBtn.style.right = `${btnRight + 82}px`;
     speedBtn.addEventListener('click', (e) => {
       _dpbSpeed = _dpbSpeed === 1 ? 2 : 1;
       e.currentTarget.textContent = `×${_dpbSpeed}`;
