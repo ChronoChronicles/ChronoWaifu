@@ -385,8 +385,8 @@ const CWDefileEngine = (() => {
 
       const pEnduranceRemaining = pFighter ? Math.ceil(pFighter.enduranceMax * (pFighter.endurance / 100)) : null;
       const eEnduranceRemaining = eFighter ? Math.ceil(eFighter.enduranceMax * (eFighter.endurance / 100)) : null;
-      const pBonusPct = pEnduranceRemaining != null ? Math.ceil(pEnduranceRemaining / 100) : null;
-      const eBonusPct = eEnduranceRemaining != null ? Math.ceil(eEnduranceRemaining / 100) : null;
+      const pBonusPct = pEnduranceRemaining != null ? (pEnduranceRemaining / 100) : null;
+      const eBonusPct = eEnduranceRemaining != null ? (eEnduranceRemaining / 100) : null;
       if (pBonusPct != null) pScore = Math.ceil(pScore * (1 + pBonusPct / 100));
       if (eBonusPct != null) eScore = Math.ceil(eScore * (1 + eBonusPct / 100));
 

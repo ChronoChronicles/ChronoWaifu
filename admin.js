@@ -38,8 +38,12 @@ const CWAdminPanel = (() => {
     { id: 'gacha',      label: '🎲 Gacha',       group: 'Mécanique'  },
     { id: 'event',      label: '✨ Event',        group: 'Mécanique'  },
     { id: 'daily',      label: '📅 Quotidien',   group: 'Mécanique'  },
-    { id: 'attacks',    label: '💥 Passifs',      group: 'Mécanique'  },
-    { id: 'combat',     label: '⚔️ Combat',       group: 'Mécanique'  },
+    // ── Ancien Combat (classique, plus utilisé) ─────────────────────────────────
+    { id: 'attacks',    label: '💥 Anciens Passifs', group: 'Ancien Combat' },
+    { id: 'combat',     label: '⚔️ Ancien Combat',   group: 'Ancien Combat' },
+    // ── Nouveaux modes (Défilé / Casting / Performance) ─────────────────────────
+    { id: 'new-passives', label: '⭐ Nouveaux Passifs', group: 'Nouveaux Modes' },
+    { id: 'new-modes',    label: '🎭 Réglages des Modes', group: 'Nouveaux Modes' },
     // ── Système ──────────────────────────────────────────────────────────────
     { id: 'player',     label: '🎮 Joueur',      group: 'Système'    },
     { id: 'resources',  label: '💎 Ressources',  group: 'Système'    },
@@ -670,6 +674,8 @@ const CWAdminPanel = (() => {
           case 'player':     content.innerHTML = _renderPlayerTab();     break;
           case 'resources':  content.innerHTML = _renderResourcesTab();  break;
           case 'combat':     content.innerHTML = _renderCombatTab();     break;
+          case 'new-passives': content.innerHTML = _renderNewPassivesTab(); break;
+          case 'new-modes':     content.innerHTML = _renderNewModesTab();     break;
           case 'items':      content.innerHTML = _renderItemsTab();      break;
           case 'shop':       content.innerHTML = _renderShopTab();       break;
           case 'daily':      content.innerHTML = _renderDailyTab();      _rebuildCycleDayRows();      break;
@@ -4553,215 +4559,6 @@ const CWAdminPanel = (() => {
       </div>
       <hr class="admin-sep" />
       <div class="admin-section">
-        <div class="admin-section-title">🎁 Récompenses de fin de Défilé</div>
-        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
-          Calculées à la fin de chaque défilé : XP et dollars en % du score
-          marqué, affinité selon la rareté/le stade de l'adversaire rencontrée
-          (× ce multiplicateur global).
-        </p>
-        <div class="admin-grid">
-          <div class="admin-field">
-            <label>XP perso (% du score DE la personnage)</label>
-            <input type="number" id="defile-char-xp-pct" value="${cCfg.defileCharXpPercent ?? 10}" min="0" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>XP joueur (% du score total)</label>
-            <input type="number" id="defile-player-xp-pct" value="${cCfg.defilePlayerXpPercent ?? 5}" min="0" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Dollars (% du score total)</label>
-            <input type="number" id="defile-gold-pct" value="${cCfg.defileGoldPercent ?? 1}" min="0" step="0.5" />
-          </div>
-          <div class="admin-field">
-            <label>Multiplicateur global d'affinité</label>
-            <input type="number" id="defile-affinity-mult" value="${cCfg.affinityGainMultiplier ?? 1}" min="0" step="0.1" />
-          </div>
-        </div>
-      </div>
-      <hr class="admin-sep" />
-      <div class="admin-section">
-        <div class="admin-section-title">⭐ Talents du Défilé</div>
-        <p style="font-size:.78rem;color:#888;margin-bottom:14px;">
-          Un Talent par type, activable une fois par duel. Laisse nom/description
-          vides pour garder la valeur par défaut.
-        </p>
-        ${(() => {
-          const TALENT_PARAM_FIELDS = {
-            Charme:   { field: 'defileTalentCharmeBonus',   label: '% de score bonus' },
-            naturerelle: { field: 'defileTalentNatureRegen', label: "% d'Endurance restaurée" },
-            Rebelle:  { field: 'defileTalentRebelleMalus',  label: '% de malus adverse' },
-            Passion:  { field: 'defileTalentPassionBoost',  label: '% de stats bonus' },
-            Idole:    { field: 'defileTalentIdoleTransfer', label: '% de stat transférée' },
-            Enchant:  { field: 'defileTalentEnchantSteal',  label: '% de stat volée' },
-          };
-          const typeOrder = ['Charme','Elegance','naturerelle','Rebelle','Diva','Passion','Idole','Amazone','Mystique','Enchant','Legende'];
-          return typeOrder.map(typeId => {
-            const t = CWGameDatabase.DEFILE_TALENTS[typeId];
-            const typeDef = state.types.find(x => x.id === typeId);
-            const param = TALENT_PARAM_FIELDS[typeId];
-            return `
-              <div class="admin-talent-row" style="border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px;margin-bottom:10px;">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                  <span style="background:${typeDef?.color || '#888'};color:#1b1330;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:8px;">${typeDef?.icon || ''} ${typeDef?.name || typeId}</span>
-                  <span style="font-size:.72rem;color:#888;">(effet : ${t.effect})</span>
-                </div>
-                <div class="admin-grid">
-                  <div class="admin-field">
-                    <label>Nom (défaut : "${t.name}")</label>
-                    <input type="text" id="talent-name-${typeId}" value="${cCfg.defileTalentNameOverrides?.[typeId] || ''}" placeholder="${t.name}" />
-                  </div>
-                  ${param ? `
-                    <div class="admin-field">
-                      <label>${param.label}</label>
-                      <input type="number" id="talent-param-${typeId}" value="${cCfg[param.field] ?? 10}" min="0" step="1" />
-                    </div>
-                  ` : ''}
-                </div>
-                <div class="admin-field" style="margin-top:8px;">
-                  <label>Description (défaut : "${t.description}")</label>
-                  <textarea id="talent-desc-${typeId}" rows="2" placeholder="${t.description}">${cCfg.defileTalentDescOverrides?.[typeId] || ''}</textarea>
-                </div>
-              </div>
-            `;
-          }).join('');
-        })()}
-      </div>
-      <hr class="admin-sep" />
-      <div class="admin-section">
-        <div class="admin-section-title">🎬 Grand Casting</div>
-        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
-          Recrutement par enchères face à des agences rivales, alimenté par la
-          Réputation gagnée en Défilé. Remplace le Gacha.
-        </p>
-        <div class="admin-grid">
-          <div class="admin-field">
-            <label>Réputation (% du score total du Défilé)</label>
-            <input type="number" id="casting-rep-pct" value="${cCfg.reputationPercentOfScore ?? 10}" min="0" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Bonus Réputation si Défilé gagné (%)</label>
-            <input type="number" id="casting-rep-win-bonus" value="${cCfg.defileReputationWinBonusPct ?? 75}" min="0" step="5" />
-          </div>
-          <div class="admin-field">
-            <label>Malus Réputation si Défilé perdu (%)</label>
-            <input type="number" id="casting-rep-lose-malus" value="${cCfg.defileReputationLoseMalusPct ?? 30}" min="0" step="5" />
-          </div>
-          <div class="admin-field">
-            <label>Défilés avant Casting — minimum</label>
-            <input type="number" id="casting-threshold-min" value="${cCfg.castingThresholdMin ?? 25}" min="1" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Défilés avant Casting — maximum</label>
-            <input type="number" id="casting-threshold-max" value="${cCfg.castingThresholdMax ?? 30}" min="1" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Nombre de candidates par Casting</label>
-            <input type="number" id="casting-candidate-count" value="${cCfg.castingCandidateCount ?? 4}" min="1" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Nombre d'agences rivales</label>
-            <input type="number" id="casting-rival-count" value="${cCfg.castingRivalCount ?? 3}" min="1" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Incrément d'enchère (% par tour)</label>
-            <input type="number" id="casting-bid-increment" value="${cCfg.castingBidIncrement ?? 10}" min="1" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Bonus de conviction (% PAR Tag partagé, cumulable)</label>
-            <input type="number" id="casting-conviction" value="${cCfg.castingConvictionBonus ?? 5}" min="0" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Plafond du bonus de conviction (%)</label>
-            <input type="number" id="casting-conviction-max" value="${cCfg.castingConvictionMaxPct ?? 80}" min="0" max="100" step="5" />
-          </div>
-          <div class="admin-field">
-            <label>Agressivité rivales — minimum</label>
-            <input type="number" id="casting-aggr-min" value="${cCfg.castingRivalAggressionMin ?? 0.6}" min="0" step="0.05" />
-          </div>
-          <div class="admin-field">
-            <label>Agressivité rivales — maximum</label>
-            <input type="number" id="casting-aggr-max" value="${cCfg.castingRivalAggressionMax ?? 1.2}" min="0" step="0.05" />
-          </div>
-        </div>
-        <p style="font-size:.78rem;color:#888;margin:14px 0 8px;">Prix de départ aux enchères, par rareté (en Réputation) :</p>
-        <div class="admin-grid">
-          ${['common','uncommon','rare','epic','legendary','mythic'].map(r => `
-            <div class="admin-field">
-              <label>${CWGameDatabase.RARITIES[r]?.name || r}</label>
-              <input type="number" id="casting-price-${r}" value="${cCfg.castingBasePriceByRarity?.[r] ?? 100}" min="0" step="10" />
-            </div>
-          `).join('')}
-        </div>
-      </div>
-      <hr class="admin-sep" />
-      <div class="admin-section">
-        <div class="admin-section-title">📊 Mode Performance</div>
-        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
-          Combat où le joueur inflige un maximum de dégâts à une vague d'ennemis
-          passifs (ils n'attaquent jamais) pendant un nombre de tours limité.
-          Chaque ennemi vaincu est immédiatement remplacé. Les récompenses ne
-          sont plus distribuées automatiquement — le joueur les réclame
-          manuellement depuis le totem, palier par palier.
-        </p>
-        <div class="admin-grid">
-          <div class="admin-field">
-            <label>Nombre de tours</label>
-            <input type="number" id="record-max-turns" value="${cCfg.recordMaxTurns ?? 15}" min="1" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Taille de la vague d'ennemis</label>
-            <input type="number" id="record-enemy-count" value="${cCfg.recordEnemyCount ?? 3}" min="1" max="6" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Points bonus par ennemi vaincu</label>
-            <input type="number" id="record-kill-bonus" value="${cCfg.recordKillBonus ?? 100}" min="0" step="10" />
-          </div>
-        </div>
-        <div style="font-size:.76rem;color:#7dd3fc;margin:14px 0 6px;">Paliers de score (3 segments à pas croissant)</div>
-        <div class="admin-grid">
-          <div class="admin-field">
-            <label>Palier 1 — pas</label>
-            <input type="number" id="record-tier1-step" value="${cCfg.recordTier1Step ?? 1000}" min="1" step="100" />
-          </div>
-          <div class="admin-field">
-            <label>Palier 1 — jusqu'à</label>
-            <input type="number" id="record-tier1-cap" value="${cCfg.recordTier1Cap ?? 20000}" min="1" step="1000" />
-          </div>
-          <div class="admin-field">
-            <label>Palier 2 — pas</label>
-            <input type="number" id="record-tier2-step" value="${cCfg.recordTier2Step ?? 2000}" min="1" step="100" />
-          </div>
-          <div class="admin-field">
-            <label>Palier 2 — jusqu'à</label>
-            <input type="number" id="record-tier2-cap" value="${cCfg.recordTier2Cap ?? 40000}" min="1" step="1000" />
-          </div>
-          <div class="admin-field">
-            <label>Palier 3 — pas (au-delà, indéfiniment)</label>
-            <input type="number" id="record-tier3-step" value="${cCfg.recordTier3Step ?? 5000}" min="1" step="500" />
-          </div>
-          <div class="admin-field">
-            <label>Score max affiché sur le totem</label>
-            <input type="number" id="record-totem-max" value="${cCfg.recordTotemMaxScore ?? 100000}" min="1000" step="5000" />
-          </div>
-        </div>
-        <div style="font-size:.76rem;color:#7dd3fc;margin:14px 0 6px;">Récompense par palier réclamé</div>
-        <div class="admin-grid">
-          <div class="admin-field">
-            <label>💵 Dollars par palier</label>
-            <input type="number" id="record-gold-per-tier" value="${cCfg.recordGoldPerTier ?? 50}" min="0" step="5" />
-          </div>
-          <div class="admin-field">
-            <label>💎 Diamants par palier</label>
-            <input type="number" id="record-crystals-per-tier" value="${cCfg.recordCrystalsPerTier ?? 2}" min="0" step="1" />
-          </div>
-          <div class="admin-field">
-            <label>Croissance (1 = plat, &gt;1 = progressif)</label>
-            <input type="number" id="record-reward-growth" value="${cCfg.recordRewardGrowth ?? 1}" min="1" max="2" step="0.01" />
-          </div>
-        </div>
-      </div>
-      <hr class="admin-sep" />
-      <div class="admin-section">
         <div class="admin-section-title">⚖️ Équilibrage joueur / ennemi</div>
         <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
           Ces multiplicateurs s'appliquent après le calcul de dégâts pour favoriser le joueur structurellement.
@@ -5065,6 +4862,243 @@ const CWAdminPanel = (() => {
               </div>
             </div>`;
           }).join('')}
+        </div>
+      </div>
+
+      <div class="admin-actions">
+        <button class="admin-btn admin-btn-success" onclick="CWAdminPanel._saveCombatConfig()">💾 Sauver tous les paramètres</button>
+      </div>
+    `;
+  }
+
+  // ─── ONGLET NOUVEAUX PASSIFS (TALENTS DU DÉFILÉ) ──────────────────────────────
+
+  function _renderNewPassivesTab() {
+    const state = CWGameState.get();
+    const cfg   = state.config;
+    const cCfg  = cfg.combat || {};
+
+    return `
+      <div class="admin-section">
+        <div class="admin-section-title">⭐ Talents du Défilé</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:14px;">
+          Un Talent par type, activable une fois par duel. Laisse nom/description
+          vides pour garder la valeur par défaut.
+        </p>
+        ${(() => {
+          const TALENT_PARAM_FIELDS = {
+            Charme:   { field: 'defileTalentCharmeBonus',   label: '% de score bonus' },
+            naturerelle: { field: 'defileTalentNatureRegen', label: "% d'Endurance restaurée" },
+            Rebelle:  { field: 'defileTalentRebelleMalus',  label: '% de malus adverse' },
+            Passion:  { field: 'defileTalentPassionBoost',  label: '% de stats bonus' },
+            Idole:    { field: 'defileTalentIdoleTransfer', label: '% de stat transférée' },
+            Enchant:  { field: 'defileTalentEnchantSteal',  label: '% de stat volée' },
+          };
+          const typeOrder = ['Charme','Elegance','naturerelle','Rebelle','Diva','Passion','Idole','Amazone','Mystique','Enchant','Legende'];
+          return typeOrder.map(typeId => {
+            const t = CWGameDatabase.DEFILE_TALENTS[typeId];
+            const typeDef = state.types.find(x => x.id === typeId);
+            const param = TALENT_PARAM_FIELDS[typeId];
+            return `
+              <div class="admin-talent-row" style="border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <span style="background:${typeDef?.color || '#888'};color:#1b1330;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:8px;">${typeDef?.icon || ''} ${typeDef?.name || typeId}</span>
+                  <span style="font-size:.72rem;color:#888;">(effet : ${t.effect})</span>
+                </div>
+                <div class="admin-grid">
+                  <div class="admin-field">
+                    <label>Nom (défaut : "${t.name}")</label>
+                    <input type="text" id="talent-name-${typeId}" value="${cCfg.defileTalentNameOverrides?.[typeId] || ''}" placeholder="${t.name}" />
+                  </div>
+                  ${param ? `
+                    <div class="admin-field">
+                      <label>${param.label}</label>
+                      <input type="number" id="talent-param-${typeId}" value="${cCfg[param.field] ?? 10}" min="0" step="1" />
+                    </div>
+                  ` : ''}
+                </div>
+                <div class="admin-field" style="margin-top:8px;">
+                  <label>Description (défaut : "${t.description}")</label>
+                  <textarea id="talent-desc-${typeId}" rows="2" placeholder="${t.description}">${cCfg.defileTalentDescOverrides?.[typeId] || ''}</textarea>
+                </div>
+              </div>
+            `;
+          }).join('');
+        })()}
+      </div>
+
+      <div class="admin-actions">
+        <button class="admin-btn admin-btn-success" onclick="CWAdminPanel._saveCombatConfig()">💾 Sauver tous les paramètres</button>
+      </div>
+    `;
+  }
+
+  // ─── ONGLET NOUVEAUX MODES (DÉFILÉ / CASTING / PERFORMANCE) ───────────────────
+
+  function _renderNewModesTab() {
+    const state = CWGameState.get();
+    const cfg   = state.config;
+    const cCfg  = cfg.combat || {};
+
+    return `
+      <div class="admin-section">
+        <div class="admin-section-title">🎁 Récompenses de fin de Défilé</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Calculées à la fin de chaque défilé : XP et dollars en % du score
+          marqué, affinité selon la rareté/le stade de l'adversaire rencontrée
+          (× ce multiplicateur global).
+        </p>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>XP perso (% du score DE la personnage)</label>
+            <input type="number" id="defile-char-xp-pct" value="${cCfg.defileCharXpPercent ?? 10}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>XP joueur (% du score total)</label>
+            <input type="number" id="defile-player-xp-pct" value="${cCfg.defilePlayerXpPercent ?? 5}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Dollars (% du score total)</label>
+            <input type="number" id="defile-gold-pct" value="${cCfg.defileGoldPercent ?? 1}" min="0" step="0.5" />
+          </div>
+          <div class="admin-field">
+            <label>Multiplicateur global d'affinité</label>
+            <input type="number" id="defile-affinity-mult" value="${cCfg.affinityGainMultiplier ?? 1}" min="0" step="0.1" />
+          </div>
+        </div>
+      </div>
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">🎬 Grand Casting</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Recrutement par enchères face à des agences rivales, alimenté par la
+          Réputation gagnée en Défilé. Remplace le Gacha.
+        </p>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>Réputation (% du score total du Défilé)</label>
+            <input type="number" id="casting-rep-pct" value="${cCfg.reputationPercentOfScore ?? 10}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Bonus Réputation si Défilé gagné (%)</label>
+            <input type="number" id="casting-rep-win-bonus" value="${cCfg.defileReputationWinBonusPct ?? 75}" min="0" step="5" />
+          </div>
+          <div class="admin-field">
+            <label>Malus Réputation si Défilé perdu (%)</label>
+            <input type="number" id="casting-rep-lose-malus" value="${cCfg.defileReputationLoseMalusPct ?? 30}" min="0" step="5" />
+          </div>
+          <div class="admin-field">
+            <label>Défilés avant Casting — minimum</label>
+            <input type="number" id="casting-threshold-min" value="${cCfg.castingThresholdMin ?? 25}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Défilés avant Casting — maximum</label>
+            <input type="number" id="casting-threshold-max" value="${cCfg.castingThresholdMax ?? 30}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Nombre de candidates par Casting</label>
+            <input type="number" id="casting-candidate-count" value="${cCfg.castingCandidateCount ?? 4}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Nombre d'agences rivales</label>
+            <input type="number" id="casting-rival-count" value="${cCfg.castingRivalCount ?? 3}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Incrément d'enchère (% par tour)</label>
+            <input type="number" id="casting-bid-increment" value="${cCfg.castingBidIncrement ?? 10}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Bonus de conviction (% PAR Tag partagé, cumulable)</label>
+            <input type="number" id="casting-conviction" value="${cCfg.castingConvictionBonus ?? 5}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Plafond du bonus de conviction (%)</label>
+            <input type="number" id="casting-conviction-max" value="${cCfg.castingConvictionMaxPct ?? 80}" min="0" max="100" step="5" />
+          </div>
+          <div class="admin-field">
+            <label>Agressivité rivales — minimum</label>
+            <input type="number" id="casting-aggr-min" value="${cCfg.castingRivalAggressionMin ?? 0.6}" min="0" step="0.05" />
+          </div>
+          <div class="admin-field">
+            <label>Agressivité rivales — maximum</label>
+            <input type="number" id="casting-aggr-max" value="${cCfg.castingRivalAggressionMax ?? 1.2}" min="0" step="0.05" />
+          </div>
+        </div>
+        <p style="font-size:.78rem;color:#888;margin:14px 0 8px;">Prix de départ aux enchères, par rareté (en Réputation) :</p>
+        <div class="admin-grid">
+          ${['common','uncommon','rare','epic','legendary','mythic'].map(r => `
+            <div class="admin-field">
+              <label>${CWGameDatabase.RARITIES[r]?.name || r}</label>
+              <input type="number" id="casting-price-${r}" value="${cCfg.castingBasePriceByRarity?.[r] ?? 100}" min="0" step="10" />
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">📊 Mode Performance</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Combat où le joueur inflige un maximum de dégâts à une vague d'ennemis
+          passifs (ils n'attaquent jamais) pendant un nombre de tours limité.
+          Chaque ennemi vaincu est immédiatement remplacé. Les récompenses ne
+          sont plus distribuées automatiquement — le joueur les réclame
+          manuellement depuis le totem, palier par palier.
+        </p>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>Nombre de tours</label>
+            <input type="number" id="record-max-turns" value="${cCfg.recordMaxTurns ?? 15}" min="1" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Taille de la vague d'ennemis</label>
+            <input type="number" id="record-enemy-count" value="${cCfg.recordEnemyCount ?? 3}" min="1" max="6" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Points bonus par ennemi vaincu</label>
+            <input type="number" id="record-kill-bonus" value="${cCfg.recordKillBonus ?? 100}" min="0" step="10" />
+          </div>
+        </div>
+        <div style="font-size:.76rem;color:#7dd3fc;margin:14px 0 6px;">Paliers de score (3 segments à pas croissant)</div>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>Palier 1 — pas</label>
+            <input type="number" id="record-tier1-step" value="${cCfg.recordTier1Step ?? 1000}" min="1" step="100" />
+          </div>
+          <div class="admin-field">
+            <label>Palier 1 — jusqu'à</label>
+            <input type="number" id="record-tier1-cap" value="${cCfg.recordTier1Cap ?? 20000}" min="1" step="1000" />
+          </div>
+          <div class="admin-field">
+            <label>Palier 2 — pas</label>
+            <input type="number" id="record-tier2-step" value="${cCfg.recordTier2Step ?? 2000}" min="1" step="100" />
+          </div>
+          <div class="admin-field">
+            <label>Palier 2 — jusqu'à</label>
+            <input type="number" id="record-tier2-cap" value="${cCfg.recordTier2Cap ?? 40000}" min="1" step="1000" />
+          </div>
+          <div class="admin-field">
+            <label>Palier 3 — pas (au-delà, indéfiniment)</label>
+            <input type="number" id="record-tier3-step" value="${cCfg.recordTier3Step ?? 5000}" min="1" step="500" />
+          </div>
+          <div class="admin-field">
+            <label>Score max affiché sur le totem</label>
+            <input type="number" id="record-totem-max" value="${cCfg.recordTotemMaxScore ?? 100000}" min="1000" step="5000" />
+          </div>
+        </div>
+        <div style="font-size:.76rem;color:#7dd3fc;margin:14px 0 6px;">Récompense par palier réclamé</div>
+        <div class="admin-grid">
+          <div class="admin-field">
+            <label>💵 Dollars par palier</label>
+            <input type="number" id="record-gold-per-tier" value="${cCfg.recordGoldPerTier ?? 50}" min="0" step="5" />
+          </div>
+          <div class="admin-field">
+            <label>💎 Diamants par palier</label>
+            <input type="number" id="record-crystals-per-tier" value="${cCfg.recordCrystalsPerTier ?? 2}" min="0" step="1" />
+          </div>
+          <div class="admin-field">
+            <label>Croissance (1 = plat, &gt;1 = progressif)</label>
+            <input type="number" id="record-reward-growth" value="${cCfg.recordRewardGrowth ?? 1}" min="1" max="2" step="0.01" />
+          </div>
         </div>
       </div>
 
@@ -6703,48 +6737,68 @@ const CWAdminPanel = (() => {
     el.textContent = examples.join(' | ');
   }
 
-  function _saveCombatConfig() {
-    const state  = CWGameState.get();
-    const xpBase = parseInt(document.getElementById('level-xp-base')?.value || '100');
-    const xpExpo = parseFloat(document.getElementById('level-xp-expo')?.value || '1.8');
+  /** Lit un champ numérique s'il existe dans le DOM, sinon garde la valeur actuelle (jamais un défaut codé en dur) */
+  function _getVal(id, fallback, isInt) {
+    const el = document.getElementById(id);
+    if (!el || el.value === '' || el.value == null) return fallback;
+    const v = isInt ? parseInt(el.value) : parseFloat(el.value);
+    return isNaN(v) ? fallback : v;
+  }
+  function _getStrVal(id, fallback) {
+    const el = document.getElementById(id);
+    return el ? el.value : fallback;
+  }
 
-    // Sous-niveaux élites (champ texte "10,20")
-    const eliteRaw = document.getElementById('story-elites')?.value || '10,20';
-    const eliteSubLevels = eliteRaw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+  function _saveCombatConfig() {
+    const state = CWGameState.get();
+    const cCfg  = state.config.combat || {};
+    const gCfg  = state.config.game   || {};
+    const lCfg  = state.config.level  || {};
+    const sCfg  = cCfg.story || {};
+
+    const xpBase = _getVal('level-xp-base', lCfg.xpBase ?? 100, true);
+    const xpExpo = _getVal('level-xp-expo', lCfg.xpExponent ?? 1.8, false);
+
+    // Sous-niveaux élites (champ texte "10,20") — ne touche à rien si absent de cet onglet
+    const eliteEl = document.getElementById('story-elites');
+    const eliteSubLevels = eliteEl
+      ? eliteEl.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+      : (sCfg.eliteSubLevels || [10, 20]);
 
     const newCfg = {
       ...state.config,
       game: {
         ...state.config.game,
-        maxTeamSize: parseInt(document.getElementById('game-max-team')?.value || '3'),
+        maxTeamSize: _getVal('game-max-team', gCfg.maxTeamSize ?? 3, true),
         enemyTeamSize: {
-          mode:  document.getElementById('game-enemy-mode')?.value || 'fixed',
-          value: parseInt(document.getElementById('game-enemy-val')?.value || '3'),
-          min:   parseInt(document.getElementById('game-enemy-val')?.value || '1'),
-          max:   parseInt(document.getElementById('game-enemy-max')?.value || '5'),
+          mode:  _getStrVal('game-enemy-mode', gCfg.enemyTeamSize?.mode || 'fixed'),
+          value: _getVal('game-enemy-val', gCfg.enemyTeamSize?.value ?? 3, true),
+          min:   _getVal('game-enemy-val', gCfg.enemyTeamSize?.min ?? 1, true),
+          max:   _getVal('game-enemy-max', gCfg.enemyTeamSize?.max ?? 5, true),
         },
       },
       shop: {
         ...(state.config.shop || {}),
-        rotatingCount: parseInt(document.getElementById('shop-rotating-count')?.value || '9'),
+        rotatingCount: _getVal('shop-rotating-count', (state.config.shop || {}).rotatingCount ?? 9, true),
       },
       combat: {
-        ...state.config.combat,
-        minDamage:               parseInt(document.getElementById('combat-min-dmg')?.value || '1'),
-        captureBaseRate:         parseInt(document.getElementById('combat-capture-rate')?.value || '15') / 100,
-        rewardXpPerEnemy:        parseFloat(document.getElementById('combat-xp-per-enemy')?.value || '20'),
-        rewardGoldPerEnemy:      parseFloat(document.getElementById('combat-gold-per-enemy')?.value || '5'),
-        rewardDiamondsPerEnemy:  parseFloat(document.getElementById('combat-diamonds-per-enemy')?.value || '10'),
-        speedEvasionCap:         parseFloat(document.getElementById('combat-evasion-cap')?.value || '0.10'),
-        speedAccuracyCap:        parseFloat(document.getElementById('combat-accuracy-cap')?.value || '0.10'),
-        critDivisor:             parseFloat(document.getElementById('combat-crit-divisor')?.value || '200'),
-        critMultiplier:          parseFloat(document.getElementById('combat-crit-mult')?.value || '1.5'),
-        scoreDefReference:       parseFloat(document.getElementById('combat-score-def-ref')?.value || '10'),
-        defileCharXpPercent:     parseFloat(document.getElementById('defile-char-xp-pct')?.value || '10'),
-        defilePlayerXpPercent:   parseFloat(document.getElementById('defile-player-xp-pct')?.value || '5'),
-        defileGoldPercent:       parseFloat(document.getElementById('defile-gold-pct')?.value || '1'),
-        affinityGainMultiplier:  parseFloat(document.getElementById('defile-affinity-mult')?.value || '1'),
+        ...cCfg,
+        minDamage:               _getVal('combat-min-dmg', cCfg.minDamage ?? 1, true),
+        captureBaseRate:         _getVal('combat-capture-rate', (cCfg.captureBaseRate ?? 0.15) * 100, true) / 100,
+        rewardXpPerEnemy:        _getVal('combat-xp-per-enemy', cCfg.rewardXpPerEnemy ?? 20, false),
+        rewardGoldPerEnemy:      _getVal('combat-gold-per-enemy', cCfg.rewardGoldPerEnemy ?? 5, false),
+        rewardDiamondsPerEnemy:  _getVal('combat-diamonds-per-enemy', cCfg.rewardDiamondsPerEnemy ?? 10, false),
+        speedEvasionCap:         _getVal('combat-evasion-cap', cCfg.speedEvasionCap ?? 0.10, false),
+        speedAccuracyCap:        _getVal('combat-accuracy-cap', cCfg.speedAccuracyCap ?? 0.10, false),
+        critDivisor:             _getVal('combat-crit-divisor', cCfg.critDivisor ?? 200, false),
+        critMultiplier:          _getVal('combat-crit-mult', cCfg.critMultiplier ?? 1.5, false),
+        scoreDefReference:       _getVal('combat-score-def-ref', cCfg.scoreDefReference ?? 10, false),
+        defileCharXpPercent:     _getVal('defile-char-xp-pct', cCfg.defileCharXpPercent ?? 10, false),
+        defilePlayerXpPercent:   _getVal('defile-player-xp-pct', cCfg.defilePlayerXpPercent ?? 5, false),
+        defileGoldPercent:       _getVal('defile-gold-pct', cCfg.defileGoldPercent ?? 1, false),
+        affinityGainMultiplier:  _getVal('defile-affinity-mult', cCfg.affinityGainMultiplier ?? 1, false),
         defileTalentNameOverrides: (() => {
+          if (!document.getElementById('talent-name-Charme')) return cCfg.defileTalentNameOverrides || {};
           const out = {};
           ['Charme','Elegance','naturerelle','Rebelle','Diva','Passion','Idole','Amazone','Mystique','Enchant','Legende'].forEach(typeId => {
             const v = document.getElementById(`talent-name-${typeId}`)?.value.trim();
@@ -6753,6 +6807,7 @@ const CWAdminPanel = (() => {
           return out;
         })(),
         defileTalentDescOverrides: (() => {
+          if (!document.getElementById('talent-desc-Charme')) return cCfg.defileTalentDescOverrides || {};
           const out = {};
           ['Charme','Elegance','naturerelle','Rebelle','Diva','Passion','Idole','Amazone','Mystique','Enchant','Legende'].forEach(typeId => {
             const v = document.getElementById(`talent-desc-${typeId}`)?.value.trim();
@@ -6760,59 +6815,62 @@ const CWAdminPanel = (() => {
           });
           return out;
         })(),
-        defileTalentCharmeBonus:   parseFloat(document.getElementById('talent-param-Charme')?.value      || '15'),
-        defileTalentNatureRegen:   parseFloat(document.getElementById('talent-param-naturerelle')?.value  || '10'),
-        defileTalentRebelleMalus:  parseFloat(document.getElementById('talent-param-Rebelle')?.value      || '20'),
-        defileTalentPassionBoost:  parseFloat(document.getElementById('talent-param-Passion')?.value      || '20'),
-        defileTalentIdoleTransfer: parseFloat(document.getElementById('talent-param-Idole')?.value        || '10'),
-        defileTalentEnchantSteal:  parseFloat(document.getElementById('talent-param-Enchant')?.value      || '10'),
-        reputationPercentOfScore: parseFloat(document.getElementById('casting-rep-pct')?.value || '10'),
-        defileReputationWinBonusPct:  parseFloat(document.getElementById('casting-rep-win-bonus')?.value  || '75'),
-        defileReputationLoseMalusPct: parseFloat(document.getElementById('casting-rep-lose-malus')?.value || '30'),
-        castingThresholdMin:     parseInt(document.getElementById('casting-threshold-min')?.value || '25'),
-        castingThresholdMax:     parseInt(document.getElementById('casting-threshold-max')?.value || '30'),
-        castingCandidateCount:   parseInt(document.getElementById('casting-candidate-count')?.value || '4'),
-        castingRivalCount:       parseInt(document.getElementById('casting-rival-count')?.value || '3'),
-        castingBidIncrement:     parseFloat(document.getElementById('casting-bid-increment')?.value || '10'),
-        castingConvictionBonus:  parseFloat(document.getElementById('casting-conviction')?.value || '5'),
-        castingConvictionMaxPct: parseFloat(document.getElementById('casting-conviction-max')?.value || '80'),
-        castingRivalAggressionMin: parseFloat(document.getElementById('casting-aggr-min')?.value || '0.6'),
-        castingRivalAggressionMax: parseFloat(document.getElementById('casting-aggr-max')?.value || '1.2'),
+        defileTalentCharmeBonus:   _getVal('talent-param-Charme',       cCfg.defileTalentCharmeBonus   ?? 50, false),
+        defileTalentNatureRegen:   _getVal('talent-param-naturerelle',  cCfg.defileTalentNatureRegen   ?? 10, false),
+        defileTalentRebelleMalus:  _getVal('talent-param-Rebelle',      cCfg.defileTalentRebelleMalus  ?? 50, false),
+        defileTalentPassionBoost:  _getVal('talent-param-Passion',      cCfg.defileTalentPassionBoost  ?? 20, false),
+        defileTalentIdoleTransfer: _getVal('talent-param-Idole',        cCfg.defileTalentIdoleTransfer ?? 20, false),
+        defileTalentEnchantSteal:  _getVal('talent-param-Enchant',      cCfg.defileTalentEnchantSteal  ?? 20, false),
+        reputationPercentOfScore: _getVal('casting-rep-pct', cCfg.reputationPercentOfScore ?? 10, false),
+        defileReputationWinBonusPct:  _getVal('casting-rep-win-bonus',  cCfg.defileReputationWinBonusPct  ?? 75, false),
+        defileReputationLoseMalusPct: _getVal('casting-rep-lose-malus', cCfg.defileReputationLoseMalusPct ?? 30, false),
+        castingThresholdMin:     _getVal('casting-threshold-min', cCfg.castingThresholdMin ?? 25, true),
+        castingThresholdMax:     _getVal('casting-threshold-max', cCfg.castingThresholdMax ?? 30, true),
+        castingCandidateCount:   _getVal('casting-candidate-count', cCfg.castingCandidateCount ?? 4, true),
+        castingRivalCount:       _getVal('casting-rival-count', cCfg.castingRivalCount ?? 3, true),
+        castingBidIncrement:     _getVal('casting-bid-increment', cCfg.castingBidIncrement ?? 10, false),
+        castingConvictionBonus:  _getVal('casting-conviction', cCfg.castingConvictionBonus ?? 5, false),
+        castingConvictionMaxPct: _getVal('casting-conviction-max', cCfg.castingConvictionMaxPct ?? 80, false),
+        castingRivalAggressionMin: _getVal('casting-aggr-min', cCfg.castingRivalAggressionMin ?? 0.6, false),
+        castingRivalAggressionMax: _getVal('casting-aggr-max', cCfg.castingRivalAggressionMax ?? 1.2, false),
         castingBasePriceByRarity: {
-          common:    parseFloat(document.getElementById('casting-price-common')?.value    || '50'),
-          uncommon:  parseFloat(document.getElementById('casting-price-uncommon')?.value  || '120'),
-          rare:      parseFloat(document.getElementById('casting-price-rare')?.value      || '300'),
-          epic:      parseFloat(document.getElementById('casting-price-epic')?.value      || '700'),
-          legendary: parseFloat(document.getElementById('casting-price-legendary')?.value || '1500'),
-          mythic:    parseFloat(document.getElementById('casting-price-mythic')?.value    || '3500'),
+          common:    _getVal('casting-price-common',    cCfg.castingBasePriceByRarity?.common    ?? 50,   false),
+          uncommon:  _getVal('casting-price-uncommon',  cCfg.castingBasePriceByRarity?.uncommon  ?? 120,  false),
+          rare:      _getVal('casting-price-rare',      cCfg.castingBasePriceByRarity?.rare      ?? 300,  false),
+          epic:      _getVal('casting-price-epic',      cCfg.castingBasePriceByRarity?.epic      ?? 700,  false),
+          legendary: _getVal('casting-price-legendary', cCfg.castingBasePriceByRarity?.legendary ?? 1500, false),
+          mythic:    _getVal('casting-price-mythic',    cCfg.castingBasePriceByRarity?.mythic    ?? 3500, false),
         },
-        recordMaxTurns:          parseInt(document.getElementById('record-max-turns')?.value || '15'),
-        recordEnemyCount:        parseInt(document.getElementById('record-enemy-count')?.value || '3'),
-        recordKillBonus:         parseInt(document.getElementById('record-kill-bonus')?.value || '100'),
-        recordTier1Step:         parseInt(document.getElementById('record-tier1-step')?.value || '1000'),
-        recordTier1Cap:          parseInt(document.getElementById('record-tier1-cap')?.value || '20000'),
-        recordTier2Step:         parseInt(document.getElementById('record-tier2-step')?.value || '2000'),
-        recordTier2Cap:          parseInt(document.getElementById('record-tier2-cap')?.value || '40000'),
-        recordTier3Step:         parseInt(document.getElementById('record-tier3-step')?.value || '5000'),
-        recordTotemMaxScore:     parseInt(document.getElementById('record-totem-max')?.value || '100000'),
-        recordGoldPerTier:       parseInt(document.getElementById('record-gold-per-tier')?.value || '50'),
-        recordCrystalsPerTier:   parseInt(document.getElementById('record-crystals-per-tier')?.value || '2'),
-        recordRewardGrowth:      parseFloat(document.getElementById('record-reward-growth')?.value || '1'),
-        playerDmgBonus:          parseFloat(document.getElementById('combat-player-bonus')?.value || '1.15'),
-        enemyDmgPenalty:         parseFloat(document.getElementById('combat-enemy-penalty')?.value || '0.80'),
-        enemyStatRatio:          parseFloat(document.getElementById('combat-enemy-stat-ratio')?.value || '0.85'),
-        adaptiveScalingFactor:   Math.max(0, Math.min(1, parseFloat(document.getElementById('combat-adaptive-scaling')?.value ?? '0.6'))),
-        evolvedFormWeightFactor: parseFloat(document.getElementById('combat-evolved-factor')?.value || '0.5'),
+        recordMaxTurns:          _getVal('record-max-turns', cCfg.recordMaxTurns ?? 15, true),
+        recordEnemyCount:        _getVal('record-enemy-count', cCfg.recordEnemyCount ?? 3, true),
+        recordKillBonus:         _getVal('record-kill-bonus', cCfg.recordKillBonus ?? 100, true),
+        recordTier1Step:         _getVal('record-tier1-step', cCfg.recordTier1Step ?? 1000, true),
+        recordTier1Cap:          _getVal('record-tier1-cap', cCfg.recordTier1Cap ?? 20000, true),
+        recordTier2Step:         _getVal('record-tier2-step', cCfg.recordTier2Step ?? 2000, true),
+        recordTier2Cap:          _getVal('record-tier2-cap', cCfg.recordTier2Cap ?? 40000, true),
+        recordTier3Step:         _getVal('record-tier3-step', cCfg.recordTier3Step ?? 5000, true),
+        recordTotemMaxScore:     _getVal('record-totem-max', cCfg.recordTotemMaxScore ?? 100000, true),
+        recordGoldPerTier:       _getVal('record-gold-per-tier', cCfg.recordGoldPerTier ?? 50, true),
+        recordCrystalsPerTier:   _getVal('record-crystals-per-tier', cCfg.recordCrystalsPerTier ?? 2, true),
+        recordRewardGrowth:      _getVal('record-reward-growth', cCfg.recordRewardGrowth ?? 1, false),
+        playerDmgBonus:          _getVal('combat-player-bonus', cCfg.playerDmgBonus ?? 1.15, false),
+        enemyDmgPenalty:         _getVal('combat-enemy-penalty', cCfg.enemyDmgPenalty ?? 0.80, false),
+        enemyStatRatio:          _getVal('combat-enemy-stat-ratio', cCfg.enemyStatRatio ?? 0.85, false),
+        adaptiveScalingFactor:   Math.max(0, Math.min(1, _getVal('combat-adaptive-scaling', cCfg.adaptiveScalingFactor ?? 0.6, false))),
+        evolvedFormWeightFactor: _getVal('combat-evolved-factor', cCfg.evolvedFormWeightFactor ?? 0.5, false),
         story: {
-          ...(state.config.combat?.story || {}),
-          subLevelsPerWorld: parseInt(document.getElementById('story-sublevels')?.value || '25'),
-          bossSubLevel:      parseInt(document.getElementById('story-boss')?.value || '25'),
+          ...sCfg,
+          subLevelsPerWorld: _getVal('story-sublevels', sCfg.subLevelsPerWorld ?? 25, true),
+          bossSubLevel:      _getVal('story-boss', sCfg.bossSubLevel ?? 25, true),
           eliteSubLevels,
-          eliteStatBoost:    parseInt(document.getElementById('story-elite-boost')?.value || '10') / 100,
-          bossStatBoost:     parseInt(document.getElementById('story-boss-boost')?.value || '25') / 100,
-          worldStatBoost:    parseInt(document.getElementById('story-world-boost')?.value || '10') / 100,
-          rewardEliteGold:      parseInt(document.getElementById('story-reward-elite')?.value || '100'),
-          rewardBossDiamonds:   parseInt(document.getElementById('story-reward-boss')?.value  || '100'),
+          eliteStatBoost: document.getElementById('story-elite-boost')
+            ? _getVal('story-elite-boost', (sCfg.eliteStatBoost ?? 0.1) * 100, true) / 100 : (sCfg.eliteStatBoost ?? 0.1),
+          bossStatBoost: document.getElementById('story-boss-boost')
+            ? _getVal('story-boss-boost', (sCfg.bossStatBoost ?? 0.25) * 100, true) / 100 : (sCfg.bossStatBoost ?? 0.25),
+          worldStatBoost: document.getElementById('story-world-boost')
+            ? _getVal('story-world-boost', (sCfg.worldStatBoost ?? 0.1) * 100, true) / 100 : (sCfg.worldStatBoost ?? 0.1),
+          rewardEliteGold:      _getVal('story-reward-elite', sCfg.rewardEliteGold ?? 100, true),
+          rewardBossDiamonds:   _getVal('story-reward-boss', sCfg.rewardBossDiamonds ?? 100, true),
         },
       },
       level: {
@@ -6820,21 +6878,22 @@ const CWAdminPanel = (() => {
         xpBase,
         xpExponent: xpExpo,
         statGrowthPerLevel: {
-          hp:  parseInt(document.getElementById('level-grow-hp')?.value  || '5')  / 100,
-          atk: parseInt(document.getElementById('level-grow-atk')?.value || '4')  / 100,
-          def: parseInt(document.getElementById('level-grow-def')?.value || '4')  / 100,
-          spd: parseInt(document.getElementById('level-grow-spd')?.value || '3')  / 100,
+          hp:  document.getElementById('level-grow-hp')  ? _getVal('level-grow-hp',  (lCfg.statGrowthPerLevel?.hp  ?? 0.05) * 100, true) / 100 : (lCfg.statGrowthPerLevel?.hp  ?? 0.05),
+          atk: document.getElementById('level-grow-atk') ? _getVal('level-grow-atk', (lCfg.statGrowthPerLevel?.atk ?? 0.04) * 100, true) / 100 : (lCfg.statGrowthPerLevel?.atk ?? 0.04),
+          def: document.getElementById('level-grow-def') ? _getVal('level-grow-def', (lCfg.statGrowthPerLevel?.def ?? 0.04) * 100, true) / 100 : (lCfg.statGrowthPerLevel?.def ?? 0.04),
+          spd: document.getElementById('level-grow-spd') ? _getVal('level-grow-spd', (lCfg.statGrowthPerLevel?.spd ?? 0.03) * 100, true) / 100 : (lCfg.statGrowthPerLevel?.spd ?? 0.03),
         },
       },
     };
-    // Bonus joueur
+    // Bonus joueur — préserve les valeurs actuelles si cet onglet n'est pas affiché
     const bonusKeys = ['battles','victories','kills','captures','pulls','evolutions','awakenings','goldEarned','scoreTotal','scoreTeam','tourneeProgress','galleryEntries'];
     const defaultBonus = CWGameDatabase.DEFAULT_CONFIG.playerBonus;
+    const currentBonus = state.config.playerBonus || {};
     const playerBonus = {};
     bonusKeys.forEach(k => {
       const el = document.getElementById(`pb-${k}`);
       playerBonus[k] = {
-        every: parseInt(el?.value) || defaultBonus[k].every,
+        every: el ? (parseInt(el.value) || defaultBonus[k].every) : (currentBonus[k]?.every ?? defaultBonus[k].every),
         label: defaultBonus[k].label,
       };
     });

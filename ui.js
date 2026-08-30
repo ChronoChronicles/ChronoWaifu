@@ -862,7 +862,7 @@ const CWGameUI = (() => {
         if (mode === 'storyMode') { showScreen('story-chapters'); return; }
         if (mode === 'story' || mode === 'byLine') { showScreen('combat'); return; }
         if (mode === 'record') { showScreen('record'); return; }
-        if (mode === 'defile') { showScreen('defile-planning'); return; }
+        if (mode === 'defile') { CWAudioSystem.playCombat(); showScreen('defile-planning'); return; }
         if (mode === 'casting') { showScreen('casting'); return; }
         showScreen('combat');
         setTimeout(() => _launchCombat({ mode: mode === 'fullRandom' ? 'fullRandom' : mode }), 100);
@@ -6753,12 +6753,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     // Phase 4b — bonus de Forme (Endurance restante), révélé alliée puis adversaire
     if (l.playerEnduranceBonusPct != null) {
-      _setDefilePhaseCaption(`Bonus Forme +${l.playerEnduranceBonusPct}% — ${l.playerFighter || '?'}`);
+      _setDefilePhaseCaption(`Bonus de Forme — ${l.playerFighter || '?'}`);
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileEndurance);
       await _setScorePop('dpb-score-player', l.playerAfterEndurance ?? l.playerScoreBeforeForme);
     }
     if (l.enemyEnduranceBonusPct != null) {
-      _setDefilePhaseCaption(`Bonus Forme +${l.enemyEnduranceBonusPct}% — ${l.enemyFighter || '?'}`);
+      _setDefilePhaseCaption(`Bonus de Forme — ${l.enemyFighter || '?'}`);
       CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileEndurance);
       await _setScorePop('dpb-score-enemy', l.enemyAfterEndurance ?? l.enemyScoreBeforeForme);
     }
@@ -6770,13 +6770,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     await _setScorePop('dpb-score-enemy', l.enemyScore);
     pSide.classList.toggle('winner', l.playerScore > l.enemyScore);
     eSide.classList.toggle('winner', l.enemyScore > l.playerScore);
-    CWAudioSystem.playSfx(l.playerScore > l.enemyScore ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose);
     await _sleep(400);
 
-    // Phase 6b — zoom sur la gagnante du tournage, mise en avant au centre de l'écran
+    // Phase 6b — zoom sur la gagnante du tournage ; le son victoire/défaite
+    // (le seul, pas un son en plus) se joue une fois le portrait au centre.
     if (l.playerScore !== l.enemyScore) {
       _setDefilePhaseCaption(`${l.playerScore > l.enemyScore ? l.playerFighter : l.enemyFighter} remporte le tournage !`);
-      await _spotlightDefileWinner(l.playerScore > l.enemyScore ? pSide : eSide);
+      const resultSfx = l.playerScore > l.enemyScore ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose;
+      await _spotlightDefileWinner(l.playerScore > l.enemyScore ? pSide : eSide, resultSfx);
     }
     await _sleep(600);
 
@@ -6835,7 +6836,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
    * l'agrandissant, puis la retire (l'original reste affiché en dessous,
    * déjà mis en valeur par le halo doré ".winner").
    */
-  function _spotlightDefileWinner(sideEl) {
+  function _spotlightDefileWinner(sideEl, resultSfxKey) {
     return new Promise(resolve => {
       const cardFrame = sideEl?.querySelector('.dpb-card-frame');
       const shell = document.querySelector('.app-shell');
@@ -6845,15 +6846,15 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
       const clone = cardFrame.cloneNode(true);
       clone.className = 'dpb-card-frame dpb-spotlight-clone';
-      clone.style.position = 'fixed';
-      clone.style.left = `${rect.left}px`;
-      clone.style.top = `${rect.top}px`;
+      clone.style.position = 'absolute'; // ancré DANS .app-shell — plus de calcul viewport fragile
+      clone.style.left = `${rect.left - shellRect.left}px`;
+      clone.style.top = `${rect.top - shellRect.top}px`;
       clone.style.width = `${rect.width}px`;
       clone.style.margin = '0';
-      // Le centre CIBLE est celui de l'interface (.app-shell), pas du viewport entier
-      clone.style.setProperty('--dpb-target-left', `${shellRect.left + shellRect.width / 2}px`);
-      clone.style.setProperty('--dpb-target-top', `${shellRect.top + shellRect.height / 2}px`);
-      document.body.appendChild(clone);
+      // Le centre CIBLE est le centre de .app-shell LUI-MÊME (coordonnées relatives, garanties justes)
+      clone.style.setProperty('--dpb-target-left', `${shellRect.width / 2}px`);
+      clone.style.setProperty('--dpb-target-top', `${shellRect.height / 2}px`);
+      shell.appendChild(clone);
 
       const arrivalDelay = 550; // durée de la transition CSS de rapprochement
       requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -6862,9 +6863,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
       setTimeout(async () => {
         // Le portrait est maintenant au centre — on attend 500ms de plus,
-        // PUIS on lance le son, PUIS on attend sa vraie fin avant de repartir.
+        // PUIS on joue LE son (celui transmis, pas un second en plus),
+        // PUIS on attend sa vraie fin avant de repartir.
         await _sleep(500);
-        await CWAudioSystem.playSfxAwait(CWAudioSystem.SFX_KEYS.defileRoundWin);
+        await CWAudioSystem.playSfxAwait(resultSfxKey);
         clone.classList.remove('active');
         setTimeout(() => { clone.remove(); resolve(); }, 300);
       }, arrivalDelay);
@@ -7207,7 +7209,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     const doneBtn = document.getElementById('btn-rewards-done');
     doneBtn.style.display = '';
-    doneBtn.addEventListener('click', () => _showCombatSelect());
+    doneBtn.addEventListener('click', () => {
+      CWAudioSystem.playGlobal();
+      _showCombatSelect();
+    });
   }
 
   /** Anime la jauge d'XP d'une personnage façon Pokémon (remplissage → niveau → reset → suite) */
