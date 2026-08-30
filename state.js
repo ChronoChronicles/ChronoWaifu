@@ -526,8 +526,15 @@ const CWGameState = (() => {
   /** Modifie les ressources du joueur (monnaie, énergie) */
   function modifyResources(changes) {
     const p = _state.player;
-    if (changes.crystals  !== undefined) p.currency.crystals  = Math.max(0, (p.currency.crystals  || 0) + changes.crystals);
-    if (changes.gold      !== undefined) p.currency.gold      = Math.max(0, (p.currency.gold      || 0) + changes.gold);
+    p.stats = p.stats || {};
+    if (changes.crystals  !== undefined) {
+      p.currency.crystals = Math.max(0, (p.currency.crystals || 0) + changes.crystals);
+      if (changes.crystals > 0) p.stats.totalCrystalsEarned = (p.stats.totalCrystalsEarned || 0) + changes.crystals;
+    }
+    if (changes.gold      !== undefined) {
+      p.currency.gold = Math.max(0, (p.currency.gold || 0) + changes.gold);
+      if (changes.gold > 0) p.stats.totalGoldEarned = (p.stats.totalGoldEarned || 0) + changes.gold;
+    }
     if (changes.energy    !== undefined) p.energy.current     = Math.max(0, Math.min(p.energy.max, p.energy.current + changes.energy));
     _notify('resourceChanged');
     _autoSave();
@@ -1121,21 +1128,16 @@ const CWGameState = (() => {
     const cfg    = _state.config?.playerBonus || CWGameDatabase.DEFAULT_CONFIG.playerBonus;
 
     const mapping = {
-      battles:    stats.totalBattles     || 0,
-      victories:  stats.totalVictories   || 0,
-      kills:      stats.totalKills       || 0,
       captures:   stats.totalCaptures    || 0,
-      pulls:      stats.totalPulls       || 0,
       evolutions: stats.totalEvolutions  || 0,
       awakenings: stats.totalAwakenings  || 0,
       goldEarned: stats.totalGoldEarned  || 0,
-      tourneeProgress: getTourneeProgress(),
+      reputationEarned: stats.totalReputationEarned || 0,
       galleryEntries:  Object.keys(_state.player.catalogue || {}).length,
     };
-    // Score Aura : ce ne sont PAS des compteurs stockés mais des valeurs
-    // recalculées en direct à partir de toute la collection (cf. plus bas).
+    // Score Aura : ce n'est PAS un compteur stocké mais une valeur recalculée
+    // en direct à partir de toute la collection.
     if (!excludeKeys.includes('scoreTotal')) mapping.scoreTotal = getPlayerAuraScoreTotal();
-    if (!excludeKeys.includes('scoreTeam'))  mapping.scoreTeam  = getPlayerAuraScoreTeam();
 
     let total = 0;
     const detail = [];
@@ -1146,6 +1148,22 @@ const CWGameState = (() => {
       total += points;
       detail.push({ key, label: rule.label, count, every: rule.every, points });
     });
+
+    // Bonus par NIVEAU joueur : +2 points de stat par niveau, à partir du
+    // niveau 2 (le niveau 1 n'en rapporte pas). Carte dédiée avec sa propre
+    // jauge de progression (XP restant avant le prochain niveau).
+    const perLevelBonus = _state.config?.playerBonus?.perLevelBonus ?? 2;
+    const level = _state.player.level || 1;
+    const levelPoints = Math.max(0, level - 1) * perLevelBonus;
+    total += levelPoints;
+    const xpForNext = CWGameDatabase.xpForPlayerLevel(level + 1, _state.config.playerLevel);
+    const xpCurrent = _state.player.experience || 0;
+    detail.push({
+      key: 'playerLevel', label: 'Niveau joueur', isLevel: true,
+      count: level, every: null, points: levelPoints,
+      xpCurrent, xpForNext, xpRemaining: Math.max(0, xpForNext - xpCurrent),
+    });
+
     return { bonus: total, detail };
   }
 
@@ -1158,6 +1176,31 @@ const CWGameState = (() => {
   let _auraCache = { version: -1, total: 0, team: 0 };
 
   /** Score Aura d'un personnage possédé (stats totales, hors bonus Aura lui-même) */
+  /**
+   * Bonus de stats INDIVIDUEL à un personnage, basé sur SES propres compteurs
+   * (Défilés gagnés, Tournages remportés, Popularité...). Réparti à parts
+   * égales sur les 3 stats jugées (Charisme/Prestance/Grâce) — pas l'Endurance.
+   */
+  function getCharacterStatBonus(inst) {
+    if (!inst) return { bonus: 0, detail: [] };
+    const cfg = _state.config?.characterBonus || CWGameDatabase.DEFAULT_CONFIG.characterBonus;
+    const mapping = {
+      popularityEarned:   inst.popularityEarned   || 0,
+      passagesWon:        inst.passagesWon        || 0,
+      defilesWon:         inst.defilesWon         || 0,
+    };
+    let total = 0;
+    const detail = [];
+    Object.entries(mapping).forEach(([key, count]) => {
+      const rule = cfg[key];
+      if (!rule || !rule.every) return;
+      const points = Math.floor(count / rule.every);
+      total += points;
+      detail.push({ key, label: rule.label, count, every: rule.every, points });
+    });
+    return { bonus: total, detail };
+  }
+
   /**
    * Stats finales d'un personnage (base + niveau + éveil + équipement + bonus
    * joueur) — logique partagée par le score Aura ET le mode Défilé.
@@ -1173,11 +1216,13 @@ const CWGameState = (() => {
       inst.equipment, _state.player.equipInventory, _state.equipment
     );
     const playerBonus = getPlayerStatBonus(['scoreTotal', 'scoreTeam']).bonus;
+    const charBonusTotal = getCharacterStatBonus(inst).bonus;
+    const charBonusPerStat = Math.round(charBonusTotal / 3); // réparti à parts égales sur les 3 stats jugées
     return {
       hp:  computed.hp  + eqBonus.hp  + playerBonus,
-      atk: computed.atk + eqBonus.atk + playerBonus,
-      def: computed.def + eqBonus.def + playerBonus,
-      spd: computed.spd + eqBonus.spd + playerBonus,
+      atk: computed.atk + eqBonus.atk + playerBonus + charBonusPerStat,
+      def: computed.def + eqBonus.def + playerBonus + charBonusPerStat,
+      spd: computed.spd + eqBonus.spd + playerBonus + charBonusPerStat,
     };
   }
 
@@ -1396,6 +1441,8 @@ const CWGameState = (() => {
     const cfg = _state.config.combat;
     const gain = Math.round(score * ((cfg.reputationPercentOfScore ?? 10) / 100));
     _state.player.reputation = (_state.player.reputation || 0) + gain;
+    _state.player.stats = _state.player.stats || {};
+    _state.player.stats.totalReputationEarned = (_state.player.stats.totalReputationEarned || 0) + gain;
 
     let castingOpened = false;
     if (!_state.player.currentCasting) {
@@ -2299,7 +2346,7 @@ const CWGameState = (() => {
     refreshRotatingShop, getRotatingShopListings,
     checkEvent, getActiveEvent, setEventConfig, setNextEventConfig, setNextEventTag, setCurrentEventTag,
     trackEventQuestProgress, claimEventQuest, planifyNextEvent, cancelNextEvent, getPlayerStatBonus,
-    getCharacterAuraScore, getCharacterFinalStats, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
+    getCharacterAuraScore, getCharacterFinalStats, getCharacterStatBonus, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
     getAffinityPercent, registerAffinityGain, getAllAffinityProgress,

@@ -226,6 +226,7 @@ const CWAudioSystem = (() => {
 
     const sfxEl = new Audio(url);
     sfxEl.muted = _muted;
+    sfxEl.volume = _baseVolume;
     const cleanup = () => { if (shouldDuck) _unduck(); };
     sfxEl.addEventListener('ended', cleanup);
     sfxEl.play().catch(cleanup); // lecture bloquée : on libère/restaure immédiatement
@@ -250,6 +251,7 @@ const CWAudioSystem = (() => {
 
       const sfxEl = new Audio(url);
       sfxEl.muted = _muted;
+      sfxEl.volume = _baseVolume;
       const finish = () => { if (shouldDuck) _unduck(); resolve(); };
       sfxEl.addEventListener('ended', finish);
       sfxEl.addEventListener('error', finish);

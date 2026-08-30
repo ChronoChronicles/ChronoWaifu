@@ -913,7 +913,12 @@ const CWGameUI = (() => {
     if (el) el.classList.add('active');
     _applyScreenBackground(screenId);
 
-    CWAudioSystem.playGlobal();
+    // Les écrans du Défilé gèrent eux-mêmes la musique de combat — ne jamais
+    // la couper ici en relançant la musique globale par défaut.
+    const DEFILE_SCREENS = ['defile-planning', 'defile-playback', 'defile-result', 'defile-rewards', 'casting'];
+    if (!DEFILE_SCREENS.includes(screenId)) {
+      CWAudioSystem.playGlobal();
+    }
 
     const renderers = {
       collection:       renderCollection,
@@ -1281,8 +1286,8 @@ const CWGameUI = (() => {
     const bonusByKey = {};
     (bonusInfo.detail || []).forEach(d => { bonusByKey[d.key] = d; });
 
-    // Construit la barre de progression HTML vers le prochain palier de bonus de stat
-    // (uniquement pour les compteurs qui offrent +1 stat bonus, cf. config playerBonus)
+    // Construit la barre de progression HTML vers le prochain palier de bonus de
+    // stat, ET le nombre de points déjà gagnés grâce à CET item précis.
     const _progressBarHtml = (bonusKey) => {
       const d = bonusByKey[bonusKey];
       if (!d || !d.every) return '';
@@ -1292,35 +1297,37 @@ const CWGameUI = (() => {
       return `
         <div class="pm-stat-progress">
           <div class="pm-stat-progress-bar"><div class="pm-stat-progress-fill" style="width:${pct}%"></div></div>
-          <div class="pm-stat-progress-label">${remaining} avant +1 aux stats</div>
+          <div class="pm-stat-progress-label">${remaining} avant +1 aux stats — <strong>+${d.points}</strong> gagnés au total</div>
+        </div>`;
+    };
+
+    // Carte dédiée au bonus par niveau joueur (jauge = XP vers le prochain niveau)
+    const _levelBonusHtml = () => {
+      const d = bonusByKey['playerLevel'];
+      if (!d) return '';
+      const pct = d.xpForNext ? Math.round((d.xpCurrent / d.xpForNext) * 100) : 0;
+      return `
+        <div class="pm-stat-progress">
+          <div class="pm-stat-progress-bar"><div class="pm-stat-progress-fill" style="width:${pct}%"></div></div>
+          <div class="pm-stat-progress-label">${d.xpRemaining.toLocaleString('fr-FR')} XP avant le niveau ${d.count + 1} — <strong>+${d.points}</strong> gagnés au total</div>
         </div>`;
     };
 
     const statCards = [
       // Carte bonus en pleine largeur en tête
       { label: '✨ Bonus stats (toutes)', value: `+${bonusInfo.bonus}`, highlight: true, full: true },
-      { label: '⚔️ Combats',           value: (stats.totalBattles||0).toLocaleString('fr-FR'),    highlight: false, progress: _progressBarHtml('battles') },
-      { label: '🏆 Victoires',          value: (stats.totalVictories||0).toLocaleString('fr-FR'),  highlight: true,  progress: _progressBarHtml('victories') },
-      { label: '💀 Défaites',           value: (stats.totalDefeats||0).toLocaleString('fr-FR'),    highlight: false },
-      { label: '📈 Taux de victoire',   value: `${winRate}%`,                                       highlight: winRate>=60 },
-      { label: '⚡ Série actuelle',     value: (stats.currentWinStreak||0).toLocaleString('fr-FR'), highlight: false },
-      { label: '🔥 Meilleure série',    value: (stats.longestWinStreak||0).toLocaleString('fr-FR'), highlight: true  },
-      { label: '💥 Ennemis vaincus',   value: (stats.totalKills||0).toLocaleString('fr-FR'),       highlight: false, progress: _progressBarHtml('kills') },
-      { label: '🎭 Captures',           value: (stats.totalCaptures||0).toLocaleString('fr-FR'),    highlight: false, progress: _progressBarHtml('captures') },
-      { label: '💎 Invocations',        value: (stats.totalPulls||0).toLocaleString('fr-FR'),       highlight: false, progress: _progressBarHtml('pulls') },
-      { label: '✨ Évolutions',         value: (stats.totalEvolutions||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('evolutions') },
-      { label: '⭐ Éveils',             value: (stats.totalAwakenings||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('awakenings') },
-      { label: '🌸 Galerie',             value: `${galleryEntries} / ${catalogueTotal}`,             highlight: galleryEntries===catalogueTotal, progress: _progressBarHtml('galleryEntries') },
-      { label: '💵 $ gagnés',           value: (stats.totalGoldEarned||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('goldEarned') },
-      { label: '💎 Diamants gagnés',    value: (stats.totalCrystalsEarned||0).toLocaleString('fr-FR'), highlight: false },
-      { label: '💫 Aura totale',        value: (CWGameState.getPlayerAuraScoreTotal?.()||0).toLocaleString('fr-FR'), highlight: true, progress: _progressBarHtml('scoreTotal') },
-      { label: '👑 Aura d\'équipe',     value: (CWGameState.getPlayerAuraScoreTeam?.()||0).toLocaleString('fr-FR'),  highlight: true, progress: _progressBarHtml('scoreTeam') },
-      { label: '🌍 Tournée',            value: `Monde ${tourneeWorld} — ${tourneeSubLevel}/${tourneePerWorld}`, highlight: true, progress: _progressBarHtml('tourneeProgress') },
-      { label: '📊 Performance',        value: `${(player.recordBest||0).toLocaleString('fr-FR')} pts`, highlight: true },
-      { label: '💃 Défilés',            value: (stats.totalDefiles||0).toLocaleString('fr-FR'), highlight: false },
-      { label: '🏆 Défilés Remportés',  value: (stats.totalDefilesWon||0).toLocaleString('fr-FR'), highlight: false },
-      { label: '🎬 Passages Remportés', value: (stats.totalPassagesWon||0).toLocaleString('fr-FR'), highlight: false },
-      { label: '🌟 Popularité',         value: (stats.totalPopularity||0).toLocaleString('fr-FR'), highlight: true },
+      { label: '👑 Niveau joueur',        value: `Niv. ${player.level || 1}`, highlight: true, progress: _levelBonusHtml() },
+      { label: '🎭 Recrutées',            value: (stats.totalCaptures||0).toLocaleString('fr-FR'),    highlight: false, progress: _progressBarHtml('captures') },
+      { label: '✨ Évolutions',           value: (stats.totalEvolutions||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('evolutions') },
+      { label: '⭐ Sublimation',          value: (stats.totalAwakenings||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('awakenings') },
+      { label: '🌸 Galerie',              value: `${galleryEntries} / ${catalogueTotal}`,             highlight: galleryEntries===catalogueTotal, progress: _progressBarHtml('galleryEntries') },
+      { label: '💵 $ gagnés',             value: (stats.totalGoldEarned||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('goldEarned') },
+      { label: '🎬 Réputation gagnée',    value: (stats.totalReputationEarned||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('reputationEarned') },
+      { label: '💫 Aura totale',          value: (CWGameState.getPlayerAuraScoreTotal?.()||0).toLocaleString('fr-FR'), highlight: true, progress: _progressBarHtml('scoreTotal') },
+      { label: '💃 Défilés',              value: (stats.totalDefiles||0).toLocaleString('fr-FR'), highlight: false },
+      { label: '🏆 Défilés Remportés',    value: (stats.totalDefilesWon||0).toLocaleString('fr-FR'), highlight: false },
+      { label: '🎬 Tournages Remportés',  value: (stats.totalPassagesWon||0).toLocaleString('fr-FR'), highlight: false },
+      { label: '🌟 Popularité',           value: (stats.totalPopularity||0).toLocaleString('fr-FR'), highlight: true },
     ];
     const statsEl = document.getElementById('pm-stats-grid');
     if (statsEl) statsEl.innerHTML = statCards.map(s => `
@@ -1984,18 +1991,35 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                     <span>📅 Obtenue le</span>
                     <strong>${inst.obtainedAt ? new Date(inst.obtainedAt).toLocaleDateString('fr-FR', { day:'2-digit', month:'long', year:'numeric' }) : '—'}</strong>
                   </div>
-                  <div class="detail-history-row">
-                    <span>🏆 Défilés gagnés</span>
-                    <strong>${(inst.defilesWon || 0).toLocaleString('fr-FR')}</strong>
-                  </div>
-                  <div class="detail-history-row">
-                    <span>🎬 Tournages Remportés</span>
-                    <strong>${(inst.passagesWon || 0).toLocaleString('fr-FR')}</strong>
-                  </div>
-                  <div class="detail-history-row">
-                    <span>🌟 Popularité</span>
-                    <strong>${(inst.popularityEarned || 0).toLocaleString('fr-FR')}</strong>
-                  </div>
+                  ${(() => {
+                    const charBonus = CWGameState.getCharacterStatBonus(inst);
+                    const byKey = {};
+                    charBonus.detail.forEach(d => { byKey[d.key] = d; });
+                    const gaugeRow = (icon, label, count, key) => {
+                      const d = byKey[key];
+                      const gauge = d ? `
+                        <div class="pm-stat-progress">
+                          <div class="pm-stat-progress-bar"><div class="pm-stat-progress-fill" style="width:${Math.round(((count % d.every) / d.every) * 100)}%"></div></div>
+                          <div class="pm-stat-progress-label">${d.every - (count % d.every)} avant +1 (réparti sur Charisme/Prestance/Grâce) — <strong>+${d.points}</strong> gagnés</div>
+                        </div>` : '';
+                      return `
+                        <div class="detail-history-row" style="flex-direction:column;align-items:stretch;gap:4px;">
+                          <div style="display:flex;justify-content:space-between;">
+                            <span>${icon} ${label}</span>
+                            <strong>${count.toLocaleString('fr-FR')}</strong>
+                          </div>
+                          ${gauge}
+                        </div>`;
+                    };
+                    return `
+                      ${gaugeRow('🏆', 'Défilés gagnés', inst.defilesWon || 0, 'defilesWon')}
+                      ${gaugeRow('🎬', 'Tournages Remportés', inst.passagesWon || 0, 'passagesWon')}
+                      ${gaugeRow('🌟', 'Popularité', inst.popularityEarned || 0, 'popularityEarned')}
+                      <div class="detail-history-row" style="border-top:1px solid rgba(255,255,255,.1);margin-top:4px;padding-top:8px;">
+                        <span>✨ Bonus stats individuel (Charisme/Prestance/Grâce)</span>
+                        <strong style="color:#a78bfa;">+${Math.round(charBonus.bonus/3)} chacune</strong>
+                      </div>`;
+                  })()}
                 </div>
               </div>
             </div>

@@ -4834,20 +4834,25 @@ const CWAdminPanel = (() => {
           Chaque palier atteint ajoute <b style="color:#a78bfa">+1 à toutes les stats</b> de tous les personnages alliés.
           Modifiez le seuil "tous les N" pour chaque compteur.
         </p>
+        <div class="admin-field" style="margin-bottom:14px;">
+          <label>👑 Bonus par niveau joueur
+            <span style="font-size:.68rem;color:#a78bfa;margin-left:4px">(Niv. ${state.player.level || 1} → +${Math.max(0, (state.player.level||1)-1) * (cfg.playerBonus?.perLevelBonus ?? 2)})</span>
+          </label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:.75rem;color:#888">Chaque niveau (dès le niveau 2) donne +</span>
+            <input type="number" id="pb-perLevelBonus" value="${cfg.playerBonus?.perLevelBonus ?? 2}" min="0" style="width:60px">
+            <span style="font-size:.75rem;color:#888">stat(s)</span>
+          </div>
+        </div>
         <div class="admin-grid">
-          ${Object.entries(cfg.playerBonus || CWGameDatabase.DEFAULT_CONFIG.playerBonus).map(([key, rule]) => {
+          ${Object.entries(cfg.playerBonus || CWGameDatabase.DEFAULT_CONFIG.playerBonus).filter(([key]) => key !== 'perLevelBonus').map(([key, rule]) => {
             const statVal = {
-              battles: state.player.stats?.totalBattles || 0,
-              victories: state.player.stats?.totalVictories || 0,
-              kills: state.player.stats?.totalKills || 0,
               captures: state.player.stats?.totalCaptures || 0,
-              pulls: state.player.stats?.totalPulls || 0,
               evolutions: state.player.stats?.totalEvolutions || 0,
               awakenings: state.player.stats?.totalAwakenings || 0,
               goldEarned: state.player.stats?.totalGoldEarned || 0,
+              reputationEarned: state.player.stats?.totalReputationEarned || 0,
               scoreTotal: CWGameState.getPlayerAuraScoreTotal?.() || 0,
-              scoreTeam:  CWGameState.getPlayerAuraScoreTeam?.()  || 0,
-              tourneeProgress: CWGameState.getTourneeProgress?.() || 0,
               galleryEntries:  Object.keys(state.player.catalogue || {}).length,
             }[key] || 0;
             const pts = Math.floor(statVal / rule.every);
@@ -4862,6 +4867,26 @@ const CWAdminPanel = (() => {
               </div>
             </div>`;
           }).join('')}
+        </div>
+      </div>
+
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">💃 Bonus de stats individuel (par personnage)</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px">
+          Basé sur les compteurs propres à CHAQUE personnage (pas ceux du joueur).
+          Le bonus est réparti à parts égales sur ses 3 stats jugées (Charisme/Prestance/Grâce).
+        </p>
+        <div class="admin-grid">
+          ${Object.entries(cfg.characterBonus || CWGameDatabase.DEFAULT_CONFIG.characterBonus).map(([key, rule]) => `
+            <div class="admin-field">
+              <label>${rule.label}</label>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-size:.75rem;color:#888">Tous les</span>
+                <input type="number" id="cb-${key}" value="${rule.every}" min="1" style="width:80px">
+                <span style="font-size:.75rem;color:#888">= +1 (réparti sur les 3)</span>
+              </div>
+            </div>`).join('')}
         </div>
       </div>
 
@@ -6886,7 +6911,7 @@ const CWAdminPanel = (() => {
       },
     };
     // Bonus joueur — préserve les valeurs actuelles si cet onglet n'est pas affiché
-    const bonusKeys = ['battles','victories','kills','captures','pulls','evolutions','awakenings','goldEarned','scoreTotal','scoreTeam','tourneeProgress','galleryEntries'];
+    const bonusKeys = ['captures','evolutions','awakenings','goldEarned','reputationEarned','scoreTotal','galleryEntries'];
     const defaultBonus = CWGameDatabase.DEFAULT_CONFIG.playerBonus;
     const currentBonus = state.config.playerBonus || {};
     const playerBonus = {};
@@ -6897,8 +6922,22 @@ const CWAdminPanel = (() => {
         label: defaultBonus[k].label,
       };
     });
+    const perLevelEl = document.getElementById('pb-perLevelBonus');
+    playerBonus.perLevelBonus = perLevelEl ? (parseInt(perLevelEl.value) || defaultBonus.perLevelBonus) : (currentBonus.perLevelBonus ?? defaultBonus.perLevelBonus);
 
-    CWGameState.updateConfig({ ...newCfg, playerBonus });
+    // Bonus individuel par personnage — même principe de préservation
+    const defaultCharBonus = CWGameDatabase.DEFAULT_CONFIG.characterBonus;
+    const currentCharBonus = state.config.characterBonus || {};
+    const characterBonus = {};
+    Object.keys(defaultCharBonus).forEach(k => {
+      const el = document.getElementById(`cb-${k}`);
+      characterBonus[k] = {
+        every: el ? (parseInt(el.value) || defaultCharBonus[k].every) : (currentCharBonus[k]?.every ?? defaultCharBonus[k].every),
+        label: defaultCharBonus[k].label,
+      };
+    });
+
+    CWGameState.updateConfig({ ...newCfg, playerBonus, characterBonus });
     _notify('✅ Tous les paramètres ont été sauvegardés.');
   }
 

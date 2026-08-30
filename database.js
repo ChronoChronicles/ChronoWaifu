@@ -299,21 +299,25 @@ const CWGameDatabase = (() => {
     // ─── BONUS JOUEUR ─────────────────────────────────────────────────────────
     // +1 à toutes les stats de tous les personnages par palier atteint.
     playerBonus: {
-      battles:    { every: 100,   label: 'Combats joués'      },
-      victories:  { every: 100,   label: 'Victoires'          },
-      kills:      { every: 1000,  label: 'Ennemis vaincus'    },
-      captures:   { every: 100,   label: 'Captures'           },
-      pulls:      { every: 200,   label: 'Invocations'        },
+      captures:   { every: 100,   label: 'Recrutées'          },
       evolutions: { every: 50,    label: 'Évolutions'         },
-      awakenings: { every: 100,   label: 'Éveils'             },
-      goldEarned: { every: 10000, label: 'Dollars gagnés en combat' },
-      // ── Score Aura (calculés en direct, pas des compteurs cumulés) ──────────
-      // Seuils à ajuster librement depuis l'admin selon l'échelle réelle des
-      // scores obtenus en jeu.
+      awakenings: { every: 100,   label: 'Sublimation'        },
+      goldEarned: { every: 10000, label: 'Dollars gagnés' },
+      reputationEarned: { every: 5000, label: 'Réputation gagnée' },
+      // ── Score Aura (calculé en direct, pas un compteur cumulé) ──────────────
       scoreTotal: { every: 50000, label: 'Aura totale (collection)' },
-      scoreTeam:  { every: 10000, label: "Aura d'équipe (3 meilleurs scores)" },
-      tourneeProgress: { every: 25,  label: 'Sous-niveaux Tournée complétés' },
       galleryEntries:  { every: 10,  label: 'Entrées débloquées (Galerie)' },
+      // ── Bonus par niveau joueur (pas un compteur — géré à part) ─────────────
+      perLevelBonus: 2, // +2 points de stat par niveau, dès le niveau 2
+    },
+
+    // ─── BONUS INDIVIDUEL PAR PERSONNAGE ─────────────────────────────────────
+    // +1 réparti sur les 3 stats jugées (Charisme/Prestance/Grâce) de CETTE
+    // personnage précise, selon SES propres compteurs de Défilé.
+    characterBonus: {
+      popularityEarned:   { every: 20,   label: 'Popularité individuelle' },
+      passagesWon:        { every: 20,   label: 'Tournages remportés' },
+      defilesWon:         { every: 10,   label: 'Défilés remportés' },
     },
   };
 
