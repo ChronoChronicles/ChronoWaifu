@@ -44,6 +44,9 @@ const CWAdminPanel = (() => {
     // ── Nouveaux modes (Défilé / Casting / Performance) ─────────────────────────
     { id: 'new-passives', label: '⭐ Nouveaux Passifs', group: 'Nouveaux Modes' },
     { id: 'new-modes',    label: '🎭 Réglages des Modes', group: 'Nouveaux Modes' },
+    { id: 'player-bonus',    label: '🌟 Paliers Stats Joueur',      group: 'Nouveaux Modes' },
+    { id: 'character-bonus', label: '💃 Paliers Stats Personnages', group: 'Nouveaux Modes' },
+    { id: 'affection',       label: '💞 Affection',                 group: 'Nouveaux Modes' },
     // ── Système ──────────────────────────────────────────────────────────────
     { id: 'player',     label: '🎮 Joueur',      group: 'Système'    },
     { id: 'resources',  label: '💎 Ressources',  group: 'Système'    },
@@ -676,6 +679,9 @@ const CWAdminPanel = (() => {
           case 'combat':     content.innerHTML = _renderCombatTab();     break;
           case 'new-passives': content.innerHTML = _renderNewPassivesTab(); break;
           case 'new-modes':     content.innerHTML = _renderNewModesTab();     break;
+          case 'player-bonus':    content.innerHTML = _renderPlayerBonusTab();    break;
+          case 'character-bonus': content.innerHTML = _renderCharacterBonusTab(); break;
+          case 'affection':       content.innerHTML = _renderAffectionTab();      break;
           case 'items':      content.innerHTML = _renderItemsTab();      break;
           case 'shop':       content.innerHTML = _renderShopTab();       break;
           case 'daily':      content.innerHTML = _renderDailyTab();      _rebuildCycleDayRows();      break;
@@ -4827,7 +4833,19 @@ const CWAdminPanel = (() => {
         </div>
       </div>
 
-      <!-- ── Bonus Joueur ── -->
+      <div class="admin-actions">
+        <button class="admin-btn admin-btn-success" onclick="CWAdminPanel._saveCombatConfig()">💾 Sauver tous les paramètres</button>
+      </div>
+    `;
+  }
+
+  // ─── ONGLET PALIERS STATS JOUEUR ───────────────────────────────────────────────
+
+  function _renderPlayerBonusTab() {
+    const state = CWGameState.get();
+    const cfg   = state.config;
+
+    return `
       <div class="admin-section">
         <div class="admin-section-title">🌟 Bonus de stats joueur</div>
         <p style="font-size:.78rem;color:#888;margin-bottom:12px">
@@ -4870,12 +4888,24 @@ const CWAdminPanel = (() => {
         </div>
       </div>
 
-      <hr class="admin-sep" />
+      <div class="admin-actions">
+        <button class="admin-btn admin-btn-success" onclick="CWAdminPanel._saveCombatConfig()">💾 Sauver tous les paramètres</button>
+      </div>
+    `;
+  }
+
+  // ─── ONGLET PALIERS STATS PERSONNAGES ──────────────────────────────────────────
+
+  function _renderCharacterBonusTab() {
+    const state = CWGameState.get();
+    const cfg   = state.config;
+
+    return `
       <div class="admin-section">
         <div class="admin-section-title">💃 Bonus de stats individuel (par personnage)</div>
         <p style="font-size:.78rem;color:#888;margin-bottom:12px">
           Basé sur les compteurs propres à CHAQUE personnage (pas ceux du joueur).
-          Le bonus est réparti à parts égales sur ses 3 stats jugées (Charisme/Prestance/Grâce).
+          Le bonus s'ajoute intégralement aux 4 stats (Endurance, Charisme, Prestance, Grâce) — pas de répartition.
         </p>
         <div class="admin-grid">
           ${Object.entries(cfg.characterBonus || CWGameDatabase.DEFAULT_CONFIG.characterBonus).map(([key, rule]) => `
@@ -4884,7 +4914,7 @@ const CWAdminPanel = (() => {
               <div style="display:flex;align-items:center;gap:6px">
                 <span style="font-size:.75rem;color:#888">Tous les</span>
                 <input type="number" id="cb-${key}" value="${rule.every}" min="1" style="width:80px">
-                <span style="font-size:.75rem;color:#888">= +1 (réparti sur les 3)</span>
+                <span style="font-size:.75rem;color:#888">= +1 aux 4 stats</span>
               </div>
             </div>`).join('')}
         </div>
@@ -4895,6 +4925,86 @@ const CWAdminPanel = (() => {
       </div>
     `;
   }
+
+  // ─── ONGLET AFFECTION ───────────────────────────────────────────────────────────
+
+  function _renderAffectionTab() {
+    const state = CWGameState.get();
+    const cfg   = state.config;
+    const aCfg  = cfg.affection || CWGameDatabase.DEFAULT_CONFIG.affection;
+
+    return `
+      <div class="admin-section">
+        <div class="admin-section-title">💞 Paliers d'Affection</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Chaque palier franchi ajoute son bonus aux 3 stats jugées (Charisme/Prestance/Grâce)
+          de CETTE personnage précise. Le seuil est CUMULÉ (le total d'Affection nécessaire
+          depuis 0, pas un delta depuis le palier précédent).
+        </p>
+        <div id="affection-tiers-list">
+          ${aCfg.tiers.map((t, i) => `
+            <div class="admin-field" data-tier-row="${i}" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <span style="font-size:.76rem;color:#f9a8d4;width:70px;flex-shrink:0;">Niveau ${t.level}</span>
+              <span style="font-size:.72rem;color:#888;">Seuil</span>
+              <input type="number" id="aff-tier-${i}-threshold" value="${t.threshold}" min="1" style="width:90px">
+              <span style="font-size:.72rem;color:#888;">Bonus</span>
+              <input type="number" id="aff-tier-${i}-bonus" value="${t.bonus}" min="0" style="width:60px">
+              <button type="button" class="admin-btn admin-btn-danger admin-btn-sm" onclick="CWAdminPanel._removeAffectionTierRow(${i})">🗑️</button>
+            </div>
+          `).join('')}
+        </div>
+        <button type="button" class="admin-btn admin-btn-primary" onclick="CWAdminPanel._addAffectionTierRow()">➕ Ajouter un palier</button>
+      </div>
+
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">🎁 Cadeaux (accélèrent l'Affection)</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Achetables en $ depuis la fiche de chaque personnage, pour lui offrir un paquet
+          d'Affection d'un coup.
+        </p>
+        ${aCfg.gifts.map((g, i) => `
+          <div class="admin-field" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <input type="text" id="aff-gift-${i}-label" value="${g.label}" style="width:130px;" placeholder="Nom" />
+            <span style="font-size:.72rem;color:#888;">Coût</span>
+            <input type="number" id="aff-gift-${i}-cost" value="${g.cost}" min="0" style="width:90px">
+            <span style="font-size:.72rem;color:#888;">$ → +</span>
+            <input type="number" id="aff-gift-${i}-affection" value="${g.affectionGiven}" min="0" style="width:80px">
+            <span style="font-size:.72rem;color:#888;">Affection</span>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="admin-actions">
+        <button class="admin-btn admin-btn-success" onclick="CWAdminPanel._saveCombatConfig()">💾 Sauver tous les paramètres</button>
+      </div>
+    `;
+  }
+
+  /** Ajoute une ligne de palier d'Affection vide (valeurs de repli sensées) dans l'écran, sans sauvegarder */
+  function _addAffectionTierRow() {
+    const state = CWGameState.get();
+    const aCfg = state.config.affection || CWGameDatabase.DEFAULT_CONFIG.affection;
+    const lastTier = aCfg.tiers[aCfg.tiers.length - 1];
+    aCfg.tiers.push({
+      level: aCfg.tiers.length + 1,
+      threshold: (lastTier?.threshold || 0) + 500,
+      bonus: (lastTier?.bonus || 0) + 1,
+    });
+    state.config.affection = aCfg;
+    switchTab('affection');
+  }
+
+  /** Retire une ligne de palier d'Affection de l'écran (renumérote les suivants), sans sauvegarder */
+  function _removeAffectionTierRow(index) {
+    const state = CWGameState.get();
+    const aCfg = state.config.affection || CWGameDatabase.DEFAULT_CONFIG.affection;
+    aCfg.tiers.splice(index, 1);
+    aCfg.tiers.forEach((t, i) => { t.level = i + 1; }); // pas de trou dans la numérotation
+    state.config.affection = aCfg;
+    switchTab('affection');
+  }
+
 
   // ─── ONGLET NOUVEAUX PASSIFS (TALENTS DU DÉFILÉ) ──────────────────────────────
 
@@ -6937,7 +7047,27 @@ const CWAdminPanel = (() => {
       };
     });
 
-    CWGameState.updateConfig({ ...newCfg, playerBonus, characterBonus });
+    // Affection — tableau dynamique (paliers ajoutables/retirables depuis l'écran).
+    // Le nombre de lignes attendues suit l'état EN MÉMOIRE (déjà à jour si le
+    // joueur vient d'ajouter/retirer un palier), pas un nombre figé.
+    const currentAffection = state.config.affection || CWGameDatabase.DEFAULT_CONFIG.affection;
+    let affection = currentAffection;
+    if (document.getElementById('aff-tier-0-threshold')) {
+      const tiers = currentAffection.tiers.map((t, i) => ({
+        level: t.level,
+        threshold: parseInt(document.getElementById(`aff-tier-${i}-threshold`)?.value) || t.threshold,
+        bonus:     parseInt(document.getElementById(`aff-tier-${i}-bonus`)?.value)     || t.bonus,
+      }));
+      const gifts = currentAffection.gifts.map((g, i) => ({
+        id: g.id,
+        label: document.getElementById(`aff-gift-${i}-label`)?.value || g.label,
+        cost: parseInt(document.getElementById(`aff-gift-${i}-cost`)?.value) || g.cost,
+        affectionGiven: parseInt(document.getElementById(`aff-gift-${i}-affection`)?.value) || g.affectionGiven,
+      }));
+      affection = { tiers, gifts };
+    }
+
+    CWGameState.updateConfig({ ...newCfg, playerBonus, characterBonus, affection });
     _notify('✅ Tous les paramètres ont été sauvegardés.');
   }
 
@@ -7102,6 +7232,7 @@ const CWAdminPanel = (() => {
     _saveStoryMode, _addStoryChapter, _deleteStoryChapter,
     _saveResources, _addResources, _saveEnergyConfig, _fillEnergy, _resetStats,
     _saveCombatConfig, _saveAdaptiveScaling, _previewAdaptiveScaling, _saveEnemyRarityWeights, _resetEnemyRarityWeights, _updateEnemyWeightTotal, _saveEnemyXpBonus,
+    _addAffectionTierRow, _removeAffectionTierRow,
     _saveEventTemplate, _resetEventTemplate, _addEventTplQuest, _deleteEventTplQuest,
     _saveCurrentTag, _saveNextTag, _onTplDayTypeChange,
     _previewEvolvedFormWeight, _saveEvolvedFormWeightFactor,
