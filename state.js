@@ -1434,13 +1434,15 @@ const CWGameState = (() => {
       if (!pool || !pool.length) pool = unowned; // repli si la rareté tirée n'a personne de disponible
       const picked = pool[Math.floor(Math.random() * pool.length)];
       const basePrice = cfg.castingBasePriceByRarity?.[picked.rarity] ?? 100;
+      const variance = 1 + (Math.random() * 0.2 - 0.1); // ±10% autour du prix de base par rareté
+      const startPrice = Math.ceil(basePrice * variance);
 
       candidates.push({
         id: `cand_${Date.now()}_${i}`,
         charId: picked.id,
         rarity: picked.rarity,
-        basePrice,
-        currentBid: basePrice,
+        basePrice: startPrice, // prix de départ RÉEL (avec variance) — sert aussi de référence au plafond des rivales
+        currentBid: startPrice,
         currentLeader: null, // 'player' | id d'une rivale | null
         status: 'active',    // 'active' | 'won_player' | 'won_rival'
       });
@@ -1513,8 +1515,12 @@ const CWGameState = (() => {
     if (candidateIndex !== (casting.activeIndex ?? 0)) return null; // pas encore révélée, pas encore enchérissable
 
     const cfg = _state.config.combat;
-    const increment = (cfg.castingBidIncrement ?? 10) / 100;
+    const baseIncrementPct = cfg.castingBidIncrement ?? 10;
+    // Le bonus de conviction réduit l'INCRÉMENT lui-même (propre à cette
+    // candidate, pour tout le monde, joueur comme rivales) — plus de
+    // "coût effectif" séparé : il n'existe qu'un seul prix, "currentBid".
     const conviction = _getCastingConvictionBonus(candidate.charId);
+    const effectiveIncrementPct = baseIncrementPct * (1 - conviction / 100);
     const log = []; // { type:'player_bid'|'rival_drops'|'rival_raises'|'rival_watches', name?, bid? }
 
     // Le joueur passe définitivement sur cette candidate
@@ -1522,11 +1528,13 @@ const CWGameState = (() => {
       candidate.playerPassed = true;
       log.push({ type: 'player_pass' });
     } else {
-      const effectiveCost = Math.round(candidate.currentBid * (1 - conviction / 100));
-      if (effectiveCost > _state.player.reputation) return { candidate, playerReputation: _state.player.reputation, error: 'insufficient' };
-      candidate.currentBid = Math.ceil(candidate.currentBid * (1 + increment));
+      // On vérifie contre le prix ACTUEL : c'est ce qu'il faudrait payer si
+      // personne ne surenchérit plus après ce tour.
+      if (candidate.currentBid > _state.player.reputation) {
+        return { candidate, playerReputation: _state.player.reputation, error: 'insufficient' };
+      }
+      candidate.currentBid = Math.ceil(candidate.currentBid * (1 + effectiveIncrementPct / 100));
       candidate.currentLeader = 'player';
-      candidate.lastBidCost = effectiveCost;
       log.push({ type: 'player_bid', bid: candidate.currentBid });
     }
 
@@ -1535,14 +1543,14 @@ const CWGameState = (() => {
       if (candidate.currentLeader === rivalId) return; // déjà meneuse, ne remise pas contre elle-même
       const rival = casting.rivals.find(r => r.id === rivalId);
       if (!rival) return;
-      // Une rivale abandonne si l'enchère dépasse ce que son agressivité tolère pour cette rareté
-      const rarityCeiling = (cfg.castingBasePriceByRarity?.[candidate.rarity] ?? 100) * 3 * rival.aggression;
+      // Une rivale abandonne si l'enchère dépasse ce que son agressivité tolère
+      const rarityCeiling = (candidate.basePrice ?? candidate.currentBid) * 3 * rival.aggression;
       const follows = candidate.currentBid <= rarityCeiling && Math.random() < rival.aggression;
       if (!follows) {
         candidate.activeRivals = candidate.activeRivals.filter(id => id !== rivalId);
         log.push({ type: 'rival_drops', name: rival.name });
       } else if (candidate.currentLeader !== 'player' || Math.random() < rival.aggression * 0.5) {
-        candidate.currentBid = Math.ceil(candidate.currentBid * (1 + increment));
+        candidate.currentBid = Math.ceil(candidate.currentBid * (1 + effectiveIncrementPct / 100));
         candidate.currentLeader = rivalId;
         log.push({ type: 'rival_raises', name: rival.name, bid: candidate.currentBid });
       } else {
@@ -1560,9 +1568,8 @@ const CWGameState = (() => {
       candidate.status = 'won_rival';
     } else if (playerStillIn && rivalsStillIn === 0 && candidate.currentLeader === 'player') {
       candidate.status = 'won_player';
-      const cost = candidate.lastBidCost ?? candidate.currentBid;
-      candidate.finalCost = cost; // conservé pour l'affichage ("signée pour XXX Réputation")
-      _state.player.reputation = Math.max(0, _state.player.reputation - cost);
+      candidate.finalCost = candidate.currentBid; // le prix affiché EST le prix payé, plus de calcul séparé
+      _state.player.reputation = Math.max(0, _state.player.reputation - candidate.finalCost);
       const baseChar = _state.characters.find(c => c.id === candidate.charId);
       if (baseChar) addCharacterToCollection(baseChar.id, 'casting');
     } else if (!playerStillIn && rivalsStillIn === 0) {

@@ -7382,10 +7382,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     }
 
     const state = CWGameState.get();
+    const cfg = state.config.combat;
     const def = CWGameState.getCharDef(c.charId);
     const rd = CWGameDatabase.RARITIES[c.rarity] || {};
     const conviction = CWGameState.getCastingConvictionBonus(c.charId);
-    const effectiveCost = Math.round(c.currentBid * (1 - conviction / 100));
+    const baseIncrementPct = cfg.castingBidIncrement ?? 10;
+    const effectiveIncrementPct = baseIncrementPct * (1 - conviction / 100);
+    const nextBidPreview = Math.ceil(c.currentBid * (1 + effectiveIncrementPct / 100));
     const leaderName = c.currentLeader === 'player' ? 'Toi'
       : c.currentLeader ? (casting.rivals.find(r => r.id === c.currentLeader)?.name || '?')
       : 'Personne encore';
@@ -7410,13 +7413,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
               Enchère actuelle : <strong id="casting-bid-value-${c.id}">${c.currentBid.toLocaleString('fr-FR')}</strong>
               — meneuse : <span id="casting-leader-${c.id}">${leaderName}</span>
             </div>
-            ${conviction > 0 ? `<div class="casting-conviction">💞 Bonus de conviction : -${conviction}% (Tags partagés)</div>` : ''}
+            ${conviction > 0 ? `<div class="casting-conviction">💞 Bonus de conviction : l'enchère ne monte que de ${effectiveIncrementPct.toFixed(1)}% par tour au lieu de ${baseIncrementPct}% (Tags partagés)</div>` : ''}
             ${c.playerPassed ? `
               <div class="casting-candidate-passed">Tu as laissé passer cette candidate.</div>
             ` : `
               <div class="casting-candidate-actions">
                 <button class="btn-primary casting-bid-btn" data-candidate="${c.id}" style="flex:1;">
-                  Enchérir (${effectiveCost.toLocaleString('fr-FR')} 🎬)
+                  Enchérir (${nextBidPreview.toLocaleString('fr-FR')} 🎬)
                 </button>
                 <button class="btn-secondary casting-pass-btn" data-candidate="${c.id}">Passer</button>
               </div>
