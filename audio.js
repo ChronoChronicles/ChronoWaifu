@@ -140,9 +140,8 @@ const CWAudioSystem = (() => {
    */
   async function playCombat() {
     const cfg = CWGameState.get() ? CWGameState.getConfig() : null;
-    console.log('[AUDIO DIAG] playCombat() appelée. audio.enabled=', cfg?.audio?.enabled, '| _audioEl existe=', !!_audioEl, '| _muted=', _muted);
-    if (cfg?.audio?.enabled === false) { console.log('[AUDIO DIAG] STOP : audio désactivé dans la config.'); return; }
-    if (!_audioEl) { console.log('[AUDIO DIAG] STOP : élément <audio> introuvable dans le DOM.'); return; }
+    if (cfg?.audio?.enabled === false) return;
+    if (!_audioEl) return;
 
     // Mémoriser la position de la musique globale avant de l'interrompre
     if (_currentKind === 'global') {
@@ -150,17 +149,13 @@ const CWAudioSystem = (() => {
     }
 
     const url = cfg?.audio?.[FIELD_MAP.combat] || null;
-    console.log('[AUDIO DIAG] URL de la musique de combat trouvée dans la config:', url);
-    if (!url) { console.log('[AUDIO DIAG] STOP : aucune URL — repli sur la musique globale.'); await playGlobal(); return; } // pas de musique de combat définie : on reste sur la globale
+    if (!url) { await playGlobal(); return; } // pas de musique de combat définie : on reste sur la globale
 
     _audioEl.src = url;
     _audioEl.currentTime = 0; // la musique de combat repart toujours de zéro
     _currentKind = 'combat';
     _audioEl.muted = _muted;
-    console.log('[AUDIO DIAG] Tentative de lecture... muted=', _audioEl.muted, 'volume=', _audioEl.volume);
-    _audioEl.play()
-      .then(() => console.log('[AUDIO DIAG] ✅ play() a réussi, la musique devrait jouer.'))
-      .catch((err) => console.log('[AUDIO DIAG] ❌ play() a échoué :', err.name, err.message));
+    _audioEl.play().catch(() => { /* autoplay bloqué tant que le joueur n'a pas interagi */ });
   }
 
   function stop() {

@@ -862,7 +862,7 @@ const CWGameUI = (() => {
         if (mode === 'storyMode') { showScreen('story-chapters'); return; }
         if (mode === 'story' || mode === 'byLine') { showScreen('combat'); return; }
         if (mode === 'record') { showScreen('record'); return; }
-        if (mode === 'defile') { CWAudioSystem.playCombat(); showScreen('defile-planning'); return; }
+        if (mode === 'defile') { showScreen('defile-planning'); CWAudioSystem.playCombat(); return; }
         if (mode === 'casting') { showScreen('casting'); return; }
         showScreen('combat');
         setTimeout(() => _launchCombat({ mode: mode === 'fullRandom' ? 'fullRandom' : mode }), 100);
