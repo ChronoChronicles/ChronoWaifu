@@ -2016,8 +2016,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                       ${gaugeRow('🎬', 'Tournages Remportés', inst.passagesWon || 0, 'passagesWon')}
                       ${gaugeRow('🌟', 'Popularité', inst.popularityEarned || 0, 'popularityEarned')}
                       <div class="detail-history-row" style="border-top:1px solid rgba(255,255,255,.1);margin-top:4px;padding-top:8px;">
-                        <span>✨ Bonus stats individuel (Charisme/Prestance/Grâce)</span>
-                        <strong style="color:#a78bfa;">+${Math.round(charBonus.bonus/3)} chacune</strong>
+                        <span>✨ Bonus stats individuel (Endurance/Charisme/Prestance/Grâce)</span>
+                        <strong style="color:#a78bfa;">+${charBonus.bonus} à chacune des 4</strong>
                       </div>`;
                   })()}
                 </div>

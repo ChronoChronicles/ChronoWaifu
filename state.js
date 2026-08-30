@@ -1262,14 +1262,16 @@ const CWGameState = (() => {
       inst.equipment, _state.player.equipInventory, _state.equipment
     );
     const playerBonus = getPlayerStatBonus(['scoreTotal', 'scoreTeam']).bonus;
-    const charBonusTotal = getCharacterStatBonus(inst).bonus;
-    const affectionBonus = getCharacterAffectionTier(inst).bonus;
-    const charBonusPerStat = Math.round((charBonusTotal + affectionBonus) / 3); // réparti à parts égales sur les 3 stats jugées
+    // Bonus d'HISTORIQUE (Défilés gagnés, Tournages Remportés, Popularité) :
+    // +1 à CHACUNE des 4 stats par palier atteint — pas de répartition.
+    const charBonusFull = getCharacterStatBonus(inst).bonus;
+    // Bonus d'AFFECTION : réparti sur les 3 stats jugées uniquement (jamais l'Endurance).
+    const affectionPerStat = Math.round(getCharacterAffectionTier(inst).bonus / 3);
     return {
-      hp:  computed.hp  + eqBonus.hp  + playerBonus,
-      atk: computed.atk + eqBonus.atk + playerBonus + charBonusPerStat,
-      def: computed.def + eqBonus.def + playerBonus + charBonusPerStat,
-      spd: computed.spd + eqBonus.spd + playerBonus + charBonusPerStat,
+      hp:  computed.hp  + eqBonus.hp  + playerBonus + charBonusFull,
+      atk: computed.atk + eqBonus.atk + playerBonus + charBonusFull + affectionPerStat,
+      def: computed.def + eqBonus.def + playerBonus + charBonusFull + affectionPerStat,
+      spd: computed.spd + eqBonus.spd + playerBonus + charBonusFull + affectionPerStat,
     };
   }
 
