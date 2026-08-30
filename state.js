@@ -1181,6 +1181,52 @@ const CWGameState = (() => {
    * (Défilés gagnés, Tournages remportés, Popularité...). Réparti à parts
    * égales sur les 3 stats jugées (Charisme/Prestance/Grâce) — pas l'Endurance.
    */
+  /**
+   * Palier d'Affection actuel d'un personnage : le dernier palier dont le
+   * seuil cumulé est atteint, plus la progression vers le suivant (s'il y en
+   * a un — le tableau des paliers est extensible, peut être vide au-delà).
+   */
+  function getCharacterAffectionTier(inst) {
+    if (!inst) return { level: 0, bonus: 0, points: inst?.affection || 0, nextThreshold: null, prevThreshold: 0 };
+    const tiers = _state.config?.affection?.tiers || CWGameDatabase.DEFAULT_CONFIG.affection.tiers;
+    const points = inst.affection || 0;
+    let current = null, next = null;
+    for (const t of tiers) {
+      if (points >= t.threshold) current = t;
+      else { next = t; break; }
+    }
+    return {
+      level: current?.level || 0,
+      bonus: current?.bonus || 0,
+      points,
+      prevThreshold: current?.threshold || 0,
+      nextThreshold: next?.threshold ?? null, // null = tous les paliers actuels sont dépassés
+    };
+  }
+
+  /** Ajoute de l'Affection (usage passif en Défilé, ou cadeau) à un personnage */
+  function addCharacterAffection(instanceId, amount) {
+    const inst = getPlayerChar(instanceId);
+    if (!inst || !amount) return;
+    inst.affection = (inst.affection || 0) + amount;
+  }
+
+  /** Offre un cadeau à un personnage : dépense du $, augmente son Affection */
+  function giveGiftToCharacter(instanceId, giftId) {
+    const inst = getPlayerChar(instanceId);
+    if (!inst) return { error: 'not_found' };
+    const gifts = _state.config?.affection?.gifts || CWGameDatabase.DEFAULT_CONFIG.affection.gifts;
+    const gift = gifts.find(g => g.id === giftId);
+    if (!gift) return { error: 'not_found' };
+    if ((_state.player.currency.gold || 0) < gift.cost) return { error: 'insufficient' };
+
+    modifyResources({ gold: -gift.cost });
+    addCharacterAffection(instanceId, gift.affectionGiven);
+    _notify('affectionChanged');
+    _autoSave();
+    return { gift, newAffection: inst.affection, tier: getCharacterAffectionTier(inst) };
+  }
+
   function getCharacterStatBonus(inst) {
     if (!inst) return { bonus: 0, detail: [] };
     const cfg = _state.config?.characterBonus || CWGameDatabase.DEFAULT_CONFIG.characterBonus;
@@ -1217,7 +1263,8 @@ const CWGameState = (() => {
     );
     const playerBonus = getPlayerStatBonus(['scoreTotal', 'scoreTeam']).bonus;
     const charBonusTotal = getCharacterStatBonus(inst).bonus;
-    const charBonusPerStat = Math.round(charBonusTotal / 3); // réparti à parts égales sur les 3 stats jugées
+    const affectionBonus = getCharacterAffectionTier(inst).bonus;
+    const charBonusPerStat = Math.round((charBonusTotal + affectionBonus) / 3); // réparti à parts égales sur les 3 stats jugées
     return {
       hp:  computed.hp  + eqBonus.hp  + playerBonus,
       atk: computed.atk + eqBonus.atk + playerBonus + charBonusPerStat,
@@ -2347,6 +2394,7 @@ const CWGameState = (() => {
     checkEvent, getActiveEvent, setEventConfig, setNextEventConfig, setNextEventTag, setCurrentEventTag,
     trackEventQuestProgress, claimEventQuest, planifyNextEvent, cancelNextEvent, getPlayerStatBonus,
     getCharacterAuraScore, getCharacterFinalStats, getCharacterStatBonus, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
+    getCharacterAffectionTier, addCharacterAffection, giveGiftToCharacter,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
     getAffinityPercent, registerAffinityGain, getAllAffinityProgress,

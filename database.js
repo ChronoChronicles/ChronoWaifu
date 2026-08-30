@@ -319,6 +319,32 @@ const CWGameDatabase = (() => {
       passagesWon:        { every: 20,   label: 'Tournages remportés' },
       defilesWon:         { every: 10,   label: 'Défilés remportés' },
     },
+
+    // ─── AFFECTION ────────────────────────────────────────────────────────────
+    // Monte passivement (+1 à chaque fois que la personnage défile), accélérée
+    // par des cadeaux achetés en $. Chaque palier franchi ajoute "bonus" points
+    // de stat, répartis sur les 3 stats jugées (Charisme/Prestance/Grâce).
+    // "threshold" = seuil CUMULÉ total (pas un delta) — permet d'ajouter de
+    // nouveaux paliers plus tard (au-delà du 10e) sans tout recalculer.
+    affection: {
+      tiers: [
+        { level: 1,  threshold: 50,   bonus: 2 },
+        { level: 2,  threshold: 150,  bonus: 2 },
+        { level: 3,  threshold: 300,  bonus: 3 },
+        { level: 4,  threshold: 500,  bonus: 3 },
+        { level: 5,  threshold: 750,  bonus: 3 },
+        { level: 6,  threshold: 1100, bonus: 4 },
+        { level: 7,  threshold: 1500, bonus: 4 },
+        { level: 8,  threshold: 2000, bonus: 4 },
+        { level: 9,  threshold: 2600, bonus: 5 },
+        { level: 10, threshold: 3300, bonus: 5 },
+      ],
+      gifts: [
+        { id: 'small',  label: 'Petit cadeau',  cost: 500,   affectionGiven: 30  },
+        { id: 'medium', label: 'Cadeau moyen',  cost: 2000,  affectionGiven: 120 },
+        { id: 'large',  label: 'Grand cadeau',  cost: 6000,  affectionGiven: 350 },
+      ],
+    },
   };
 
   // ─── TYPES ───────────────────────────────────────────────────────────────────

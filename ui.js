@@ -2021,6 +2021,36 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                       </div>`;
                   })()}
                 </div>
+
+                <div class="detail-affection-section">
+                  ${(() => {
+                    const tier = CWGameState.getCharacterAffectionTier(inst);
+                    const gifts = state.config.affection?.gifts || CWGameDatabase.DEFAULT_CONFIG.affection.gifts;
+                    const pct = tier.nextThreshold != null
+                      ? Math.round(((tier.points - tier.prevThreshold) / (tier.nextThreshold - tier.prevThreshold)) * 100)
+                      : 100;
+                    return `
+                      <div class="detail-affection-header">
+                        <span>💞 Affection — Niveau ${tier.level}</span>
+                        <strong style="color:#f472b6;">+${tier.bonus} chacune (Charisme/Prestance/Grâce)</strong>
+                      </div>
+                      <div class="pm-stat-progress">
+                        <div class="pm-stat-progress-bar"><div class="pm-stat-progress-fill" style="width:${pct}%;background:linear-gradient(90deg,#f472b6,#f9a8d4);"></div></div>
+                        <div class="pm-stat-progress-label">
+                          ${tier.nextThreshold != null
+                            ? `${(tier.nextThreshold - tier.points).toLocaleString('fr-FR')} avant le Niveau ${tier.level + 1}`
+                            : `Niveau maximum atteint pour l'instant`}
+                        </div>
+                      </div>
+                      <div class="detail-affection-gifts">
+                        ${gifts.map(g => `
+                          <button class="btn-gift" data-gift="${g.id}" data-instance="${inst.instanceId}">
+                            🎁 ${g.label}<br><span style="font-size:.68rem;color:var(--text-dim);">${g.cost.toLocaleString('fr-FR')} $ — +${g.affectionGiven} Affection</span>
+                          </button>
+                        `).join('')}
+                      </div>`;
+                  })()}
+                </div>
               </div>
             </div>
           </div>
@@ -2043,6 +2073,19 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     modal.querySelectorAll('.char-gallery-card.is-unlocked').forEach(card => {
       card.addEventListener('click', () => {
         if (card.dataset.portrait) _openImageLightbox(card.dataset.portrait, card.dataset.name);
+      });
+    });
+    modal.querySelectorAll('.btn-gift').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const result = CWGameState.giveGiftToCharacter(btn.dataset.instance, btn.dataset.gift);
+        if (result?.error === 'insufficient') {
+          _showToast('⚠️ Pas assez de $ pour ce cadeau.', 'error');
+          return;
+        }
+        if (result?.gift) {
+          _showToast(`🎁 ${result.gift.label} offert — +${result.gift.affectionGiven} Affection !`, 'success');
+          _openCharDetail(inst.instanceId); // re-rendu pour voir la jauge mise à jour
+        }
       });
     });
   }
@@ -7102,6 +7145,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           inst.defilePointsEarned = (inst.defilePointsEarned || 0) + l.playerScore;
           inst.popularityEarned   = (inst.popularityEarned   || 0) + Math.floor(l.playerScore / 100);
           if (passageWon) inst.passagesWon = (inst.passagesWon || 0) + 1;
+          inst.affection = (inst.affection || 0) + 1; // usage passif : elle a défilé, gagné ou perdu peu importe
         }
       }
     });
