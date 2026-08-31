@@ -1682,10 +1682,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         <h2>Collection <span class="badge">${player.collection.length}</span></h2>
         ${_helpBtn('collection')}
       </div>
-      <div class="screen-controls">
-        ${_renderSortSelect('col-sort', _collectionSort)}
+      <div class="sticky-controls">
+        <div class="screen-controls">
+          ${_renderSortSelect('col-sort', _collectionSort)}
+        </div>
+        ${_renderCharFilterBar('col', _collectionFilters, state)}
       </div>
-      ${_renderCharFilterBar('col', _collectionFilters, state)}
       <div class="card-grid" id="collection-grid"></div>
     `;
 
@@ -2578,10 +2580,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       <div class="screen-header" style="margin-top:2rem">
         <h2>Collection</h2>
       </div>
-      <div class="screen-controls">
-        ${_renderSortSelect('team-sort', _teamSort)}
+      <div class="sticky-controls">
+        <div class="screen-controls">
+          ${_renderSortSelect('team-sort', _teamSort)}
+        </div>
+        ${_renderCharFilterBar('team', _teamFilters, state)}
       </div>
-      ${_renderCharFilterBar('team', _teamFilters, state)}
       <div class="card-grid" id="team-collection-grid"></div>
     `;
 
