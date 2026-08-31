@@ -877,7 +877,27 @@ const CWGameUI = (() => {
         if (mode === 'story' || mode === 'byLine') { showScreen('combat'); return; }
         if (mode === 'record') { showScreen('record'); return; }
         if (mode === 'defile') { showScreen('defile-planning'); CWAudioSystem.playCombat(); return; }
-        if (mode === 'defile-random') { showScreen('defile-random-select'); return; }
+        if (mode === 'defile-random') {
+          const state = CWGameState.get();
+          const usedLines = new Set();
+          const picked = [];
+          const shuffled = [...state.player.collection].sort(() => Math.random() - 0.5);
+          for (const inst of shuffled) {
+            if (picked.length >= 9) break;
+            const def = CWGameState.getCharDef(inst.charId);
+            if (!def || usedLines.has(def.evolutionLine)) continue; // pas 2 exemplaires de la même lignée
+            usedLines.add(def.evolutionLine);
+            picked.push(inst);
+          }
+          if (picked.length < 9) {
+            _showToast('Il te faut au moins 9 lignées différentes dans ta collection.', 'error');
+            return;
+          }
+          renderDefilePlanning(picked.map(inst => inst.instanceId));
+          showScreen('defile-planning');
+          CWAudioSystem.playCombat();
+          return;
+        }
         if (mode === 'casting') { showScreen('casting'); return; }
         showScreen('combat');
         setTimeout(() => _launchCombat({ mode: mode === 'fullRandom' ? 'fullRandom' : mode }), 100);
@@ -930,7 +950,7 @@ const CWGameUI = (() => {
 
     // Les écrans du Défilé gèrent eux-mêmes la musique de combat — ne jamais
     // la couper ici en relançant la musique globale par défaut.
-    const DEFILE_SCREENS = ['defile-planning', 'defile-random-select', 'defile-playback', 'defile-result', 'defile-rewards', 'casting'];
+    const DEFILE_SCREENS = ['defile-planning', 'defile-playback', 'defile-result', 'defile-rewards', 'casting'];
     if (!DEFILE_SCREENS.includes(screenId)) {
       CWAudioSystem.playGlobal();
     }
@@ -952,7 +972,6 @@ const CWGameUI = (() => {
       record:           renderRecordHome,
       'record-rewards': renderRecordRewards,
       'defile-planning': renderDefilePlanning,
-      'defile-random-select': renderDefileRandomSelect,
       'defile-playback': renderDefilePlayback,
       affinity: renderAffinity,
       casting: renderCasting,
@@ -6206,73 +6225,6 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       const fighter = CWDefileEngine.buildFighter({ instanceId: `enemy_${i}` }, def, baseStats, cfg);
       fighter.level = avgLevel;
       return fighter;
-    });
-  }
-
-  let _defileRandomSelection = []; // instanceId[] — les 9 personnages choisies pour ce défilé aléatoire
-
-  function renderDefileRandomSelect() {
-    const el = document.getElementById('screen-defile-random-select');
-    if (!el) return;
-    const state = CWGameState.get();
-    const REQUIRED = 9;
-
-    el.innerHTML = `
-      <div class="screen-header"><h2>🎲 Défilé Aléatoire — Choisis 9 personnages</h2></div>
-      <p class="defile-help">
-        Chaque personnage ne peut être utilisée qu'UNE seule fois. Choisis-en
-        exactement ${REQUIRED} parmi ta collection.
-      </p>
-      <div class="team-select-counter" id="drs-counter">0 / ${REQUIRED} sélectionnées</div>
-      <div class="team-select-grid">
-        ${state.player.collection.map(inst => {
-          const def = CWGameState.getCharDef(inst.charId);
-          if (!def) return '';
-          const rd = CWGameDatabase.RARITIES[def.rarity] || {};
-          return `
-            <div class="team-select-card" data-iid="${inst.instanceId}" style="border-color:${rd.color || '#888'}">
-              <div class="team-select-portrait">${_combatPortraitImgHtml(def)}</div>
-              <div class="team-select-name">${def.name}</div>
-              <div class="team-select-level">Niv.${inst.level}</div>
-              <div class="team-select-check">✓</div>
-            </div>`;
-        }).join('')}
-      </div>
-      <button class="btn-primary" id="drs-launch" style="width:100%;margin-top:16px;" disabled>
-        Lancer le Défilé (0/${REQUIRED})
-      </button>
-    `;
-
-    _defileRandomSelection = [];
-    const counterEl = document.getElementById('drs-counter');
-    const launchBtn = document.getElementById('drs-launch');
-    const updateUI = () => {
-      counterEl.textContent = `${_defileRandomSelection.length} / ${REQUIRED} sélectionnées`;
-      launchBtn.textContent = `Lancer le Défilé (${_defileRandomSelection.length}/${REQUIRED})`;
-      launchBtn.disabled = _defileRandomSelection.length !== REQUIRED;
-    };
-
-    el.querySelectorAll('.team-select-card').forEach(card => {
-      card.addEventListener('click', () => {
-        const iid = card.dataset.iid;
-        const idx = _defileRandomSelection.indexOf(iid);
-        if (idx >= 0) {
-          _defileRandomSelection.splice(idx, 1);
-          card.classList.remove('selected');
-        } else {
-          if (_defileRandomSelection.length >= REQUIRED) return; // déjà complet
-          _defileRandomSelection.push(iid);
-          card.classList.add('selected');
-        }
-        updateUI();
-      });
-    });
-
-    launchBtn.addEventListener('click', () => {
-      if (_defileRandomSelection.length !== REQUIRED) return;
-      renderDefilePlanning(_defileRandomSelection.slice()); // crée _defileState AVANT que showScreen ne rappelle le renderer sans argument
-      showScreen('defile-planning');
-      CWAudioSystem.playCombat();
     });
   }
 

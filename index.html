@@ -317,6 +317,10 @@
   .defile-help{ font-size:.8rem; color:var(--text-dim); margin:8px 0 12px; line-height:1.5; }
   .defile-programme{
     display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px;
+    position:sticky; top:0; z-index:15;
+    background:var(--bg, #0f0a1e);
+    padding:8px 0 12px;
+    box-shadow:0 8px 12px -6px rgba(0,0,0,.5);
   }
   .defile-slot{
     background:rgba(255,255,255,.04); border:1.5px dashed rgba(255,255,255,.15);
@@ -4201,7 +4205,6 @@
       <section id="screen-record" class="screen"></section>
       <section id="screen-record-rewards" class="screen"></section>
       <section id="screen-defile-planning" class="screen"></section>
-      <section id="screen-defile-random-select" class="screen"></section>
       <section id="screen-defile-playback" class="screen"></section>
       <section id="screen-defile-result" class="screen"></section>
       <section id="screen-defile-rewards" class="screen"></section>
