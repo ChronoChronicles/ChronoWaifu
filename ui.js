@@ -831,11 +831,16 @@ const CWGameUI = (() => {
     const ev    = CWGameState.getActiveEvent();
     const cfg   = state.config?.combat?.costs || {};
 
+    const lineageCount = CWGameState.getOwnedLineageCount();
+    const unlockLineages = state.config.combat?.defileRandomUnlockLineages ?? 10;
     const modes = [
       // Retiré temporairement pour les tests : tous les autres modes de combat
       // (Histoire, Caprice, Tournée, Saga, Grand Gala, Performance...) — le
       // code reste intact, il suffit de les remettre dans ce tableau.
       { id:'defile',       icon:'💃', name:'Défilé',           desc:'Duel de popularité en 9 passages',                    featured:true, unlocked:true, lockedDesc:'' },
+      { id:'defile-random', icon:'🎲', name:'Défilé Aléatoire', desc:'9 personnages contre 9, une seule utilisation chacune', featured:false,
+        unlocked: lineageCount >= unlockLineages,
+        lockedDesc: `🔒 Possède ${unlockLineages} lignées différentes (${lineageCount}/${unlockLineages})` },
       { id:'casting',      icon:'🎬', name:'Grand Casting',    desc:'Recrute de nouvelles actrices par enchères',          featured:false, unlocked:true, lockedDesc:'' },
     ];
 
@@ -863,6 +868,7 @@ const CWGameUI = (() => {
         if (mode === 'story' || mode === 'byLine') { showScreen('combat'); return; }
         if (mode === 'record') { showScreen('record'); return; }
         if (mode === 'defile') { showScreen('defile-planning'); CWAudioSystem.playCombat(); return; }
+        if (mode === 'defile-random') { showScreen('defile-random-select'); return; }
         if (mode === 'casting') { showScreen('casting'); return; }
         showScreen('combat');
         setTimeout(() => _launchCombat({ mode: mode === 'fullRandom' ? 'fullRandom' : mode }), 100);
@@ -915,7 +921,7 @@ const CWGameUI = (() => {
 
     // Les écrans du Défilé gèrent eux-mêmes la musique de combat — ne jamais
     // la couper ici en relançant la musique globale par défaut.
-    const DEFILE_SCREENS = ['defile-planning', 'defile-playback', 'defile-result', 'defile-rewards', 'casting'];
+    const DEFILE_SCREENS = ['defile-planning', 'defile-random-select', 'defile-playback', 'defile-result', 'defile-rewards', 'casting'];
     if (!DEFILE_SCREENS.includes(screenId)) {
       CWAudioSystem.playGlobal();
     }
@@ -937,6 +943,7 @@ const CWGameUI = (() => {
       record:           renderRecordHome,
       'record-rewards': renderRecordRewards,
       'defile-planning': renderDefilePlanning,
+      'defile-random-select': renderDefileRandomSelect,
       'defile-playback': renderDefilePlayback,
       affinity: renderAffinity,
       casting: renderCasting,
@@ -6127,19 +6134,19 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     return CWGameDatabase.getDefileTalentDisplay(typeId, cfg);
   }
 
-  function _buildDefileEnemyTeam(playerTeam, cfg, state) {
+  function _buildDefileEnemyTeam(playerTeam, cfg, state, count = 3) {
     const avgLevel = Math.max(1, Math.round(
       playerTeam.reduce((s, f) => s + (f.level || 1), 0) / playerTeam.length
     ));
 
     // Aucune lignée en commun avec le joueur, ni en double côté adverse —
-    // les 6 personnages du duel doivent toutes être des lignées différentes.
+    // tous les personnages du duel doivent être des lignées différentes.
     const playerLines = new Set(
       playerTeam.map(f => CWGameState.getCharDef(f.charId)?.evolutionLine).filter(Boolean)
     );
     const usedEnemyLines = new Set();
     const enemyDefs = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < count; i++) {
       const pool = state.characters.filter(c =>
         c.evolutionStage === 0 &&
         !playerLines.has(c.evolutionLine) &&
@@ -6159,17 +6166,95 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     });
   }
 
-  function renderDefilePlanning() {
+  let _defileRandomSelection = []; // instanceId[] — les 9 personnages choisies pour ce défilé aléatoire
+
+  function renderDefileRandomSelect() {
+    const el = document.getElementById('screen-defile-random-select');
+    if (!el) return;
+    const state = CWGameState.get();
+    const REQUIRED = 9;
+
+    el.innerHTML = `
+      <div class="screen-header"><h2>🎲 Défilé Aléatoire — Choisis 9 personnages</h2></div>
+      <p class="defile-help">
+        Chaque personnage ne peut être utilisée qu'UNE seule fois. Choisis-en
+        exactement ${REQUIRED} parmi ta collection.
+      </p>
+      <div class="team-select-counter" id="drs-counter">0 / ${REQUIRED} sélectionnées</div>
+      <div class="team-select-grid">
+        ${state.player.collection.map(inst => {
+          const def = CWGameState.getCharDef(inst.charId);
+          if (!def) return '';
+          const rd = CWGameDatabase.RARITIES[def.rarity] || {};
+          return `
+            <div class="team-select-card" data-iid="${inst.instanceId}" style="border-color:${rd.color || '#888'}">
+              <div class="team-select-portrait">${_combatPortraitImgHtml(def)}</div>
+              <div class="team-select-name">${def.name}</div>
+              <div class="team-select-level">Niv.${inst.level}</div>
+              <div class="team-select-check">✓</div>
+            </div>`;
+        }).join('')}
+      </div>
+      <button class="btn-primary" id="drs-launch" style="width:100%;margin-top:16px;" disabled>
+        Lancer le Défilé (0/${REQUIRED})
+      </button>
+    `;
+
+    _defileRandomSelection = [];
+    const counterEl = document.getElementById('drs-counter');
+    const launchBtn = document.getElementById('drs-launch');
+    const updateUI = () => {
+      counterEl.textContent = `${_defileRandomSelection.length} / ${REQUIRED} sélectionnées`;
+      launchBtn.textContent = `Lancer le Défilé (${_defileRandomSelection.length}/${REQUIRED})`;
+      launchBtn.disabled = _defileRandomSelection.length !== REQUIRED;
+    };
+
+    el.querySelectorAll('.team-select-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const iid = card.dataset.iid;
+        const idx = _defileRandomSelection.indexOf(iid);
+        if (idx >= 0) {
+          _defileRandomSelection.splice(idx, 1);
+          card.classList.remove('selected');
+        } else {
+          if (_defileRandomSelection.length >= REQUIRED) return; // déjà complet
+          _defileRandomSelection.push(iid);
+          card.classList.add('selected');
+        }
+        updateUI();
+      });
+    });
+
+    launchBtn.addEventListener('click', () => {
+      if (_defileRandomSelection.length !== REQUIRED) return;
+      renderDefilePlanning(_defileRandomSelection.slice()); // crée _defileState AVANT que showScreen ne rappelle le renderer sans argument
+      showScreen('defile-planning');
+      CWAudioSystem.playCombat();
+    });
+  }
+
+  function renderDefilePlanning(randomModeSelection = null) {
     const el = document.getElementById('screen-defile-planning');
     if (!el) return;
     const state = CWGameState.get();
     const cfg   = state.config.combat;
-    const teamInstances = CWGameState.getTeam();
+    const isRandomMode = Array.isArray(randomModeSelection);
+    const REQUIRED_RANDOM = 9;
+    const teamInstances = isRandomMode
+      ? randomModeSelection.map(iid => CWGameState.getPlayerChar(iid)).filter(Boolean)
+      : CWGameState.getTeam();
 
-    if (teamInstances.length < 3) {
+    if (!isRandomMode && teamInstances.length < 3) {
       el.innerHTML = `
         <div class="screen-header"><h2>💃 Défilé</h2></div>
         <p class="empty-msg">Compose une équipe complète (3 personnages) avant de te lancer dans un défilé.</p>
+      `;
+      return;
+    }
+    if (isRandomMode && teamInstances.length !== REQUIRED_RANDOM) {
+      el.innerHTML = `
+        <div class="screen-header"><h2>🎲 Défilé Aléatoire</h2></div>
+        <p class="empty-msg">Sélection invalide — reviens à l'écran précédent et choisis exactement ${REQUIRED_RANDOM} personnages.</p>
       `;
       return;
     }
@@ -6184,8 +6269,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         fighter.level = inst.level;      // pour calquer le niveau de l'équipe adverse
         return fighter;
       });
-      const enemyTeam = _buildDefileEnemyTeam(playerTeam, cfg, state);
-      const enemyAssignment = CWDefileEngine.autoAssign(programme, enemyTeam, state.typeMatrix, cfg.defileUsesPerChar ?? 3);
+      const usesPerChar = isRandomMode ? 1 : (cfg.defileUsesPerChar ?? 3);
+      const enemyTeam = _buildDefileEnemyTeam(playerTeam, cfg, state, playerTeam.length);
+      const enemyAssignment = CWDefileEngine.autoAssign(programme, enemyTeam, state.typeMatrix, usesPerChar);
       _defileState = {
         programme,
         playerTeam,
@@ -6193,7 +6279,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         enemyAssignment,  // idem — son programme complet doit être connu pour Mystique
         assignment: new Array(programme.length).fill(null), // { instanceId } — qui défile
         talentPlacement: {},                                 // { round: { instanceId, typeId } } — Talent placé (libre, par personnage + type)
-        usesPerChar: cfg.defileUsesPerChar ?? 3,
+        usesPerChar,
+        isRandomMode,      // pour le calcul des récompenses (XP perso à 70% au lieu du taux normal)
         legendeCopyTypeId: null,       // choix de Légende (Polyvalence), tranché avant la planification
         legendeChoicePending: playerTeam.some(f => f.type1 === 'Legende' || f.type2 === 'Legende'),
         mystiqueSwapRounds: {},        // { round (1-based) du talent Mystique : [round1, round2] adverses échangés }
@@ -7193,7 +7280,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       }
     });
 
-    const charXpPercent = cfg.defileCharXpPercent ?? 10;
+    const charXpPercent = _defileState?.isRandomMode
+      ? (cfg.defileRandomCharXpPercent ?? 70)
+      : (cfg.defileCharXpPercent ?? 10);
     const charXp = Object.entries(scoreByInstance).map(([instanceId, score]) => {
       const inst = CWGameState.getPlayerChar(instanceId);
       const def  = inst ? CWGameState.getCharDef(inst.charId) : null;

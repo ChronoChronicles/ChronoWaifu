@@ -1452,6 +1452,16 @@ const CWGameState = (() => {
     });
   }
 
+  /** Nombre de lignées DISTINCTES possédées (indépendamment du nombre d'exemplaires) */
+  function getOwnedLineageCount() {
+    const lines = new Set();
+    _state.player.collection.forEach(inst => {
+      const def = getCharDef(inst.charId);
+      if (def?.evolutionLine) lines.add(def.evolutionLine);
+    });
+    return lines.size;
+  }
+
   /**
    * Enregistre le gain d'affinité pour une lignée après un tournage GAGNÉ
    * contre une adversaire de cette lignée. Ne fait rien si la lignée est
@@ -2447,7 +2457,7 @@ const CWGameState = (() => {
     getCharacterAffectionTier, addCharacterAffection, giveGiftToCharacter,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
-    getAffinityPercent, registerAffinityGain, addAffinityDirect, getAllAffinityProgress,
+    getAffinityPercent, registerAffinityGain, addAffinityDirect, getAllAffinityProgress, getOwnedLineageCount,
     registerReputationGain, placeCastingBid, getCastingConvictionBonus: _getCastingConvictionBonus, debugForceCasting,
     getStoryChapterProgress, completeStoryStage, isFeatureUnlocked,
     addDailyLoginCycle, updateDailyLoginCycle, removeDailyLoginCycle, getDailyLoginClaimable, claimDailyLoginReward,

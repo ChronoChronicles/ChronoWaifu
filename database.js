@@ -59,6 +59,9 @@ const CWGameDatabase = (() => {
       defilePassageCount: 9,          // Nombre d'épreuves du programme
       defileUsesPerChar: 3,           // Nombre de fois où chaque personnage doit défiler
       defileTalentsCount: 3,          // Nombre de Talents à placer (1 par personnage max, généralement 3)
+      // ── Défilé Aléatoire (9 vs 9, 1 utilisation par personnage) ──────────────
+      defileRandomUnlockLineages: 10,  // Nombre de lignées différentes possédées nécessaires pour débloquer
+      defileRandomCharXpPercent: 70,   // % du score du tournage donné en XP à la personnage (au lieu de defileCharXpPercent)
       // Endurance en cours de défilé (distincte des PV de combat classique)
       defileStartEndurancePct: 50,    // Endurance de départ (% de l'Endurance max)
       defileEnduranceLossPct: 15,     // Perdue quand la personnage défile

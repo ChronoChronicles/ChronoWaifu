@@ -654,6 +654,29 @@
   .casting-candidate-bid{ font-size:.76rem; color:var(--text-dim); margin-bottom:4px; }
   .casting-candidate-bid strong{ color:#fbbf24; font-family:var(--font-mono); }
   .casting-conviction{ font-size:.7rem; color:#4ade80; margin-bottom:8px; }
+
+  /* ── Sélection des 9 personnages (Défilé Aléatoire) ── */
+  .team-select-counter{
+    text-align:center; font-weight:800; font-size:.9rem; color:#fbbf24;
+    margin-bottom:14px;
+  }
+  .team-select-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:10px;
+  }
+  .team-select-card{
+    position:relative; border:2px solid; border-radius:10px; padding:6px;
+    background:rgba(255,255,255,.04); text-align:center; cursor:pointer;
+  }
+  .team-select-card.selected{ background:rgba(167,139,250,.18); box-shadow:0 0 0 2px #a78bfa; }
+  .team-select-portrait{ width:100%; aspect-ratio:1/1.2; border-radius:6px; overflow:hidden; margin-bottom:4px; }
+  .team-select-name{ font-size:.7rem; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .team-select-level{ font-size:.62rem; color:var(--text-dim); }
+  .team-select-check{
+    position:absolute; top:4px; right:4px; width:18px; height:18px; border-radius:50%;
+    background:#a78bfa; color:#1b1330; font-size:.7rem; font-weight:900;
+    display:none; align-items:center; justify-content:center;
+  }
+  .team-select-card.selected .team-select-check{ display:flex; }
   .casting-candidate-actions{ display:flex; gap:8px; margin-top:6px; }
   .casting-candidate-passed{ font-size:.76rem; color:var(--text-faint); font-style:italic; margin-top:6px; }
   .casting-candidate-result{ font-size:.82rem; font-weight:700; margin-top:6px; }
@@ -4157,6 +4180,7 @@
       <section id="screen-record" class="screen"></section>
       <section id="screen-record-rewards" class="screen"></section>
       <section id="screen-defile-planning" class="screen"></section>
+      <section id="screen-defile-random-select" class="screen"></section>
       <section id="screen-defile-playback" class="screen"></section>
       <section id="screen-defile-result" class="screen"></section>
       <section id="screen-defile-rewards" class="screen"></section>
