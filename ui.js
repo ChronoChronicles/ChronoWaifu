@@ -2349,19 +2349,35 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         playerBonusVal = CWGameState.getPlayerStatBonus?.()?.bonus ?? 0;
       } catch (_) {}
 
+      // Bonus individuel (Défilés gagnés, Tournages Remportés, Popularité) — +1 aux 4 stats par palier
+      let charBonusVal = 0;
+      try {
+        charBonusVal = CWGameState.getCharacterStatBonus?.(inst)?.bonus ?? 0;
+      } catch (_) {}
+
+      // Bonus d'Affection — réparti sur les 3 stats jugées uniquement (jamais l'Endurance)
+      let affectionPerStat = 0;
+      try {
+        affectionPerStat = Math.round((CWGameState.getCharacterAffectionTier?.(inst)?.bonus ?? 0) / 3);
+      } catch (_) {}
+
+      // Bonus des objets de boutique (Élixirs) utilisés sur cette personnage
+      const itemBonus = inst.itemStatBonus || _zero;
+
       const total = {
-        hp:  Math.min(999999, (base.hp  + awBonus.hp  + eqBonus.hp  + playerBonusVal)),
-        atk: Math.min(99999,  (base.atk + awBonus.atk + eqBonus.atk + playerBonusVal)),
-        def: Math.min(99999,  (base.def + awBonus.def + eqBonus.def + playerBonusVal)),
-        spd: Math.min(99999,  (base.spd + awBonus.spd + eqBonus.spd + playerBonusVal)),
+        hp:  Math.min(999999, (base.hp  + awBonus.hp  + eqBonus.hp  + playerBonusVal + charBonusVal + itemBonus.hp)),
+        atk: Math.min(99999,  (base.atk + awBonus.atk + eqBonus.atk + playerBonusVal + charBonusVal + affectionPerStat + itemBonus.atk)),
+        def: Math.min(99999,  (base.def + awBonus.def + eqBonus.def + playerBonusVal + charBonusVal + affectionPerStat + itemBonus.def)),
+        spd: Math.min(99999,  (base.spd + awBonus.spd + eqBonus.spd + playerBonusVal + charBonusVal + affectionPerStat + itemBonus.spd)),
       };
 
-      return { base, awBonus, eqBonus, playerBonus: playerBonusVal, total };
+      return { base, awBonus, eqBonus, playerBonus: playerBonusVal, charBonus: charBonusVal, affectionBonus: affectionPerStat, itemBonus, total };
     } catch (e) {
       // Fallback absolu : stats brutes sans bonus
       const bs = def?.baseStats || _zero;
       return {
         base: { ...bs }, awBonus: { ..._zero }, eqBonus: { ..._zero }, playerBonus: 0,
+        charBonus: 0, affectionBonus: 0, itemBonus: { ..._zero },
         total: { hp: bs.hp||0, atk: bs.atk||0, def: bs.def||0, spd: bs.spd||0 },
       };
     }
@@ -2385,6 +2401,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const awBonus       = _fs.awBonus[statKey];
     const eqBonus       = _fs.eqBonus[statKey];
     const pb            = _fs.playerBonus;
+    const cb            = _fs.charBonus;
+    const affB          = statKey === 'hp' ? 0 : _fs.affectionBonus; // jamais sur l'Endurance
+    const itB           = _fs.itemBonus[statKey];
     const total         = _fs.total[statKey];
 
     const panel = document.createElement('div');
@@ -2420,6 +2439,21 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           <span class="sdb-icon">🌟</span>
           <span class="sdb-label">Bonus joueur</span>
           <span class="sdb-value">+${pb}</span>
+        </div>` : ''}
+        ${cb > 0 ? `<div class="sdb-row">
+          <span class="sdb-icon">✨</span>
+          <span class="sdb-label">Bonus individuel</span>
+          <span class="sdb-value">+${cb}</span>
+        </div>` : ''}
+        ${affB > 0 ? `<div class="sdb-row">
+          <span class="sdb-icon">💞</span>
+          <span class="sdb-label">Bonus Affection</span>
+          <span class="sdb-value">+${affB}</span>
+        </div>` : ''}
+        ${itB > 0 ? `<div class="sdb-row">
+          <span class="sdb-icon">🧪</span>
+          <span class="sdb-label">Élixirs utilisés</span>
+          <span class="sdb-value">+${itB}</span>
         </div>` : ''}
         <div class="sdb-row sdb-total">
           <span class="sdb-icon">∑</span>
