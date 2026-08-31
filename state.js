@@ -785,6 +785,27 @@ const CWGameState = (() => {
       return { success: true, energyGained: effect.amount };
     }
 
+    // Objet de boutique : boost PERMANENT d'une stat précise sur une personnage ciblée
+    if (effect.type === 'stat_boost') {
+      if (!targetInstanceId) return { success: false, reason: 'target_required' };
+      const inst = _state.player.collection.find(c => c.instanceId === targetInstanceId);
+      if (!inst) return { success: false, reason: 'target_not_found' };
+      inst.itemStatBonus = inst.itemStatBonus || { hp: 0, atk: 0, def: 0, spd: 0 };
+      inst.itemStatBonus[effect.stat] = (inst.itemStatBonus[effect.stat] || 0) + effect.amount;
+      _consumeItem(itemId);
+      return { success: true, stat: effect.stat, amount: effect.amount };
+    }
+
+    // Objet de boutique : boost d'Affinité sur une lignée NON possédée (typeId
+    // conservé sur l'objet pour un futur bonus selon le type ciblé)
+    if (effect.type === 'affinity_boost') {
+      if (!targetInstanceId) return { success: false, reason: 'target_required' }; // ici : evolutionLine ciblée
+      const result = addAffinityDirect(targetInstanceId, effect.amount);
+      if (!result) return { success: false, reason: 'target_not_found' };
+      _consumeItem(itemId);
+      return { success: true, ...result };
+    }
+
     return { success: false, reason: 'unsupported_effect' };
   }
 
@@ -1271,11 +1292,13 @@ const CWGameState = (() => {
     const charBonusFull = getCharacterStatBonus(inst).bonus;
     // Bonus d'AFFECTION : réparti sur les 3 stats jugées uniquement (jamais l'Endurance).
     const affectionPerStat = Math.round(getCharacterAffectionTier(inst).bonus / 3);
+    // Bonus PERMANENT des objets de boutique achetés et utilisés sur elle
+    const itemBonus = inst.itemStatBonus || { hp: 0, atk: 0, def: 0, spd: 0 };
     return {
-      hp:  computed.hp  + eqBonus.hp  + playerBonus + charBonusFull,
-      atk: computed.atk + eqBonus.atk + playerBonus + charBonusFull + affectionPerStat,
-      def: computed.def + eqBonus.def + playerBonus + charBonusFull + affectionPerStat,
-      spd: computed.spd + eqBonus.spd + playerBonus + charBonusFull + affectionPerStat,
+      hp:  computed.hp  + eqBonus.hp  + playerBonus + charBonusFull + itemBonus.hp,
+      atk: computed.atk + eqBonus.atk + playerBonus + charBonusFull + affectionPerStat + itemBonus.atk,
+      def: computed.def + eqBonus.def + playerBonus + charBonusFull + affectionPerStat + itemBonus.def,
+      spd: computed.spd + eqBonus.spd + playerBonus + charBonusFull + affectionPerStat + itemBonus.spd,
     };
   }
 
@@ -1457,6 +1480,27 @@ const CWGameState = (() => {
     _notify('affinityChanged');
     _autoSave();
     return { gain, current: next, unlocked };
+  }
+
+  /**
+   * Ajoute un montant FIXE d'affinité à une lignée (utilisé par les objets de
+   * boutique) — indépendant de la formule rareté/stade utilisée pour les gains
+   * de Défilé. Même logique de déblocage à 100%.
+   */
+  function addAffinityDirect(evolutionLine, amount) {
+    if (!evolutionLine || _isLineageOwned(evolutionLine)) return null;
+    const current = getAffinityPercent(evolutionLine);
+    const next = Math.min(100, current + amount);
+    _state.player.affinity = { ..._state.player.affinity, [evolutionLine]: next };
+
+    let unlocked = null;
+    if (next >= 100) {
+      const baseChar = _state.characters.find(c => c.evolutionLine === evolutionLine && c.evolutionStage === 0);
+      if (baseChar) unlocked = addCharacterToCollection(baseChar.id, 'affinity');
+    }
+    _notify('affinityChanged');
+    _autoSave();
+    return { gain: amount, current: next, unlocked };
   }
 
   /**
@@ -2403,7 +2447,7 @@ const CWGameState = (() => {
     getCharacterAffectionTier, addCharacterAffection, giveGiftToCharacter,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
-    getAffinityPercent, registerAffinityGain, getAllAffinityProgress,
+    getAffinityPercent, registerAffinityGain, addAffinityDirect, getAllAffinityProgress,
     registerReputationGain, placeCastingBid, getCastingConvictionBonus: _getCastingConvictionBonus, debugForceCasting,
     getStoryChapterProgress, completeStoryStage, isFeatureUnlocked,
     addDailyLoginCycle, updateDailyLoginCycle, removeDailyLoginCycle, getDailyLoginClaimable, claimDailyLoginReward,

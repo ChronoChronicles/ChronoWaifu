@@ -957,7 +957,6 @@ const CWGameUI = (() => {
     const hud    = document.getElementById('hud');
     const infoBar = document.getElementById('player-info-bar');
     if (!hud) return;
-    const energyPct = cfg.energy.enabled ? Math.round((player.energy.current / player.energy.max) * 100) : 100;
 
     if (infoBar) {
       const xpCurrent = Math.floor(player.experience || 0);
@@ -972,25 +971,10 @@ const CWGameUI = (() => {
       `;
     }
 
-    hud.innerHTML = `
-      <div class="hud-item">
-        <span class="hud-icon">💎</span>
-        <span class="hud-val">${player.currency.crystals.toLocaleString()}</span>
-      </div>
-      <div class="hud-item">
-        <span class="hud-icon">💵</span>
-        <span class="hud-val">${(player.currency.gold || 0).toLocaleString()}</span>
-      </div>
-      <div class="hud-item" title="Désir">
-        <span class="hud-icon">⚡</span>
-        <span class="hud-val">${cfg.energy.enabled ? `${player.energy.current}/${player.energy.max}` : '∞'}</span>
-        ${cfg.energy.enabled ? `<div class="hud-bar"><div class="hud-bar-fill" style="width:${energyPct}%"></div></div>` : ''}
-      </div>
-      <div class="hud-item">
-        <span class="hud-icon">🏆</span>
-        <span class="hud-val">${player.stats.totalVictories}V</span>
-      </div>
-    `;
+    // Bandeau d'indicateurs retiré (cristaux/énergie n'existent plus, $ et
+    // victoires visibles ailleurs si besoin).
+    hud.innerHTML = '';
+    hud.style.display = 'none';
     _updateNavDots();
   }
 
@@ -5689,26 +5673,41 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     }
   }
 
-  /** Ouvre une fenêtre de sélection de créature pour un objet ciblé (ex: Up de Lvl) */
+  /** Ouvre une fenêtre de sélection de cible pour un objet ciblé — une créature
+   *  possédée (stat_boost, level_up), ou une lignée NON possédée (affinity_boost) */
   function _openItemTargetModal(itemId) {
     const state = CWGameState.get();
     const itemDef = state.items.find(i => i.id === itemId);
     const modal = document.getElementById('modal');
     if (!itemDef || !modal) return;
 
-    const cards = state.player.collection.map(inst => {
-      const def = CWGameState.getCharDef(inst.charId);
-      if (!def) return '';
-      const rarityDef = CWGameDatabase.RARITIES[def.rarity] || {};
-      return `
-        <div class="equip-char-mini" data-iid="${inst.instanceId}" style="border-top:3px solid ${rarityDef.color || '#888'}">
-          ${def.portrait
-            ? `<img src="${def.portrait}" alt="${def.name}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;display:block;margin:0 auto 4px">`
-            : `<div class="portrait-ph" style="width:48px;height:48px;border-radius:6px;margin:0 auto 4px;font-size:1.2rem">${def.name.charAt(0)}</div>`}
-          <div class="equip-char-mini-name">${def.name}</div>
-          <div class="equip-char-mini-level">Niv.${inst.level}</div>
-        </div>`;
-    }).join('');
+    const isAffinity = itemDef.effect?.type === 'affinity_boost';
+
+    const cards = isAffinity
+      ? CWGameState.getAllAffinityProgress().map(p => {
+          const rd = CWGameDatabase.RARITIES[p.baseChar.rarity] || {};
+          return `
+            <div class="equip-char-mini" data-iid="${p.baseChar.evolutionLine}" style="border-top:3px solid ${rd.color || '#888'}">
+              ${p.percent > 0 && p.baseChar.portrait
+                ? `<img src="${p.baseChar.portrait}" alt="${p.baseChar.name}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;display:block;margin:0 auto 4px">`
+                : `<div class="portrait-ph" style="width:48px;height:48px;border-radius:6px;margin:0 auto 4px;font-size:1.2rem">?</div>`}
+              <div class="equip-char-mini-name">${p.percent > 0 ? p.baseChar.name : '???'}</div>
+              <div class="equip-char-mini-level">${p.percent}% Affinité</div>
+            </div>`;
+        }).join('')
+      : state.player.collection.map(inst => {
+          const def = CWGameState.getCharDef(inst.charId);
+          if (!def) return '';
+          const rarityDef = CWGameDatabase.RARITIES[def.rarity] || {};
+          return `
+            <div class="equip-char-mini" data-iid="${inst.instanceId}" style="border-top:3px solid ${rarityDef.color || '#888'}">
+              ${def.portrait
+                ? `<img src="${def.portrait}" alt="${def.name}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;display:block;margin:0 auto 4px">`
+                : `<div class="portrait-ph" style="width:48px;height:48px;border-radius:6px;margin:0 auto 4px;font-size:1.2rem">${def.name.charAt(0)}</div>`}
+              <div class="equip-char-mini-name">${def.name}</div>
+              <div class="equip-char-mini-level">Niv.${inst.level}</div>
+            </div>`;
+        }).join('');
 
     modal.style.display = 'block';
     modal.innerHTML = `
@@ -5716,9 +5715,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         <div class="modal-box">
           <button class="modal-close" id="modal-close">✕</button>
           <h3 style="font-family:var(--font-display);margin:0 0 4px">${itemDef.icon || '📦'} ${itemDef.name}</h3>
-          <p style="font-size:.8rem;color:var(--text-dim);margin:0 0 14px">Choisis la créature à cibler.</p>
+          <p style="font-size:.8rem;color:var(--text-dim);margin:0 0 14px">${isAffinity ? 'Choisis la lignée à qui offrir ce cadeau.' : 'Choisis la créature à cibler.'}</p>
           <div class="equip-char-picker">
-            ${cards || '<p class="empty-msg" style="margin:0;padding:.5rem">Aucune créature dans la collection.</p>'}
+            ${cards || `<p class="empty-msg" style="margin:0;padding:.5rem">${isAffinity ? 'Toutes les lignées disponibles sont déjà dans ta collection !' : 'Aucune créature dans la collection.'}</p>`}
           </div>
         </div>
       </div>
@@ -5763,6 +5762,17 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       _showToast(`${def?.name || 'La créature'} est passée au niveau ${result.finalLevel} ! ${itemDef.icon || ''}`, 'success');
     } else if (itemDef.effect.type === 'energy_regen') {
       _showToast(`+${result.energyGained} ⚡ Désir ! ${itemDef.icon || ''}`, 'success');
+    } else if (itemDef.effect.type === 'stat_boost') {
+      const inst = CWGameState.getPlayerChar(targetInstanceId);
+      const def  = inst ? CWGameState.getCharDef(inst.charId) : null;
+      const statLabels = { atk: 'Charisme', def: 'Prestance', spd: 'Grâce', hp: 'Endurance' };
+      _showToast(`${def?.name || 'Elle'} gagne +${result.amount} ${statLabels[result.stat] || result.stat} définitivement ! ${itemDef.icon || ''}`, 'success');
+    } else if (itemDef.effect.type === 'affinity_boost') {
+      if (result.unlocked) {
+        _showToast(`✨ Affinité complète ! Une nouvelle actrice rejoint ta collection !`, 'success');
+      } else {
+        _showToast(`+${result.gain} Affinité (${result.current}%) ${itemDef.icon || ''}`, 'success');
+      }
     }
 
     if (_currentScreen === 'inventory') renderInventory();

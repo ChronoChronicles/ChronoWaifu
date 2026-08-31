@@ -993,6 +993,18 @@ const CWGameDatabase = (() => {
       amountLabel: 'Désir regagné',
       requiresTarget: false,  // s'applique directement au joueur
     },
+    stat_boost: {
+      label: 'Boost de stat permanent',
+      description: 'Ajoute définitivement des points à une stat précise de l\'actrice choisie.',
+      amountLabel: 'Points ajoutés',
+      requiresTarget: true,   // nécessite de choisir une créature
+    },
+    affinity_boost: {
+      label: "Boost d'Affinité",
+      description: "Ajoute un montant fixe d'Affinité à une lignée non encore possédée.",
+      amountLabel: "Affinité ajoutée",
+      requiresTarget: true,   // nécessite de choisir une lignée (evolutionLine)
+    },
   };
 
   const DEFAULT_ITEMS = [
@@ -1012,6 +1024,19 @@ const CWGameDatabase = (() => {
       stackable: true,
       effect: { type: 'energy_regen', amount: 50 },
     },
+    // ── Objets de stat (un par stat, achetables en boutique) ────────────────────
+    { id: 'item_stat_charisme',  name: 'Élixir de Charisme',  icon: '✨', description: "Ajoute +1 Charisme définitivement à l'actrice choisie.",  stackable: true, effect: { type: 'stat_boost', stat: 'atk', amount: 1 } },
+    { id: 'item_stat_prestance', name: 'Élixir de Prestance', icon: '🌹', description: "Ajoute +1 Prestance définitivement à l'actrice choisie.", stackable: true, effect: { type: 'stat_boost', stat: 'def', amount: 1 } },
+    { id: 'item_stat_grace',     name: 'Élixir de Grâce',     icon: '🕊️', description: "Ajoute +1 Grâce définitivement à l'actrice choisie.",     stackable: true, effect: { type: 'stat_boost', stat: 'spd', amount: 1 } },
+    { id: 'item_stat_endurance', name: 'Élixir d\'Endurance', icon: '💗', description: "Ajoute +10 Endurance définitivement à l'actrice choisie.", stackable: true, effect: { type: 'stat_boost', stat: 'hp', amount: 10 } },
+    // ── Objets d'Affinité — 3 paliers par type existant, générés automatiquement ──
+    // Toutes donnent le même montant de base pour l'instant (le typeId est
+    // conservé sur chaque objet pour un futur bonus selon le type ciblé).
+    ...DEFAULT_TYPES.flatMap(t => [
+      { id: `item_affinity_small_${t.id}`,  name: `Petit cadeau d'Affinité — ${t.name}`,  icon: t.icon, description: `Ajoute un peu d'Affinité avec une lignée non possédée (type ${t.name}).`,  stackable: true, effect: { type: 'affinity_boost', typeId: t.id, amount: 3 } },
+      { id: `item_affinity_medium_${t.id}`, name: `Cadeau moyen d'Affinité — ${t.name}`,   icon: t.icon, description: `Ajoute une quantité moyenne d'Affinité avec une lignée non possédée (type ${t.name}).`, stackable: true, effect: { type: 'affinity_boost', typeId: t.id, amount: 8 } },
+      { id: `item_affinity_large_${t.id}`,  name: `Grand cadeau d'Affinité — ${t.name}`,   icon: t.icon, description: `Ajoute beaucoup d'Affinité avec une lignée non possédée (type ${t.name}).`,  stackable: true, effect: { type: 'affinity_boost', typeId: t.id, amount: 15 } },
+    ]),
   ];
 
   // ─── BOUTIQUE ───────────────────────────────────────────────────────────────────
@@ -1021,6 +1046,17 @@ const CWGameDatabase = (() => {
   const DEFAULT_SHOP_LISTINGS = [
     { id: 'shop_1781970094272', kind: 'equipment', refId: 'ArmureC', price: 100, currency: 'gold', enabled: true },
     { id: 'shop_1781970134789', kind: 'item', refId: 'item_power_pill', price: 100, currency: 'crystals', enabled: true },
+    // ── Objets de stat ──────────────────────────────────────────────────────────
+    { id: 'shop_stat_charisme',  kind: 'item', refId: 'item_stat_charisme',  price: 800,  currency: 'gold', enabled: true },
+    { id: 'shop_stat_prestance', kind: 'item', refId: 'item_stat_prestance', price: 800,  currency: 'gold', enabled: true },
+    { id: 'shop_stat_grace',     kind: 'item', refId: 'item_stat_grace',     price: 800,  currency: 'gold', enabled: true },
+    { id: 'shop_stat_endurance', kind: 'item', refId: 'item_stat_endurance', price: 800,  currency: 'gold', enabled: true },
+    // ── Objets d'Affinité — 3 paliers x 11 types, générés automatiquement ────────
+    ...DEFAULT_TYPES.flatMap(t => [
+      { id: `shop_affinity_small_${t.id}`,  kind: 'item', refId: `item_affinity_small_${t.id}`,  price: 300,  currency: 'gold', enabled: true },
+      { id: `shop_affinity_medium_${t.id}`, kind: 'item', refId: `item_affinity_medium_${t.id}`, price: 700,  currency: 'gold', enabled: true },
+      { id: `shop_affinity_large_${t.id}`,  kind: 'item', refId: `item_affinity_large_${t.id}`,  price: 1400, currency: 'gold', enabled: true },
+    ]),
   ];
 
   // ─── RÉCOMPENSE DE CONNEXION QUOTIDIENNE ────────────────────────────────────────
