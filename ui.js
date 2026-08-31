@@ -1324,10 +1324,10 @@ const CWGameUI = (() => {
       { label: '💵 $ gagnés',             value: (stats.totalGoldEarned||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('goldEarned') },
       { label: '🎬 Réputation gagnée',    value: (stats.totalReputationEarned||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('reputationEarned') },
       { label: '💫 Aura totale',          value: (CWGameState.getPlayerAuraScoreTotal?.()||0).toLocaleString('fr-FR'), highlight: true, progress: _progressBarHtml('scoreTotal') },
-      { label: '💃 Défilés',              value: (stats.totalDefiles||0).toLocaleString('fr-FR'), highlight: false },
-      { label: '🏆 Défilés Remportés',    value: (stats.totalDefilesWon||0).toLocaleString('fr-FR'), highlight: false },
-      { label: '🎬 Tournages Remportés',  value: (stats.totalPassagesWon||0).toLocaleString('fr-FR'), highlight: false },
-      { label: '🌟 Popularité',           value: (stats.totalPopularity||0).toLocaleString('fr-FR'), highlight: true },
+      { label: '💃 Défilés',              value: (stats.totalDefiles||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('defiles') },
+      { label: '🏆 Défilés Remportés',    value: (stats.totalDefilesWon||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('defilesWon') },
+      { label: '🎬 Tournages Remportés',  value: (stats.totalPassagesWon||0).toLocaleString('fr-FR'), highlight: false, progress: _progressBarHtml('passagesWon') },
+      { label: '🌟 Popularité',           value: (stats.totalPopularity||0).toLocaleString('fr-FR'), highlight: true, progress: _progressBarHtml('popularity') },
     ];
     const statsEl = document.getElementById('pm-stats-grid');
     if (statsEl) statsEl.innerHTML = statCards.map(s => `

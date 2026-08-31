@@ -307,6 +307,11 @@ const CWGameDatabase = (() => {
       // ── Score Aura (calculé en direct, pas un compteur cumulé) ──────────────
       scoreTotal: { every: 50000, label: 'Aura totale (collection)' },
       galleryEntries:  { every: 10,  label: 'Entrées débloquées (Galerie)' },
+      // ── Défilé ───────────────────────────────────────────────────────────────
+      defiles:        { every: 20,  label: 'Défilés' },
+      defilesWon:     { every: 10,  label: 'Défilés remportés' },
+      passagesWon:    { every: 50,  label: 'Tournages remportés' },
+      popularity:     { every: 500, label: 'Popularité totale' },
       // ── Bonus par niveau joueur (pas un compteur — géré à part) ─────────────
       perLevelBonus: 2, // +2 points de stat par niveau, dès le niveau 2
     },

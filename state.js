@@ -1134,6 +1134,10 @@ const CWGameState = (() => {
       goldEarned: stats.totalGoldEarned  || 0,
       reputationEarned: stats.totalReputationEarned || 0,
       galleryEntries:  Object.keys(_state.player.catalogue || {}).length,
+      defiles:      stats.totalDefiles     || 0,
+      defilesWon:   stats.totalDefilesWon  || 0,
+      passagesWon:  stats.totalPassagesWon || 0,
+      popularity:   stats.totalPopularity  || 0,
     };
     // Score Aura : ce n'est PAS un compteur stocké mais une valeur recalculée
     // en direct à partir de toute la collection.

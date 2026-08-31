@@ -4870,6 +4870,10 @@ const CWAdminPanel = (() => {
               awakenings: state.player.stats?.totalAwakenings || 0,
               goldEarned: state.player.stats?.totalGoldEarned || 0,
               reputationEarned: state.player.stats?.totalReputationEarned || 0,
+              defiles:      state.player.stats?.totalDefiles     || 0,
+              defilesWon:   state.player.stats?.totalDefilesWon  || 0,
+              passagesWon:  state.player.stats?.totalPassagesWon || 0,
+              popularity:   state.player.stats?.totalPopularity  || 0,
               scoreTotal: CWGameState.getPlayerAuraScoreTotal?.() || 0,
               galleryEntries:  Object.keys(state.player.catalogue || {}).length,
             }[key] || 0;
@@ -7021,7 +7025,7 @@ const CWAdminPanel = (() => {
       },
     };
     // Bonus joueur — préserve les valeurs actuelles si cet onglet n'est pas affiché
-    const bonusKeys = ['captures','evolutions','awakenings','goldEarned','reputationEarned','scoreTotal','galleryEntries'];
+    const bonusKeys = ['captures','evolutions','awakenings','goldEarned','reputationEarned','scoreTotal','galleryEntries','defiles','defilesWon','passagesWon','popularity'];
     const defaultBonus = CWGameDatabase.DEFAULT_CONFIG.playerBonus;
     const currentBonus = state.config.playerBonus || {};
     const playerBonus = {};
