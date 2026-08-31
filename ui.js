@@ -841,7 +841,14 @@ const CWGameUI = (() => {
       { id:'defile-random', icon:'🎲', name:'Défilé Aléatoire', desc:'9 personnages contre 9, une seule utilisation chacune', featured:false,
         unlocked: lineageCount >= unlockLineages,
         lockedDesc: `🔒 Possède ${unlockLineages} lignées différentes (${lineageCount}/${unlockLineages})` },
-      { id:'casting',      icon:'🎬', name:'Grand Casting',    desc:'Recrute de nouvelles actrices par enchères',          featured:false, unlocked:true, lockedDesc:'' },
+      { id:'casting',      icon:'🎬', name:'Grand Casting',
+        desc: state.player.currentCasting
+          ? `✨ ${(state.player.reputation || 0).toLocaleString('fr-FR')} 🎬 disponibles — vas-y !`
+          : `${(state.player.reputation || 0).toLocaleString('fr-FR')} 🎬 — ${Math.max(0, (state.player.castingThreshold || 0) - (state.player.defilesSinceLastCasting || 0))} Défilé(s) avant ouverture`,
+        lockedDesc: `${(state.player.reputation || 0).toLocaleString('fr-FR')} 🎬 — ${Math.max(0, (state.player.castingThreshold || 0) - (state.player.defilesSinceLastCasting || 0))} Défilé(s) avant ouverture`,
+        featured: !!state.player.currentCasting,
+        castingOpen: !!state.player.currentCasting, // effet visuel spécial, distinct de "featured"
+        unlocked: !!state.player.currentCasting },
     ];
 
     const grid = document.getElementById('cs-grid');
@@ -852,8 +859,10 @@ const CWGameUI = (() => {
       if (m.eventSub)      cls += ' event-sub';
       if (!m.unlocked)     cls += ' locked';
       if (m.unlocked)      cls += ' unlocked';
+      if (m.castingOpen)   cls += ' casting-open';
       return `<div class="${cls}" data-mode="${m.id}"
         style="${!m.unlocked ? 'opacity:.45;cursor:not-allowed' : ''}">
+        ${m.castingOpen ? '<div class="casting-open-badge">✨ OUVERT !</div>' : ''}
         <div class="cs-card-icon">${m.icon}${!m.unlocked ? ' 🔒' : ''}</div>
         <div class="cs-card-name">${m.name}</div>
         <div class="cs-card-desc">${m.unlocked ? m.desc : m.lockedDesc}</div>
@@ -7503,18 +7512,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const casting = player.currentCasting;
 
     if (!casting) {
-      const remaining = Math.max(0, (player.castingThreshold || 0) - (player.defilesSinceLastCasting || 0));
       el.innerHTML = `
         <div class="screen-header"><h2>🎬 Grand Casting</h2></div>
-        <p class="defile-help">
-          Des agences rivales et toi disputez le recrutement des prochaines
-          candidates. Un nouveau Casting s'ouvre tous les 25 à 30 Défilés.
+        <p class="empty-msg">
+          Aucun Casting ouvert pour l'instant — reviens plus tard, ou consulte
+          l'écran de sélection de combat pour voir ta progression.
         </p>
-        <div class="casting-progress-card">
-          <div class="casting-rep-label">Réputation accumulée</div>
-          <div class="casting-rep-value">🎬 ${(player.reputation || 0).toLocaleString('fr-FR')}</div>
-          <div class="casting-countdown">${remaining} Défilé${remaining > 1 ? 's' : ''} avant le prochain Casting</div>
-        </div>
         <button class="btn-secondary" id="btn-debug-force-casting" style="width:100%;margin-top:14px;">
           🧪 [TEST] +10 000 Réputation et ouvrir un Casting
         </button>
