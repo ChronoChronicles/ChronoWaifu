@@ -2000,7 +2000,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                       const gauge = d ? `
                         <div class="pm-stat-progress">
                           <div class="pm-stat-progress-bar"><div class="pm-stat-progress-fill" style="width:${Math.round(((count % d.every) / d.every) * 100)}%"></div></div>
-                          <div class="pm-stat-progress-label">${d.every - (count % d.every)} avant +1 (réparti sur Charisme/Prestance/Grâce) — <strong>+${d.points}</strong> gagnés</div>
+                          <div class="pm-stat-progress-label">${d.every - (count % d.every)} avant +1 stats — <strong>+${d.points}</strong> gagnés</div>
                         </div>` : '';
                       return `
                         <div class="detail-history-row" style="flex-direction:column;align-items:stretch;gap:4px;">
@@ -2016,8 +2016,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                       ${gaugeRow('🎬', 'Tournages Remportés', inst.passagesWon || 0, 'passagesWon')}
                       ${gaugeRow('🌟', 'Popularité', inst.popularityEarned || 0, 'popularityEarned')}
                       <div class="detail-history-row" style="border-top:1px solid rgba(255,255,255,.1);margin-top:4px;padding-top:8px;">
-                        <span>✨ Bonus stats individuel (Endurance/Charisme/Prestance/Grâce)</span>
-                        <strong style="color:#a78bfa;">+${charBonus.bonus} à chacune des 4</strong>
+                        <span>✨ Bonus stats individuel</span>
+                        <strong style="color:#a78bfa;">+${charBonus.bonus}</strong>
                       </div>`;
                   })()}
                 </div>
@@ -2032,7 +2032,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                     return `
                       <div class="detail-affection-header">
                         <span>💞 Affection — Niveau ${tier.level}</span>
-                        <strong style="color:#f472b6;">+${tier.bonus} chacune (Charisme/Prestance/Grâce)</strong>
+                        <strong style="color:#f472b6;">+${tier.bonus}</strong>
                       </div>
                       <div class="pm-stat-progress">
                         <div class="pm-stat-progress-bar"><div class="pm-stat-progress-fill" style="width:${pct}%;background:linear-gradient(90deg,#f472b6,#f9a8d4);"></div></div>
