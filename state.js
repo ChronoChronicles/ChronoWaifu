@@ -185,6 +185,21 @@ const CWGameState = (() => {
       awakening:   { ...defaults.awakening,   ...(saved.awakening   || {}) },
       shop:        { ...(defaults.shop        || {}), ...(saved.shop        || {}) },
       playerBonus: { ...(defaults.playerBonus || {}), ...(saved.playerBonus || {}) },
+      characterBonus: { ...(defaults.characterBonus || {}), ...(saved.characterBonus || {}) },
+      affection:   {
+        ...(defaults.affection || {}), ...(saved.affection || {}),
+        // tableaux : on garde la sauvegarde SI elle existe et n'est pas vide,
+        // sinon les nouveaux paliers/cadeaux par défaut ne remonteraient jamais
+        tiers: (saved.affection?.tiers?.length > 0) ? saved.affection.tiers : (defaults.affection?.tiers || []),
+        gifts: (saved.affection?.gifts?.length > 0) ? saved.affection.gifts : (defaults.affection?.gifts || []),
+      },
+      fashionWeek: {
+        ...(defaults.fashionWeek || {}), ...(saved.fashionWeek || {}),
+        activities:   (saved.fashionWeek?.activities?.length   > 0) ? saved.fashionWeek.activities   : (defaults.fashionWeek?.activities   || []),
+        dailyBonuses: (saved.fashionWeek?.dailyBonuses?.length > 0) ? saved.fashionWeek.dailyBonuses : (defaults.fashionWeek?.dailyBonuses || []),
+        crisisEvents: (saved.fashionWeek?.crisisEvents?.length > 0) ? saved.fashionWeek.crisisEvents : (defaults.fashionWeek?.crisisEvents || []),
+        shopItems:    (saved.fashionWeek?.shopItems?.length    > 0) ? saved.fashionWeek.shopItems    : (defaults.fashionWeek?.shopItems    || []),
+      },
       event:       { ...(defaults.event       || {}), ...(saved.event       || {}) },
       backgrounds: { ...(defaults.backgrounds || {}), ...(saved.backgrounds || {}) },
       // Contenu narratif — toujours préserver intégralement depuis la sauvegarde
@@ -1341,10 +1356,10 @@ const CWGameState = (() => {
     return slots;
   }
 
-  /** Démarre officiellement la run avec le roster choisi (instanceIds, taille = cfg.rosterSize) */
+  /** Démarre officiellement la run avec le roster choisi (instanceIds, taille = cfg.slotsPerDay) */
   function startFashionWeekRun(instanceIds) {
     const cfg = _fwCfg();
-    if (!Array.isArray(instanceIds) || instanceIds.length !== cfg.rosterSize) return null;
+    if (!Array.isArray(instanceIds) || instanceIds.length !== cfg.slotsPerDay) return null;
 
     const roster = instanceIds.map(iid => ({
       instanceId: iid,

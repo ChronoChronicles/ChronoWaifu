@@ -356,7 +356,9 @@ const CWGameDatabase = (() => {
 
     // ─── SEMAINE DE MODE (roguelike) ──────────────────────────────────────────
     fashionWeek: {
-      rosterSize: 3,           // nombre de personnages à choisir pour la run (= slotsPerDay, une par créneau)
+      // (le nombre de personnages du roster = slotsPerDay, calculé directement
+      // partout où c'est nécessaire — jamais stocké séparément, pour qu'aucune
+      // sauvegarde périmée ne puisse un jour désynchroniser les deux valeurs)
       rosterChoiceCount: 6,    // parmi combien de candidates proposées
       slotsPerDay: 3,          // créneaux par jour (Matin / Après-midi / Soir)
       slotLabels: ['🌅 Matin', '☀️ Après-midi', '🌙 Soir'],
