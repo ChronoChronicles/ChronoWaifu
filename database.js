@@ -356,9 +356,10 @@ const CWGameDatabase = (() => {
 
     // ─── SEMAINE DE MODE (roguelike) ──────────────────────────────────────────
     fashionWeek: {
-      rosterSize: 2,           // nombre de personnages à choisir pour la run
+      rosterSize: 3,           // nombre de personnages à choisir pour la run (= slotsPerDay, une par créneau)
       rosterChoiceCount: 6,    // parmi combien de candidates proposées
       slotsPerDay: 3,          // créneaux par jour (Matin / Après-midi / Soir)
+      slotLabels: ['🌅 Matin', '☀️ Après-midi', '🌙 Soir'],
       daysPerWeek: 6,          // Lundi à Samedi
       crisisChance: 0.35,      // probabilité qu'un créneau devienne une Gestion de Crise
       exceptionalThresholdMult: 1.5, // score ≥ seuil x ce multiplicateur = Réussite Éclatante

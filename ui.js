@@ -7415,6 +7415,32 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   let _fwRosterCandidates = [];
   let _fwRosterSelection = [];
 
+  /** Reproduit exactement la carte de personnage du Défilé (portrait, types, 3 stats) */
+  function _fwCharCardHtml(inst, extraFooterHtml = '') {
+    const state = CWGameState.get();
+    const def = CWGameState.getCharDef(inst.charId);
+    const finalStats = CWGameState.getCharacterFinalStats(inst);
+    const typeBadge = (typeId) => {
+      const t = state.types.find(tt => tt.id === typeId);
+      if (!t) return '';
+      return `<span class="defile-type-badge" style="background:${t.color}">${t.icon}</span>`;
+    };
+    return `
+      <div class="defile-fighter-card">
+        <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
+        <div class="defile-fighter-card-info">
+          <div class="defile-chip-name">${def.name}</div>
+          <div class="defile-chip-types">${typeBadge(def.type1)}${typeBadge(def.type2)}</div>
+          <div class="defile-chip-stats-grid">
+            <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">✨</span><span class="defile-chip-stat-value">${finalStats.atk}</span></div>
+            <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🌹</span><span class="defile-chip-stat-value">${finalStats.def}</span></div>
+            <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🕊️</span><span class="defile-chip-stat-value">${finalStats.spd}</span></div>
+          </div>
+          ${extraFooterHtml}
+        </div>
+      </div>`;
+  }
+
   function renderFashionWeekRoster() {
     const el = document.getElementById('screen-fashion-week-roster');
     if (!el) return;
@@ -7446,19 +7472,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         ${cfg.currencyIcon} ${cfg.currencyName} à la fin, une monnaie propre à ce mode.
       </p>
       <div class="team-select-counter" id="fwr-counter">0 / ${cfg.rosterSize} sélectionnées</div>
-      <div class="team-select-grid">
+      <div class="fw-roster-pick-grid">
         ${_fwRosterCandidates.map(iid => {
           const inst = CWGameState.getPlayerChar(iid);
-          const def = CWGameState.getCharDef(inst.charId);
-          if (!def) return '';
-          const rd = CWGameDatabase.RARITIES[def.rarity] || {};
-          return `
-            <div class="team-select-card" data-iid="${iid}" style="border-color:${rd.color || '#888'}">
-              <div class="team-select-portrait">${_combatPortraitImgHtml(def)}</div>
-              <div class="team-select-name">${def.name}</div>
-              <div class="team-select-level">Niv.${inst.level}</div>
-              <div class="team-select-check">✓</div>
-            </div>`;
+          return `<div class="fw-roster-pick-card" data-iid="${iid}">${_fwCharCardHtml(inst)}</div>`;
         }).join('')}
       </div>
       <button class="btn-primary" id="fwr-launch" style="width:100%;margin-top:16px;" disabled>
@@ -7474,7 +7491,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       launchBtn.disabled = _fwRosterSelection.length !== cfg.rosterSize;
     };
 
-    el.querySelectorAll('.team-select-card').forEach(card => {
+    el.querySelectorAll('.fw-roster-pick-card').forEach(card => {
       card.addEventListener('click', () => {
         const iid = card.dataset.iid;
         const idx = _fwRosterSelection.indexOf(iid);
@@ -7529,16 +7546,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       <div class="fw-roster-row">
         ${run.roster.map(m => {
           const inst = CWGameState.getPlayerChar(m.instanceId);
-          const def = CWGameState.getCharDef(inst.charId);
-          return `
-            <div class="fw-roster-card">
-              <div class="fw-roster-portrait">${_combatPortraitImgHtml(def)}</div>
-              <div class="fw-roster-name">${def.name}</div>
-              <div class="fw-endurance-bar-track"><div class="fw-endurance-bar-fill" style="width:${m.endurance}%"></div></div>
-              <div class="fw-endurance-label">${m.endurance}/100</div>
-            </div>`;
+          const enduranceFooter = `
+            <div class="fw-endurance-bar-track"><div class="fw-endurance-bar-fill" style="width:${m.endurance}%"></div></div>
+            <div class="fw-endurance-label">Forme : ${m.endurance}/100</div>`;
+          return `<div class="fw-roster-card-wrap">${_fwCharCardHtml(inst, enduranceFooter)}</div>`;
         }).join('')}
       </div>
+      <div class="fw-calendar-title">${cfg.slotLabels?.join(' · ') || 'Programme du jour'}</div>
       <div class="fw-slots">
         ${run.daySchedule.map((slot, idx) => _fwSlotCardHtml(slot, idx, run, cfg)).join('')}
       </div>
@@ -7562,11 +7576,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   function _fwSlotCardHtml(slot, idx, run, cfg) {
     const assignedInst = slot.assignedTo ? CWGameState.getPlayerChar(slot.assignedTo) : null;
     const assignedDef = assignedInst ? CWGameState.getCharDef(assignedInst.charId) : null;
+    const slotTimeLabel = cfg.slotLabels?.[idx] || `Créneau ${idx + 1}`;
 
     if (slot.type === 'crisis') {
       const crisis = cfg.crisisEvents.find(c => c.id === slot.refId);
       return `
         <div class="fw-slot-card fw-slot-crisis ${slot.resolved ? 'resolved' : ''}" data-slot="${idx}">
+          <div class="fw-slot-time-label">${slotTimeLabel}</div>
           <div class="fw-slot-header">🚨 Gestion de Crise</div>
           <div class="fw-slot-desc">${crisis?.label || '?'}</div>
           ${slot.resolved ? `
@@ -7584,6 +7600,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     if (slot.resolved) {
       return `
         <div class="fw-slot-card resolved">
+          <div class="fw-slot-time-label">${slotTimeLabel}</div>
           <div class="fw-slot-header">${act?.icon || ''} ${act?.label || '?'}</div>
           ${assignedDef ? `<div class="fw-slot-assigned">${assignedDef.name}</div>` : ''}
           <div class="fw-slot-result">${FW_OUTCOME_LABEL[slot.result.outcome]} — +${slot.result.pointsGained} pts</div>
@@ -7592,6 +7609,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     return `
       <div class="fw-slot-card" data-slot="${idx}">
+        <div class="fw-slot-time-label">${slotTimeLabel}</div>
         <div class="fw-slot-header">${act?.icon || ''} ${act?.label || '?'}</div>
         ${act?.stat ? `<div class="fw-slot-req">${FW_STAT_LABEL_UI[act.stat]} requis : ≥ ${act.threshold}</div>` : ''}
         <div class="fw-slot-endurance-cost">Coût : ${act?.enduranceCost > 0 ? `-${act.enduranceCost}` : `+${-act.enduranceCost}`} Endurance</div>
@@ -7682,7 +7700,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
               const def = CWGameState.getCharDef(inst.charId);
               return `
                 <div class="equip-char-mini" data-iid="${m.instanceId}">
-                  ${_combatPortraitImgHtml(def)}
+                  <div class="equip-char-mini-portrait">${_combatPortraitImgHtml(def)}</div>
                   <div class="equip-char-mini-name">${def.name}</div>
                   <div class="equip-char-mini-level">Forme : ${m.endurance}/100</div>
                 </div>`;
