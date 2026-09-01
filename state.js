@@ -1333,10 +1333,13 @@ const CWGameState = (() => {
   function _fwCfg() { return _state.config?.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek; }
 
   /** Propose "rosterChoiceCount" personnages au hasard pour démarrer une run (pas encore lancée) */
-  function proposeFashionWeekRoster() {
+  /** Propose 3 candidates au hasard pour UN tour de sélection, en excluant celles déjà choisies (tours précédents) */
+  function proposeFashionWeekRoundCandidates(excludeInstanceIds = []) {
     const cfg = _fwCfg();
-    const shuffled = [..._state.player.collection].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, Math.min(cfg.rosterChoiceCount, shuffled.length)).map(inst => inst.instanceId);
+    const excluded = new Set(excludeInstanceIds);
+    const pool = _state.player.collection.filter(inst => !excluded.has(inst.instanceId));
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.min(3, shuffled.length)).map(inst => inst.instanceId);
   }
 
   /** Tire au sort le contenu d'une journée : "slotsPerDay" créneaux, chacun une activité OU une Gestion de Crise */
@@ -2799,7 +2802,7 @@ const CWGameState = (() => {
     trackEventQuestProgress, claimEventQuest, planifyNextEvent, cancelNextEvent, getPlayerStatBonus,
     getCharacterAuraScore, getCharacterFinalStats, getCharacterStatBonus, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
     getCharacterAffectionTier, addCharacterAffection, giveGiftToCharacter,
-    proposeFashionWeekRoster, startFashionWeekRun, assignFashionWeekSlot, unassignFashionWeekSlot,
+    proposeFashionWeekRoundCandidates, startFashionWeekRun, assignFashionWeekSlot, unassignFashionWeekSlot,
     resolveFashionWeekActivity, resolveFashionWeekCrisis, skipFashionWeekSlot, isFashionWeekDayComplete,
     proposeFashionWeekDailyBonuses, chooseFashionWeekBonus, advanceFashionWeekDay, rerollFashionWeekDay,
     endFashionWeekRun, buyFashionWeekItem,

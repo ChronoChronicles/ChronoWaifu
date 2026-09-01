@@ -7412,8 +7412,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   // ─── SEMAINE DE MODE ─────────────────────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════════════════════
 
-  let _fwRosterCandidates = [];
   let _fwRosterSelection = [];
+  let _fwRosterSeen = [];
 
   /** Reproduit exactement la carte de personnage du Défilé (portrait, types, 3 stats) */
   function _fwCharCardHtml(inst, extraFooterHtml = '') {
@@ -7461,57 +7461,49 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       return;
     }
 
-    _fwRosterCandidates = CWGameState.proposeFashionWeekRoster();
     _fwRosterSelection = [];
+    _fwRosterSeen = []; // toutes les candidates déjà proposées (choisies ou non), jamais reproposées
+    _fwRenderRosterRound(cfg);
+  }
+
+  /** Affiche UN tour de sélection (3 candidates, choix de 1) */
+  function _fwRenderRosterRound(cfg) {
+    const el = document.getElementById('screen-fashion-week-roster');
+    const round = _fwRosterSelection.length; // 0, 1, 2
+    const candidates = CWGameState.proposeFashionWeekRoundCandidates(_fwRosterSeen);
+    _fwRosterSeen.push(...candidates);
 
     el.innerHTML = `
-      <div class="screen-header"><h2>🗓️ Semaine de Mode</h2></div>
+      <div class="screen-header"><h2>🗓️ Semaine de Mode — Tour ${round + 1}/${cfg.slotsPerDay}</h2></div>
       <p class="defile-help">
-        Choisis ${cfg.slotsPerDay} personnages parmi les ${_fwRosterCandidates.length} proposées pour cette semaine.
-        Aucune récompense classique (XP, Affinité) — les points se convertissent en
-        ${cfg.currencyIcon} ${cfg.currencyName} à la fin, une monnaie propre à ce mode.
+        Choisis 1 personnage parmi les 3 proposées. Aucune récompense classique
+        (XP, Affinité) — les points se convertissent en ${cfg.currencyIcon} ${cfg.currencyName}
+        à la fin, une monnaie propre à ce mode.
       </p>
-      <div class="team-select-counter" id="fwr-counter">0 / ${cfg.slotsPerDay} sélectionnées</div>
       <div class="fw-roster-pick-grid">
-        ${_fwRosterCandidates.map(iid => {
+        ${candidates.map(iid => {
           const inst = CWGameState.getPlayerChar(iid);
           return `<div class="fw-roster-pick-card" data-iid="${iid}">${_fwCharCardHtml(inst)}</div>`;
         }).join('')}
       </div>
-      <button class="btn-primary" id="fwr-launch" style="width:100%;margin-top:16px;" disabled>
-        Démarrer la semaine (0/${cfg.slotsPerDay})
-      </button>
+      ${_fwRosterSelection.length > 0 ? `
+        <div class="fw-roster-picked-row">
+          Déjà choisies : ${_fwRosterSelection.map(iid => CWGameState.getCharDef(CWGameState.getPlayerChar(iid).charId).name).join(', ')}
+        </div>
+      ` : ''}
     `;
-
-    const counterEl = document.getElementById('fwr-counter');
-    const launchBtn = document.getElementById('fwr-launch');
-    const updateUI = () => {
-      counterEl.textContent = `${_fwRosterSelection.length} / ${cfg.slotsPerDay} sélectionnées`;
-      launchBtn.textContent = `Démarrer la semaine (${_fwRosterSelection.length}/${cfg.slotsPerDay})`;
-      launchBtn.disabled = _fwRosterSelection.length !== cfg.slotsPerDay;
-    };
 
     el.querySelectorAll('.fw-roster-pick-card').forEach(card => {
       card.addEventListener('click', () => {
-        const iid = card.dataset.iid;
-        const idx = _fwRosterSelection.indexOf(iid);
-        if (idx >= 0) {
-          _fwRosterSelection.splice(idx, 1);
-          card.classList.remove('selected');
+        _fwRosterSelection.push(card.dataset.iid);
+        if (_fwRosterSelection.length >= cfg.slotsPerDay) {
+          const run = CWGameState.startFashionWeekRun(_fwRosterSelection.slice());
+          if (!run) { _showToast('Impossible de démarrer la semaine.', 'error'); return; }
+          showScreen('fashion-week-day');
         } else {
-          if (_fwRosterSelection.length >= cfg.slotsPerDay) return;
-          _fwRosterSelection.push(iid);
-          card.classList.add('selected');
+          _fwRenderRosterRound(cfg);
         }
-        updateUI();
       });
-    });
-
-    launchBtn.addEventListener('click', () => {
-      if (_fwRosterSelection.length !== cfg.slotsPerDay) return;
-      const run = CWGameState.startFashionWeekRun(_fwRosterSelection.slice());
-      if (!run) { _showToast('Impossible de démarrer la semaine.', 'error'); return; }
-      showScreen('fashion-week-day');
     });
   }
 
