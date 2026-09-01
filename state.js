@@ -1309,6 +1309,313 @@ const CWGameState = (() => {
     return CWGameDatabase.computeAuraScore(finalStats);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── SEMAINE DE MODE (mode roguelike) ───────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const FW_STAT_LABEL = { atk: 'Charisme', def: 'Prestance', spd: 'Grâce' };
+
+  function _fwCfg() { return _state.config?.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek; }
+
+  /** Propose "rosterChoiceCount" personnages au hasard pour démarrer une run (pas encore lancée) */
+  function proposeFashionWeekRoster() {
+    const cfg = _fwCfg();
+    const shuffled = [..._state.player.collection].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.min(cfg.rosterChoiceCount, shuffled.length)).map(inst => inst.instanceId);
+  }
+
+  /** Tire au sort le contenu d'une journée : "slotsPerDay" créneaux, chacun une activité OU une Gestion de Crise */
+  function _fwGenerateDay(cfg, runMods) {
+    const crisisChance = Math.max(0, cfg.crisisChance - (runMods.crisisChanceReductionPct || 0) / 100);
+    const slots = [];
+    for (let i = 0; i < cfg.slotsPerDay; i++) {
+      if (Math.random() < crisisChance) {
+        const crisis = cfg.crisisEvents[Math.floor(Math.random() * cfg.crisisEvents.length)];
+        slots.push({ type: 'crisis', refId: crisis.id, assignedTo: null, resolved: false, result: null });
+      } else {
+        const pool = cfg.activities.filter(a => a.id !== 'rest'); // le Repos est toujours proposable en plus, pas tiré au sort
+        const act = pool[Math.floor(Math.random() * pool.length)];
+        slots.push({ type: 'activity', refId: act.id, assignedTo: null, resolved: false, result: null });
+      }
+    }
+    return slots;
+  }
+
+  /** Démarre officiellement la run avec le roster choisi (instanceIds, taille = cfg.rosterSize) */
+  function startFashionWeekRun(instanceIds) {
+    const cfg = _fwCfg();
+    if (!Array.isArray(instanceIds) || instanceIds.length !== cfg.rosterSize) return null;
+
+    const roster = instanceIds.map(iid => ({
+      instanceId: iid,
+      endurance: 100,
+      usedThisDay: false,
+    }));
+
+    const runMods = {
+      statBoosts: { atk: 0, def: 0, spd: 0 },
+      thresholdReductionPct: 0,
+      pointsMultiplierPct: 0,
+      enduranceCostReductionPct: 0,
+      exceptionalThresholdReductionPct: 0,
+      crisisChanceReductionPct: 0,
+      crisisRewardBoostPct: 0,
+      finalGalaBoostPct: 0,
+      extraRerolls: 0,
+      freeActivityCount: 0,
+      freeSkipCount: 0,
+      secondWindCount: 0,
+      crisisImmunityCount: 0,
+      doubleFirstSlotEachDay: false,
+      restGivesPoints: 0,
+      rerollsUsedToday: 0,
+    };
+
+    _state.player.fashionWeekRun = {
+      active: true,
+      roster,
+      currentDay: 0,           // 0-based, 0 = Lundi
+      daySchedule: _fwGenerateDay(cfg, runMods),
+      totalPoints: 0,
+      runMods,
+      pendingBonusChoice: null, // rempli en fin de journée, 3 choix proposés
+      finished: false,
+    };
+    _autoSave();
+    return _state.player.fashionWeekRun;
+  }
+
+  /** Assigne une personnage du roster à un créneau du jour (sans le résoudre tout de suite) */
+  function assignFashionWeekSlot(slotIndex, instanceId) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const slot = run.daySchedule[slotIndex];
+    const member = run.roster.find(r => r.instanceId === instanceId);
+    if (!slot || !member || member.usedThisDay) return null;
+    // Libère cette personnage d'un éventuel autre créneau du même jour avant réaffectation
+    run.daySchedule.forEach(s => { if (s.assignedTo === instanceId) s.assignedTo = null; });
+    slot.assignedTo = instanceId;
+    return slot;
+  }
+
+  /** Retire l'assignation d'un créneau (redevient vide) */
+  function unassignFashionWeekSlot(slotIndex) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const slot = run.daySchedule[slotIndex];
+    if (!slot) return null;
+    slot.assignedTo = null;
+    return slot;
+  }
+
+  /** Résout une Gestion de Crise : choix binaire — "self" (risqué) ou "support" (sûr) */
+  function resolveFashionWeekCrisis(slotIndex, choice) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+    const slot = run.daySchedule[slotIndex];
+    if (!slot || slot.type !== 'crisis' || slot.resolved) return null;
+    const crisis = cfg.crisisEvents.find(c => c.id === slot.refId);
+    if (!crisis) return null;
+
+    let result;
+    if (choice === 'support') {
+      result = { outcome: 'support', pointsGained: crisis.supportRewardPoints };
+    } else {
+      const immune = run.runMods.crisisImmunityCount > 0;
+      if (immune) run.runMods.crisisImmunityCount--;
+      const success = immune || Math.random() < 0.5; // pari 50/50, sauf immunité active
+      const boost = 1 + (run.runMods.crisisRewardBoostPct || 0) / 100;
+      result = success
+        ? { outcome: 'self_success', pointsGained: Math.round(crisis.selfRewardPoints * boost) }
+        : { outcome: 'self_fail', pointsGained: -crisis.selfFailPenalty };
+    }
+    slot.resolved = true;
+    slot.result = result;
+    run.totalPoints = Math.max(0, run.totalPoints + result.pointsGained);
+    _autoSave();
+    return result;
+  }
+
+  /** Passe un créneau (activité, pas crise) : régénère l'Endurance de la personnage assignée, aucun point (sauf bonus) */
+  function skipFashionWeekSlot(slotIndex) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const slot = run.daySchedule[slotIndex];
+    if (!slot || slot.type !== 'activity' || slot.resolved || !slot.assignedTo) return null;
+    const member = run.roster.find(r => r.instanceId === slot.assignedTo);
+    if (!member) return null;
+
+    const freeSkip = run.runMods.freeSkipCount > 0;
+    if (freeSkip) run.runMods.freeSkipCount--;
+    member.endurance = Math.min(100, member.endurance + 25); // régénération forfaitaire au repos volontaire
+    slot.resolved = true;
+    slot.result = { outcome: 'skipped', pointsGained: 0 };
+    _autoSave();
+    return slot.result;
+  }
+
+  /** Résout un créneau "activité" assigné (pas crise) et applique son résultat à la run */
+  function resolveFashionWeekActivity(slotIndex) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+    const slot = run.daySchedule[slotIndex];
+    if (!slot || slot.type !== 'activity' || slot.resolved || !slot.assignedTo) return null;
+    const member = run.roster.find(r => r.instanceId === slot.assignedTo);
+    if (!member) return null;
+
+    const act = cfg.activities.find(a => a.id === slot.refId);
+    if (!act) return null;
+    const inst = getPlayerChar(member.instanceId);
+    const finalStats = getCharacterFinalStats(inst);
+
+    let enduranceCost = act.enduranceCost;
+    if (act.id !== 'rest') {
+      if (run.runMods.freeActivityCount > 0) { enduranceCost = 0; run.runMods.freeActivityCount--; }
+      else enduranceCost = Math.round(enduranceCost * (1 - (run.runMods.enduranceCostReductionPct || 0) / 100));
+    }
+    member.endurance = Math.max(0, Math.min(100, member.endurance - enduranceCost));
+
+    let result;
+    if (act.id === 'rest') {
+      result = { outcome: 'rest', pointsGained: run.runMods.restGivesPoints || 0, enduranceCost, statUsed: null };
+    } else {
+      const statVal = finalStats[act.stat] * (1 + (run.runMods.statBoosts[act.stat] || 0) / 100);
+      const threshold = act.threshold * (1 - (run.runMods.thresholdReductionPct || 0) / 100);
+      const exceptionalMult = cfg.exceptionalThresholdMult * (1 - (run.runMods.exceptionalThresholdReductionPct || 0) / 100);
+
+      let outcome, pointsGained;
+      if (statVal >= threshold * exceptionalMult) { outcome = 'exceptional'; pointsGained = act.rewardPoints * 2; }
+      else if (statVal >= threshold)              { outcome = 'success';     pointsGained = act.rewardPoints; }
+      else                                          { outcome = 'fail';       pointsGained = 0; }
+      if (outcome !== 'fail') pointsGained = Math.round(pointsGained * (1 + (run.runMods.pointsMultiplierPct || 0) / 100));
+      result = { outcome, pointsGained, enduranceCost, statUsed: act.stat, statVal: Math.round(statVal), threshold: Math.round(threshold) };
+    }
+
+    slot.resolved = true;
+    slot.result = result;
+    run.totalPoints = Math.max(0, run.totalPoints + result.pointsGained);
+    _autoSave();
+    return result;
+  }
+
+  /** Vérifie si tous les créneaux du jour sont résolus (activité ou crise) */
+  function isFashionWeekDayComplete() {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return false;
+    return run.daySchedule.every(s => s.resolved);
+  }
+
+  /** Propose 3 bonus au hasard une fois la journée terminée */
+  function proposeFashionWeekDailyBonuses() {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+    const shuffled = [...cfg.dailyBonuses].sort(() => Math.random() - 0.5);
+    run.pendingBonusChoice = shuffled.slice(0, 3).map(b => b.id);
+    _autoSave();
+    return run.pendingBonusChoice;
+  }
+
+  /** Applique le bonus choisi par le joueur aux modificateurs de la run */
+  function chooseFashionWeekBonus(bonusId) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active || !run.pendingBonusChoice?.includes(bonusId)) return null;
+    const cfg = _fwCfg();
+    const bonus = cfg.dailyBonuses.find(b => b.id === bonusId);
+    if (!bonus) return null;
+    const m = run.runMods;
+
+    if (bonus.statBoostPct)                    m.statBoosts[bonus.statBoostPct.stat] += bonus.statBoostPct.pct;
+    if (bonus.allStatsBoostPct)                 ['atk','def','spd'].forEach(s => m.statBoosts[s] += bonus.allStatsBoostPct);
+    if (bonus.instantEnduranceRestorePct)       run.roster.forEach(mem => mem.endurance = Math.min(100, mem.endurance + bonus.instantEnduranceRestorePct));
+    if (bonus.thresholdReductionPct)            m.thresholdReductionPct += bonus.thresholdReductionPct;
+    if (bonus.pointsMultiplierPct)              m.pointsMultiplierPct += bonus.pointsMultiplierPct;
+    if (bonus.crisisImmunityCount)              m.crisisImmunityCount += bonus.crisisImmunityCount;
+    if (bonus.extraRerolls)                     m.extraRerolls += bonus.extraRerolls;
+    if (bonus.enduranceCostReductionPct)        m.enduranceCostReductionPct += bonus.enduranceCostReductionPct;
+    if (bonus.exceptionalThresholdReductionPct) m.exceptionalThresholdReductionPct += bonus.exceptionalThresholdReductionPct;
+    if (bonus.freeActivityCount)                m.freeActivityCount += bonus.freeActivityCount;
+    if (bonus.doubleFirstSlotEachDay)           m.doubleFirstSlotEachDay = true;
+    if (bonus.instantCurrency)                  run.totalPoints += 0; // la monnaie s'obtient à la conversion finale — cf. note ci-dessous
+    if (bonus.crisisRewardBoostPct)             m.crisisRewardBoostPct += bonus.crisisRewardBoostPct;
+    if (bonus.freeSkipCount)                    m.freeSkipCount += bonus.freeSkipCount;
+    if (bonus.secondWindCount)                  m.secondWindCount += bonus.secondWindCount;
+    if (bonus.finalGalaBoostPct)                m.finalGalaBoostPct += bonus.finalGalaBoostPct;
+    if (bonus.restGivesPoints)                  m.restGivesPoints += bonus.restGivesPoints;
+    if (bonus.crisisChanceReductionPct)         m.crisisChanceReductionPct += bonus.crisisChanceReductionPct;
+    // "bonus_currency_10" (instantCurrency) est directement crédité en monnaie du mode, pas en points de run
+    if (bonus.instantCurrency) {
+      _state.player.currency = _state.player.currency || {};
+      _state.player.fashionWeekCurrency = (_state.player.fashionWeekCurrency || 0) + bonus.instantCurrency;
+    }
+
+    run.pendingBonusChoice = null;
+    _autoSave();
+    return run.runMods;
+  }
+
+  /** Passe au jour suivant (génère son planning), ou termine la run si Samedi est fini */
+  function advanceFashionWeekDay() {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+
+    run.currentDay++;
+    run.roster.forEach(m => m.usedThisDay = false);
+    run.runMods.rerollsUsedToday = 0;
+
+    if (run.currentDay >= cfg.daysPerWeek) {
+      return endFashionWeekRun();
+    }
+    run.daySchedule = _fwGenerateDay(cfg, run.runMods);
+    _autoSave();
+    return run;
+  }
+
+  /** Re-tire les activités du jour en cours (si des re-tirages sont disponibles) */
+  function rerollFashionWeekDay() {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+    const available = 1 + (run.runMods.extraRerolls || 0) - (run.runMods.rerollsUsedToday || 0);
+    if (available <= 0) return null;
+    run.runMods.rerollsUsedToday = (run.runMods.rerollsUsedToday || 0) + 1;
+    run.daySchedule = _fwGenerateDay(cfg, run.runMods);
+    _autoSave();
+    return run.daySchedule;
+  }
+
+  /** Termine la run (Gala final) : convertit les points en monnaie du mode, aucune autre récompense classique */
+  function endFashionWeekRun() {
+    const run = _state.player.fashionWeekRun;
+    if (!run) return null;
+    const cfg = _fwCfg();
+    const galaBoost = 1 + (run.runMods.finalGalaBoostPct || 0) / 100;
+    const currencyGained = Math.round(run.totalPoints * galaBoost / 10); // taux de conversion : 10 points = 1 pièce
+
+    _state.player.fashionWeekCurrency = (_state.player.fashionWeekCurrency || 0) + currencyGained;
+    run.active = false;
+    run.finished = true;
+    const summary = { totalPoints: run.totalPoints, currencyGained, roster: run.roster.map(m => m.instanceId) };
+    _state.player.fashionWeekRun = null;
+    _autoSave();
+    _notify('fashionWeekEnded');
+    return summary;
+  }
+
+  /** Achète un objet de la boutique dédiée avec la monnaie du mode (hors run, entre deux runs) */
+  function buyFashionWeekItem(itemId) {
+    const cfg = _fwCfg();
+    const item = cfg.shopItems.find(i => i.id === itemId);
+    if (!item) return { error: 'not_found' };
+    if ((_state.player.fashionWeekCurrency || 0) < item.cost) return { error: 'insufficient' };
+    _state.player.fashionWeekCurrency -= item.cost;
+    _autoSave();
+    return { success: true, item };
+  }
+
   function _computeAuraTotals() {
     if (_auraCache.version === _auraCacheVersion) return _auraCache;
     const scores = (_state.player.collection || []).map(inst => getCharacterAuraScore(inst));
@@ -2455,6 +2762,10 @@ const CWGameState = (() => {
     trackEventQuestProgress, claimEventQuest, planifyNextEvent, cancelNextEvent, getPlayerStatBonus,
     getCharacterAuraScore, getCharacterFinalStats, getCharacterStatBonus, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
     getCharacterAffectionTier, addCharacterAffection, giveGiftToCharacter,
+    proposeFashionWeekRoster, startFashionWeekRun, assignFashionWeekSlot, unassignFashionWeekSlot,
+    resolveFashionWeekActivity, resolveFashionWeekCrisis, skipFashionWeekSlot, isFashionWeekDayComplete,
+    proposeFashionWeekDailyBonuses, chooseFashionWeekBonus, advanceFashionWeekDay, rerollFashionWeekDay,
+    endFashionWeekRun, buyFashionWeekItem,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
     getAffinityPercent, registerAffinityGain, addAffinityDirect, getAllAffinityProgress, getOwnedLineageCount,

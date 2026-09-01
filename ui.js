@@ -820,6 +820,7 @@ const CWGameUI = (() => {
 
   function _showCombatSelect() {
     if (_isBattleActive()) return; // combat en cours : on ne peut pas revenir à la sélection
+    if (_defileInProgress) { _showToast('Impossible de quitter le Défilé en cours !', 'error'); return; }
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById('screen-hub')?.classList.remove('active');
     const el = document.getElementById('screen-combat-select');
@@ -849,6 +850,9 @@ const CWGameUI = (() => {
         featured: !!state.player.currentCasting,
         castingOpen: !!state.player.currentCasting, // effet visuel spécial, distinct de "featured"
         unlocked: !!state.player.currentCasting },
+      { id:'fashion-week', icon:'🗓️', name:'Semaine de Mode',
+        desc: `${(state.player.fashionWeekCurrency || 0).toLocaleString('fr-FR')} 🌠 — gère l'agenda de tes actrices`,
+        unlocked: true, lockedDesc: '' },
     ];
 
     const grid = document.getElementById('cs-grid');
@@ -899,6 +903,7 @@ const CWGameUI = (() => {
           return;
         }
         if (mode === 'casting') { showScreen('casting'); return; }
+        if (mode === 'fashion-week') { showScreen('fashion-week-roster'); return; }
         showScreen('combat');
         setTimeout(() => _launchCombat({ mode: mode === 'fullRandom' ? 'fullRandom' : mode }), 100);
       });
@@ -916,6 +921,13 @@ const CWGameUI = (() => {
     // Combat en cours : impossible de changer d'écran tant qu'il n'est pas terminé
     if (_isBattleActive() && screenId !== 'combat') {
       _showToast('Impossible de quitter le combat en cours !', 'error');
+      return;
+    }
+    // Défilé en cours (planification, déroulé, résultat OU récompenses) :
+    // impossible de sortir tant que la séquence entière n'est pas terminée.
+    const DEFILE_FLOW_SCREENS = ['defile-planning', 'defile-playback', 'defile-result', 'defile-rewards'];
+    if (_defileInProgress && !DEFILE_FLOW_SCREENS.includes(screenId)) {
+      _showToast('Impossible de quitter le Défilé en cours !', 'error');
       return;
     }
 
@@ -976,6 +988,9 @@ const CWGameUI = (() => {
       affinity: renderAffinity,
       casting: renderCasting,
       'defile-rewards': renderDefileRewards,
+      'fashion-week-roster': renderFashionWeekRoster,
+      'fashion-week-day': renderFashionWeekDay,
+      'fashion-week-gala': renderFashionWeekGala,
       'defile-result':   renderDefileResult,
     };
     renderers[screenId]?.();
@@ -6184,6 +6199,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   // ─── MODE DÉFILÉ — PLANIFICATION ──────────────────────────────────────────────
 
   let _defileState = null; // { programme, playerTeam, assignment, usesPerChar }
+  let _defileInProgress = false; // true dès la planification jusqu'à la fin des récompenses — verrouille la navigation
 
   const STAT_LABELS_SHORT = { atk: '✨ Charisme', def: '🌹 Prestance', spd: '🕊️ Grâce' };
 
@@ -6259,6 +6275,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     }
 
     if (!_defileState) {
+      _defileInProgress = true;
       const programme = CWDefileEngine.generateProgramme(cfg, state.types);
       const playerTeam = teamInstances.map(inst => {
         const def = CWGameState.getCharDef(inst.charId);
@@ -7311,7 +7328,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
   async function renderDefileRewards() {
     const el = document.getElementById('screen-defile-rewards');
-    if (!el || !_defileRewardsPlan) { _showCombatSelect(); return; }
+    if (!el || !_defileRewardsPlan) { _defileInProgress = false; _showCombatSelect(); return; }
     const plan = _defileRewardsPlan;
     const state = CWGameState.get();
 
@@ -7385,9 +7402,439 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const doneBtn = document.getElementById('btn-rewards-done');
     doneBtn.style.display = '';
     doneBtn.addEventListener('click', () => {
+      _defileInProgress = false; // la séquence est réellement terminée, navigation débloquée
       CWAudioSystem.playGlobal();
       _showCombatSelect();
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── SEMAINE DE MODE ─────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  let _fwRosterCandidates = [];
+  let _fwRosterSelection = [];
+
+  function renderFashionWeekRoster() {
+    const el = document.getElementById('screen-fashion-week-roster');
+    if (!el) return;
+    const state = CWGameState.get();
+    const cfg = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
+
+    // Une run déjà en cours ? On y retourne directement, pas de nouveau tirage.
+    if (state.player.fashionWeekRun?.active) {
+      showScreen('fashion-week-day');
+      return;
+    }
+
+    if (state.player.collection.length < cfg.rosterSize) {
+      el.innerHTML = `
+        <div class="screen-header"><h2>🗓️ Semaine de Mode</h2></div>
+        <p class="empty-msg">Il te faut au moins ${cfg.rosterSize} personnages dans ta collection.</p>
+      `;
+      return;
+    }
+
+    _fwRosterCandidates = CWGameState.proposeFashionWeekRoster();
+    _fwRosterSelection = [];
+
+    el.innerHTML = `
+      <div class="screen-header"><h2>🗓️ Semaine de Mode</h2></div>
+      <p class="defile-help">
+        Choisis ${cfg.rosterSize} personnages parmi les ${_fwRosterCandidates.length} proposées pour cette semaine.
+        Aucune récompense classique (XP, Affinité) — les points se convertissent en
+        ${cfg.currencyIcon} ${cfg.currencyName} à la fin, une monnaie propre à ce mode.
+      </p>
+      <div class="team-select-counter" id="fwr-counter">0 / ${cfg.rosterSize} sélectionnées</div>
+      <div class="team-select-grid">
+        ${_fwRosterCandidates.map(iid => {
+          const inst = CWGameState.getPlayerChar(iid);
+          const def = CWGameState.getCharDef(inst.charId);
+          if (!def) return '';
+          const rd = CWGameDatabase.RARITIES[def.rarity] || {};
+          return `
+            <div class="team-select-card" data-iid="${iid}" style="border-color:${rd.color || '#888'}">
+              <div class="team-select-portrait">${_combatPortraitImgHtml(def)}</div>
+              <div class="team-select-name">${def.name}</div>
+              <div class="team-select-level">Niv.${inst.level}</div>
+              <div class="team-select-check">✓</div>
+            </div>`;
+        }).join('')}
+      </div>
+      <button class="btn-primary" id="fwr-launch" style="width:100%;margin-top:16px;" disabled>
+        Démarrer la semaine (0/${cfg.rosterSize})
+      </button>
+    `;
+
+    const counterEl = document.getElementById('fwr-counter');
+    const launchBtn = document.getElementById('fwr-launch');
+    const updateUI = () => {
+      counterEl.textContent = `${_fwRosterSelection.length} / ${cfg.rosterSize} sélectionnées`;
+      launchBtn.textContent = `Démarrer la semaine (${_fwRosterSelection.length}/${cfg.rosterSize})`;
+      launchBtn.disabled = _fwRosterSelection.length !== cfg.rosterSize;
+    };
+
+    el.querySelectorAll('.team-select-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const iid = card.dataset.iid;
+        const idx = _fwRosterSelection.indexOf(iid);
+        if (idx >= 0) {
+          _fwRosterSelection.splice(idx, 1);
+          card.classList.remove('selected');
+        } else {
+          if (_fwRosterSelection.length >= cfg.rosterSize) return;
+          _fwRosterSelection.push(iid);
+          card.classList.add('selected');
+        }
+        updateUI();
+      });
+    });
+
+    launchBtn.addEventListener('click', () => {
+      if (_fwRosterSelection.length !== cfg.rosterSize) return;
+      const run = CWGameState.startFashionWeekRun(_fwRosterSelection.slice());
+      if (!run) { _showToast('Impossible de démarrer la semaine.', 'error'); return; }
+      showScreen('fashion-week-day');
+    });
+  }
+
+  const FW_DAY_NAMES = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+  const FW_OUTCOME_LABEL = {
+    success: '✅ Réussite', exceptional: '🌟 Réussite Éclatante', fail: '❌ Échec',
+    rest: '💤 Repos', skipped: '⏭️ Passé',
+    support: '🤝 Soutien envoyé', self_success: '✅ Gérée avec succès', self_fail: '❌ Ça a mal tourné',
+  };
+
+  function renderFashionWeekDay() {
+    const el = document.getElementById('screen-fashion-week-day');
+    if (!el) return;
+    const state = CWGameState.get();
+    const run = state.player.fashionWeekRun;
+    const cfg = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
+
+    if (!run || !run.active) {
+      showScreen('fashion-week-roster');
+      return;
+    }
+
+    const dayComplete = CWGameState.isFashionWeekDayComplete();
+    const rerollsLeft = 1 + (run.runMods.extraRerolls || 0) - (run.runMods.rerollsUsedToday || 0);
+
+    el.innerHTML = `
+      <div class="screen-header"><h2>🗓️ ${FW_DAY_NAMES[run.currentDay]} — Jour ${run.currentDay + 1}/${cfg.daysPerWeek}</h2></div>
+      <div class="fw-summary-bar">
+        <span>${cfg.currencyIcon} Points de la semaine : <strong>${run.totalPoints}</strong></span>
+        ${rerollsLeft > 0 && !dayComplete ? `<button class="btn-secondary fw-reroll-btn" id="fw-reroll-btn">🎲 Re-tirer (${rerollsLeft})</button>` : ''}
+      </div>
+      <div class="fw-roster-row">
+        ${run.roster.map(m => {
+          const inst = CWGameState.getPlayerChar(m.instanceId);
+          const def = CWGameState.getCharDef(inst.charId);
+          return `
+            <div class="fw-roster-card">
+              <div class="fw-roster-portrait">${_combatPortraitImgHtml(def)}</div>
+              <div class="fw-roster-name">${def.name}</div>
+              <div class="fw-endurance-bar-track"><div class="fw-endurance-bar-fill" style="width:${m.endurance}%"></div></div>
+              <div class="fw-endurance-label">${m.endurance}/100</div>
+            </div>`;
+        }).join('')}
+      </div>
+      <div class="fw-slots">
+        ${run.daySchedule.map((slot, idx) => _fwSlotCardHtml(slot, idx, run, cfg)).join('')}
+      </div>
+      ${dayComplete ? `
+        <div id="fw-day-complete-zone"></div>
+      ` : ''}
+    `;
+
+    _fwBindDaySlots(run, cfg);
+
+    document.getElementById('fw-reroll-btn')?.addEventListener('click', () => {
+      const result = CWGameState.rerollFashionWeekDay();
+      if (result) renderFashionWeekDay();
+    });
+
+    if (dayComplete) {
+      _fwShowDayCompleteZone(run, cfg);
+    }
+  }
+
+  function _fwSlotCardHtml(slot, idx, run, cfg) {
+    const assignedInst = slot.assignedTo ? CWGameState.getPlayerChar(slot.assignedTo) : null;
+    const assignedDef = assignedInst ? CWGameState.getCharDef(assignedInst.charId) : null;
+
+    if (slot.type === 'crisis') {
+      const crisis = cfg.crisisEvents.find(c => c.id === slot.refId);
+      return `
+        <div class="fw-slot-card fw-slot-crisis ${slot.resolved ? 'resolved' : ''}" data-slot="${idx}">
+          <div class="fw-slot-header">🚨 Gestion de Crise</div>
+          <div class="fw-slot-desc">${crisis?.label || '?'}</div>
+          ${slot.resolved ? `
+            <div class="fw-slot-result">${FW_OUTCOME_LABEL[slot.result.outcome]} — ${slot.result.pointsGained >= 0 ? '+' : ''}${slot.result.pointsGained} pts</div>
+          ` : `
+            <div class="fw-slot-actions">
+              <button class="btn-primary fw-crisis-self-btn" data-slot="${idx}">Gérer elle-même (risqué)</button>
+              <button class="btn-secondary fw-crisis-support-btn" data-slot="${idx}">Envoyer en soutien (sûr)</button>
+            </div>
+          `}
+        </div>`;
+    }
+
+    const act = cfg.activities.find(a => a.id === slot.refId);
+    if (slot.resolved) {
+      return `
+        <div class="fw-slot-card resolved">
+          <div class="fw-slot-header">${act?.icon || ''} ${act?.label || '?'}</div>
+          ${assignedDef ? `<div class="fw-slot-assigned">${assignedDef.name}</div>` : ''}
+          <div class="fw-slot-result">${FW_OUTCOME_LABEL[slot.result.outcome]} — +${slot.result.pointsGained} pts</div>
+        </div>`;
+    }
+
+    return `
+      <div class="fw-slot-card" data-slot="${idx}">
+        <div class="fw-slot-header">${act?.icon || ''} ${act?.label || '?'}</div>
+        ${act?.stat ? `<div class="fw-slot-req">${FW_STAT_LABEL_UI[act.stat]} requis : ≥ ${act.threshold}</div>` : ''}
+        <div class="fw-slot-endurance-cost">Coût : ${act?.enduranceCost > 0 ? `-${act.enduranceCost}` : `+${-act.enduranceCost}`} Endurance</div>
+        <div class="fw-slot-assign-zone" id="fw-assign-${idx}">
+          ${assignedDef ? `
+            <div class="fw-slot-assigned">${assignedDef.name} <button class="fw-unassign-btn" data-slot="${idx}">✕</button></div>
+            <div class="fw-slot-actions">
+              <button class="btn-primary fw-resolve-btn" data-slot="${idx}">Lancer</button>
+              <button class="btn-secondary fw-skip-btn" data-slot="${idx}">Passer (régénère l'Endurance)</button>
+            </div>
+          ` : `<span class="defile-slot-empty">Choisis une personnage ci-dessous</span>`}
+        </div>
+      </div>`;
+  }
+
+  const FW_STAT_LABEL_UI = { atk: '✨ Charisme', def: '🌹 Prestance', spd: '🕊️ Grâce' };
+
+  function _fwBindDaySlots(run, cfg) {
+    document.querySelectorAll('.fw-slot-card[data-slot]:not(.resolved):not(.fw-slot-crisis)').forEach(card => {
+      const idx = parseInt(card.dataset.slot);
+      const slot = run.daySchedule[idx];
+      if (!slot.assignedTo) {
+        card.addEventListener('click', () => _fwOpenAssignPicker(idx, run));
+      }
+    });
+    document.querySelectorAll('.fw-unassign-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        CWGameState.unassignFashionWeekSlot(parseInt(btn.dataset.slot));
+        renderFashionWeekDay();
+      });
+    });
+    document.querySelectorAll('.fw-resolve-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        btn.disabled = true;
+        const idx = parseInt(btn.dataset.slot);
+        const slot = run.daySchedule[idx];
+        const inst = CWGameState.getPlayerChar(slot.assignedTo);
+        const def = CWGameState.getCharDef(inst.charId);
+        const cardEl = btn.closest('.fw-slot-card');
+        await _fwPlayResolveSequence(cardEl, def, () => CWGameState.resolveFashionWeekActivity(idx));
+        renderFashionWeekDay();
+      });
+    });
+    document.querySelectorAll('.fw-skip-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        CWGameState.skipFashionWeekSlot(parseInt(btn.dataset.slot));
+        renderFashionWeekDay();
+      });
+    });
+    document.querySelectorAll('.fw-crisis-self-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const idx = parseInt(btn.dataset.slot);
+        const cardEl = btn.closest('.fw-slot-card');
+        await _fwPlayCrisisSequence(cardEl, () => CWGameState.resolveFashionWeekCrisis(idx, 'self'));
+        renderFashionWeekDay();
+      });
+    });
+    document.querySelectorAll('.fw-crisis-support-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const idx = parseInt(btn.dataset.slot);
+        const cardEl = btn.closest('.fw-slot-card');
+        await _fwPlayCrisisSequence(cardEl, () => CWGameState.resolveFashionWeekCrisis(idx, 'support'));
+        renderFashionWeekDay();
+      });
+    });
+  }
+
+  /** Petite modale pour choisir quelle personnage du roster occupe ce créneau */
+  function _fwOpenAssignPicker(slotIndex, run) {
+    const modal = document.getElementById('modal');
+    if (!modal) return;
+    const available = run.roster.filter(m => !run.daySchedule.some((s, i) => i !== slotIndex && s.assignedTo === m.instanceId));
+
+    modal.style.display = 'block';
+    modal.innerHTML = `
+      <div class="modal-backdrop" id="modal-backdrop">
+        <div class="modal-box">
+          <button class="modal-close" id="modal-close">✕</button>
+          <h3 style="font-family:var(--font-display);margin:0 0 10px">Qui envoyer ?</h3>
+          <div class="equip-char-picker">
+            ${available.map(m => {
+              const inst = CWGameState.getPlayerChar(m.instanceId);
+              const def = CWGameState.getCharDef(inst.charId);
+              return `
+                <div class="equip-char-mini" data-iid="${m.instanceId}">
+                  ${_combatPortraitImgHtml(def)}
+                  <div class="equip-char-mini-name">${def.name}</div>
+                  <div class="equip-char-mini-level">Forme : ${m.endurance}/100</div>
+                </div>`;
+            }).join('') || '<p class="empty-msg">Toutes tes personnages sont déjà occupées aujourd\'hui.</p>'}
+          </div>
+        </div>
+      </div>
+    `;
+    modal.querySelectorAll('.equip-char-mini').forEach(card => {
+      card.addEventListener('click', () => {
+        CWGameState.assignFashionWeekSlot(slotIndex, card.dataset.iid);
+        _closeModal();
+        renderFashionWeekDay();
+      });
+    });
+    document.getElementById('modal-close')?.addEventListener('click', _closeModal);
+    document.getElementById('modal-backdrop')?.addEventListener('click', (e) => {
+      if (e.target.id === 'modal-backdrop') _closeModal();
+    });
+  }
+
+  /** Une fois tous les créneaux résolus : propose le bonus du jour, puis le passage au jour suivant */
+  function _fwShowDayCompleteZone(run, cfg) {
+    const zone = document.getElementById('fw-day-complete-zone');
+    if (!zone) return;
+
+    if (!run.pendingBonusChoice) {
+      CWGameState.proposeFashionWeekDailyBonuses();
+    }
+    const state = CWGameState.get();
+    const freshRun = state.player.fashionWeekRun;
+    const choices = freshRun.pendingBonusChoice.map(id => cfg.dailyBonuses.find(b => b.id === id));
+
+    zone.innerHTML = `
+      <div class="fw-day-complete">
+        <div class="fw-day-complete-title">✨ Journée terminée — choisis un bonus pour la suite de la semaine</div>
+        <div class="fw-bonus-choices">
+          ${choices.map(b => `
+            <button class="fw-bonus-choice-btn" data-bonus="${b.id}">${b.label}</button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    zone.querySelectorAll('.fw-bonus-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        CWGameState.chooseFashionWeekBonus(btn.dataset.bonus);
+        const isLastDay = state.player.fashionWeekRun.currentDay >= cfg.daysPerWeek - 1;
+        const result = CWGameState.advanceFashionWeekDay();
+        if (isLastDay) {
+          showScreen('fashion-week-gala');
+        } else {
+          renderFashionWeekDay();
+        }
+      });
+    });
+  }
+
+  /**
+   * Mise en scène de la résolution d'une activité : zoom sur le portrait,
+   * temps de suspense, puis révélation du résultat avec flash coloré selon
+   * l'issue (vert=réussite, or=éclatante, rouge=échec) et points qui montent.
+   */
+  async function _fwPlayResolveSequence(cardEl, def, resolveFn) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fw-resolve-overlay';
+    overlay.innerHTML = `
+      <div class="fw-resolve-portrait">${_combatPortraitImgHtml(def)}</div>
+      <div class="fw-resolve-caption">En cours...</div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('active'));
+    await _sleep(900); // suspense
+
+    const result = resolveFn(); // applique réellement le résultat en state.js
+
+    const toneClass = result.outcome === 'exceptional' ? 'fw-tone-exceptional'
+      : result.outcome === 'success' ? 'fw-tone-success'
+      : result.outcome === 'fail' ? 'fw-tone-fail'
+      : 'fw-tone-neutral';
+    overlay.classList.add(toneClass, 'revealed');
+    overlay.querySelector('.fw-resolve-caption').innerHTML = `
+      <div class="fw-resolve-outcome">${FW_OUTCOME_LABEL[result.outcome]}</div>
+      ${result.statVal != null ? `<div class="fw-resolve-detail">${result.statVal} / ${result.threshold} requis</div>` : ''}
+      <div class="fw-resolve-points">+<span id="fw-resolve-points-num">0</span> pts</div>
+    `;
+    CWAudioSystem.playSfx(
+      result.outcome === 'exceptional' ? CWAudioSystem.SFX_KEYS.defileVictory
+      : result.outcome === 'fail' ? CWAudioSystem.SFX_KEYS.defileTypeBad
+      : CWAudioSystem.SFX_KEYS.defileTypeGood
+    );
+    if (result.pointsGained > 0) await _animateCountUp('fw-resolve-points-num', 0, result.pointsGained, 500);
+    await _sleep(1300);
+
+    overlay.classList.remove('active');
+    await _sleep(300);
+    overlay.remove();
+    return result;
+  }
+
+  /** Mise en scène plus tendue pour une Gestion de Crise : flash rouge immédiat, verdict après coup */
+  async function _fwPlayCrisisSequence(cardEl, resolveFn) {
+    const flash = document.createElement('div');
+    flash.className = 'fw-crisis-flash';
+    document.body.appendChild(flash);
+    CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileTypeBad);
+    await _sleep(250);
+    flash.remove();
+
+    const result = resolveFn();
+
+    const overlay = document.createElement('div');
+    const isGood = result.pointsGained >= 0;
+    overlay.className = `fw-resolve-overlay fw-crisis-overlay ${isGood ? 'fw-tone-success' : 'fw-tone-fail'}`;
+    overlay.innerHTML = `
+      <div class="fw-resolve-caption">
+        <div class="fw-resolve-outcome">${FW_OUTCOME_LABEL[result.outcome]}</div>
+        <div class="fw-resolve-points">${result.pointsGained >= 0 ? '+' : ''}${result.pointsGained} pts</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('active', 'revealed'));
+    CWAudioSystem.playSfx(isGood ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose);
+    await _sleep(1600);
+    overlay.classList.remove('active');
+    await _sleep(300);
+    overlay.remove();
+    return result;
+  }
+
+  function renderFashionWeekGala() {
+    const el = document.getElementById('screen-fashion-week-gala');
+    if (!el) return;
+    // La run a déjà été terminée par endFashionWeekRun() au moment d'avancer le dernier jour —
+    // on affiche donc le résultat du dernier run connu, conservé temporairement.
+    const state = CWGameState.get();
+    const cfg = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
+
+    el.innerHTML = `
+      <div class="screen-header"><h2>🎉 Gala de fin de semaine</h2></div>
+      <div class="fw-gala-summary">
+        <div class="fw-gala-currency" id="fw-gala-currency-num">0</div>
+        <p class="defile-help">${cfg.currencyIcon} ${cfg.currencyName} disponibles.</p>
+      </div>
+      <button class="btn-primary" id="fw-gala-done" style="width:100%;margin-top:16px;" disabled>Terminer</button>
+    `;
+    const finalAmount = state.player.fashionWeekCurrency || 0;
+    _animateCountUp('fw-gala-currency-num', 0, finalAmount, 1400).then(() => {
+      document.getElementById('fw-gala-done').disabled = false;
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.defileVictory);
+    });
+    document.getElementById('fw-gala-done')?.addEventListener('click', () => _showCombatSelect());
   }
 
   /** Anime la jauge d'XP d'une personnage façon Pokémon (remplissage → niveau → reset → suite) */

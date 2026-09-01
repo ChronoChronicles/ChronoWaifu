@@ -353,6 +353,79 @@ const CWGameDatabase = (() => {
         { id: 'large',  label: 'Grand cadeau',  cost: 6000,  affectionGiven: 350 },
       ],
     },
+
+    // ─── SEMAINE DE MODE (roguelike) ──────────────────────────────────────────
+    fashionWeek: {
+      rosterSize: 2,           // nombre de personnages à choisir pour la run
+      rosterChoiceCount: 6,    // parmi combien de candidates proposées
+      slotsPerDay: 3,          // créneaux par jour (Matin / Après-midi / Soir)
+      daysPerWeek: 6,          // Lundi à Samedi
+      crisisChance: 0.35,      // probabilité qu'un créneau devienne une Gestion de Crise
+      exceptionalThresholdMult: 1.5, // score ≥ seuil x ce multiplicateur = Réussite Éclatante
+      currencyName: 'Étoiles de Scène',
+      currencyIcon: '🌠',
+
+      // ── Activités — tirées aléatoirement pour remplir les créneaux du jour ──
+      activities: [
+        { id: 'interview',   label: 'Interview',          icon: '🎤', stat: 'def', threshold: 80,  enduranceCost: 30, rewardPoints: 40 },
+        { id: 'photoshoot',  label: 'Séance photo',       icon: '📸', stat: 'atk', threshold: 80,  enduranceCost: 25, rewardPoints: 40 },
+        { id: 'networking',  label: 'Networking',         icon: '🥂', stat: 'spd', threshold: 70,  enduranceCost: 15, rewardPoints: 25 },
+        { id: 'runway_test', label: 'Essayage podium',    icon: '👠', stat: 'atk', threshold: 100, enduranceCost: 35, rewardPoints: 55 },
+        { id: 'press_junket',label: 'Conférence presse',  icon: '📰', stat: 'def', threshold: 110, enduranceCost: 35, rewardPoints: 55 },
+        { id: 'charity_gala',label: 'Gala caritatif',     icon: '🎗️', stat: 'def', threshold: 90,  enduranceCost: 20, rewardPoints: 35 },
+        { id: 'magazine_cover', label: 'Couverture magazine', icon: '📖', stat: 'atk', threshold: 130, enduranceCost: 40, rewardPoints: 70 },
+        { id: 'social_post',  label: 'Post réseaux',      icon: '📱', stat: 'spd', threshold: 60,  enduranceCost: 10, rewardPoints: 20 },
+        { id: 'brand_deal',   label: 'Partenariat marque', icon: '🤝', stat: 'spd', threshold: 100, enduranceCost: 25, rewardPoints: 50 },
+        { id: 'rest',         label: 'Repos',             icon: '💤', stat: null,  threshold: 0,   enduranceCost: -40, rewardPoints: 0 },
+      ],
+
+      // ── Bonus quotidiens — un choix parmi 3, tirés dans cette liste ──
+      dailyBonuses: [
+        { id: 'bonus_atk_15',      label: '+15% Charisme (équipe, ce run)',              statBoostPct: { stat: 'atk', pct: 15 } },
+        { id: 'bonus_def_15',      label: '+15% Prestance (équipe, ce run)',             statBoostPct: { stat: 'def', pct: 15 } },
+        { id: 'bonus_spd_15',      label: '+15% Grâce (équipe, ce run)',                 statBoostPct: { stat: 'spd', pct: 15 } },
+        { id: 'bonus_endurance_20',label: 'Régénère 20% d\'Endurance (équipe, immédiat)', instantEnduranceRestorePct: 20 },
+        { id: 'bonus_threshold_10',label: 'Seuils de réussite -10% ce run',              thresholdReductionPct: 10 },
+        { id: 'bonus_points_20',   label: '+20% de points sur toute activité réussie',   pointsMultiplierPct: 20 },
+        { id: 'bonus_crisis_safe', label: 'La prochaine Gestion de Crise ne peut pas mal tourner', crisisImmunityCount: 1 },
+        { id: 'bonus_reroll',      label: 'Peut re-tirer les activités du jour une fois de plus', extraRerolls: 1 },
+        { id: 'bonus_endurance_cost_down', label: 'Coût en Endurance -20% ce run',        enduranceCostReductionPct: 20 },
+        { id: 'bonus_exceptional_easier', label: 'Réussite Éclatante 15% plus facile à atteindre', exceptionalThresholdReductionPct: 15 },
+        { id: 'bonus_free_activity', label: 'Le prochain créneau ne coûte aucune Endurance', freeActivityCount: 1 },
+        { id: 'bonus_double_first', label: 'Le 1er créneau de chaque jour rapporte double', doubleFirstSlotEachDay: true },
+        { id: 'bonus_currency_10',  label: '+10 🌠 immédiatement',                        instantCurrency: 10 },
+        { id: 'bonus_all_stats_5',  label: '+5% aux 3 stats jugées (équipe, ce run)',      allStatsBoostPct: 5 },
+        { id: 'bonus_crisis_reward',label: 'Les Gestions de Crise réussies rapportent +50%', crisisRewardBoostPct: 50 },
+        { id: 'bonus_skip_free',    label: 'Passer une activité ne coûte plus de score perdu', freeSkipCount: 1 },
+        { id: 'bonus_second_wind',  label: 'Une personnage épuisée peut agir une fois de plus', secondWindCount: 1 },
+        { id: 'bonus_gala_boost',   label: '+25% sur les récompenses du Gala final',       finalGalaBoostPct: 25 },
+        { id: 'bonus_rest_bonus',   label: 'Se reposer donne aussi 10 points',             restGivesPoints: 10 },
+        { id: 'bonus_lucky_crisis', label: 'Les Gestions de Crise apparaissent 20% moins souvent', crisisChanceReductionPct: 20 },
+      ],
+
+      // ── Gestions de Crise — un événement imprévu remplace un créneau du jour ──
+      crisisEvents: [
+        { id: 'scandal_rumor',    label: 'Une rumeur circule sur elle',            selfRewardPoints: 60, selfFailPenalty: 40, supportRewardPoints: 15 },
+        { id: 'exclusive_offer',  label: 'Un magazine propose un shooting exclusif, aujourd\'hui seulement', selfRewardPoints: 70, selfFailPenalty: 30, supportRewardPoints: 10 },
+        { id: 'sick_day',         label: 'Elle se sent mal — activité du jour compromise', selfRewardPoints: 30, selfFailPenalty: 50, supportRewardPoints: 20 },
+        { id: 'rival_shade',      label: 'Une rivale la provoque publiquement',    selfRewardPoints: 65, selfFailPenalty: 35, supportRewardPoints: 15 },
+        { id: 'paparazzi_ambush', label: 'Des paparazzis l\'attendent à la sortie', selfRewardPoints: 55, selfFailPenalty: 45, supportRewardPoints: 15 },
+        { id: 'sponsor_pullout',  label: 'Un sponsor menace de se retirer',        selfRewardPoints: 75, selfFailPenalty: 40, supportRewardPoints: 20 },
+        { id: 'wardrobe_malfunction', label: 'Incident vestimentaire en direct',   selfRewardPoints: 50, selfFailPenalty: 55, supportRewardPoints: 10 },
+        { id: 'viral_moment',     label: 'Elle devient virale du jour au lendemain', selfRewardPoints: 80, selfFailPenalty: 25, supportRewardPoints: 20 },
+        { id: 'double_booking',   label: 'Double réservation le même jour',        selfRewardPoints: 45, selfFailPenalty: 30, supportRewardPoints: 25 },
+        { id: 'interview_trap',   label: 'Une question piège en interview',        selfRewardPoints: 60, selfFailPenalty: 45, supportRewardPoints: 15 },
+        { id: 'fan_incident',     label: 'Un incident avec une fan tourne mal',    selfRewardPoints: 55, selfFailPenalty: 50, supportRewardPoints: 15 },
+        { id: 'award_snub',       label: 'Elle est ignorée lors d\'une récompense', selfRewardPoints: 65, selfFailPenalty: 30, supportRewardPoints: 20 },
+      ],
+
+      // ── Objets achetables avec la monnaie du mode ──
+      shopItems: [
+        { id: 'fw_item_endurance', label: 'Kit Récupération',   cost: 30,  effect: 'endurance_restore_full' },
+        { id: 'fw_item_reroll',    label: 'Jeton de re-tirage', cost: 20,  effect: 'extra_reroll' },
+        { id: 'fw_item_insurance', label: 'Assurance Crise',    cost: 50,  effect: 'crisis_immunity' },
+      ],
+    },
   };
 
   // ─── TYPES ───────────────────────────────────────────────────────────────────
