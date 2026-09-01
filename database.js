@@ -367,6 +367,30 @@ const CWGameDatabase = (() => {
       exceptionalThresholdMult: 1.5, // score ≥ seuil x ce multiplicateur = Réussite Éclatante
       currencyName: 'Étoiles de Scène',
       currencyIcon: '🌠',
+      // Choix masqués façon pierre-feuille-ciseaux thématique pour les défis de
+      // Gestion de Crise — Charme bat Mystère, Mystère bat Audace, Audace bat Charme.
+      challengeChoices: [
+        { id: 'charme',  label: '✨ Charme',  icon: '✨', beats: 'mystere' },
+        { id: 'audace',  label: '🔥 Audace',  icon: '🔥', beats: 'charme' },
+        { id: 'mystere', label: '🌙 Mystère', icon: '🌙', beats: 'audace' },
+      ],
+      // Textes d'ambiance tirés au sort avant la révélation du résultat d'une activité
+      flavorTexts: [
+        "Les projecteurs s'allument, tous les regards se tournent vers elle.",
+        "Une tension palpable règne dans la pièce.",
+        "Le public retient son souffle.",
+        "Elle inspire profondément avant d'entrer en scène.",
+        "Les caméras crépitent déjà, avant même le début.",
+        "Un murmure parcourt l'assistance.",
+        "Tout se joue maintenant, sans retour possible.",
+        "L'ambiance est électrique.",
+      ],
+      outcomeComments: {
+        exceptional: ["Un triomphe absolu !", "La salle est en délire !", "Personne n'oubliera ce moment."],
+        success:     ["Une prestation solide.", "Elle s'en sort très bien.", "Rien à redire, du travail propre."],
+        fail:        ["Ça ne s'est pas passé comme prévu...", "Un moment gênant, difficile à rattraper.", "La presse ne sera pas tendre."],
+        rest:        ["Un jour de calme, bien mérité.", "Elle recharge ses batteries."],
+      },
 
       // ── Activités — tirées aléatoirement pour remplir les créneaux du jour ──
       activities: [

@@ -7535,6 +7535,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     }
 
     const dayComplete = CWGameState.isFashionWeekDayComplete();
+    const allPlanned = run.daySchedule.every(s => s.assignedTo || s.plannedSkip);
     const rerollsLeft = 1 + (run.runMods.extraRerolls || 0) - (run.runMods.rerollsUsedToday || 0);
 
     el.innerHTML = `
@@ -7552,13 +7553,15 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           return `<div class="fw-roster-card-wrap">${_fwCharCardHtml(inst, enduranceFooter)}</div>`;
         }).join('')}
       </div>
-      <div class="fw-calendar-title">${cfg.slotLabels?.join(' · ') || 'Programme du jour'}</div>
+      <div class="fw-calendar-title">Programme du jour</div>
       <div class="fw-slots">
         ${run.daySchedule.map((slot, idx) => _fwSlotCardHtml(slot, idx, run, cfg)).join('')}
       </div>
-      ${dayComplete ? `
-        <div id="fw-day-complete-zone"></div>
-      ` : ''}
+      ${!dayComplete ? `
+        <button class="btn-primary fw-launch-day-btn" id="fw-launch-day-btn" style="width:100%;margin-top:16px;" ${allPlanned ? '' : 'disabled'}>
+          ▶ Lancer la journée ${allPlanned ? '' : `(planifie les ${cfg.slotsPerDay} créneaux d'abord)`}
+        </button>
+      ` : `<div id="fw-day-complete-zone"></div>`}
     `;
 
     _fwBindDaySlots(run, cfg);
@@ -7566,6 +7569,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     document.getElementById('fw-reroll-btn')?.addEventListener('click', () => {
       const result = CWGameState.rerollFashionWeekDay();
       if (result) renderFashionWeekDay();
+    });
+
+    document.getElementById('fw-launch-day-btn')?.addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      await _fwRunDaySequence(run, cfg);
+      renderFashionWeekDay();
     });
 
     if (dayComplete) {
@@ -7580,19 +7589,24 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     if (slot.type === 'crisis') {
       const crisis = cfg.crisisEvents.find(c => c.id === slot.refId);
+      if (slot.resolved) {
+        return `
+          <div class="fw-slot-card fw-slot-crisis resolved">
+            <div class="fw-slot-time-label">${slotTimeLabel}</div>
+            <div class="fw-slot-header">🚨 Gestion de Crise</div>
+            <div class="fw-slot-result">${FW_OUTCOME_LABEL[slot.result.outcome]} — ${slot.result.pointsGained >= 0 ? '+' : ''}${slot.result.pointsGained} pts</div>
+          </div>`;
+      }
       return `
-        <div class="fw-slot-card fw-slot-crisis ${slot.resolved ? 'resolved' : ''}" data-slot="${idx}">
+        <div class="fw-slot-card fw-slot-crisis" data-slot="${idx}">
           <div class="fw-slot-time-label">${slotTimeLabel}</div>
           <div class="fw-slot-header">🚨 Gestion de Crise</div>
-          <div class="fw-slot-desc">${crisis?.label || '?'}</div>
-          ${slot.resolved ? `
-            <div class="fw-slot-result">${FW_OUTCOME_LABEL[slot.result.outcome]} — ${slot.result.pointsGained >= 0 ? '+' : ''}${slot.result.pointsGained} pts</div>
-          ` : `
-            <div class="fw-slot-actions">
-              <button class="btn-primary fw-crisis-self-btn" data-slot="${idx}">Gérer elle-même (risqué)</button>
-              <button class="btn-secondary fw-crisis-support-btn" data-slot="${idx}">Envoyer en soutien (sûr)</button>
-            </div>
-          `}
+          <div class="fw-slot-desc">${crisis?.label || '?'} — une rivale va la défier, à résoudre au lancement de la journée.</div>
+          <div class="fw-slot-assign-zone">
+            ${assignedDef ? `
+              <div class="fw-slot-assigned">${assignedDef.name} <button class="fw-unassign-btn" data-slot="${idx}">✕</button></div>
+            ` : `<button class="btn-secondary fw-assign-btn" data-slot="${idx}">Choisir qui affronte le défi</button>`}
+          </div>
         </div>`;
     }
 
@@ -7606,6 +7620,15 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           <div class="fw-slot-result">${FW_OUTCOME_LABEL[slot.result.outcome]} — +${slot.result.pointsGained} pts</div>
         </div>`;
     }
+    if (slot.plannedSkip) {
+      return `
+        <div class="fw-slot-card fw-slot-planned-skip" data-slot="${idx}">
+          <div class="fw-slot-time-label">${slotTimeLabel}</div>
+          <div class="fw-slot-header">${act?.icon || ''} ${act?.label || '?'}</div>
+          <div class="fw-slot-desc">⏭️ Créneau passé — aucune personnage assignée, l'Endurance sera régénérée à la place.</div>
+          <button class="btn-secondary fw-cancel-skip-btn" data-slot="${idx}">Annuler, assigner quelqu'un</button>
+        </div>`;
+    }
 
     return `
       <div class="fw-slot-card" data-slot="${idx}">
@@ -7616,11 +7639,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         <div class="fw-slot-assign-zone" id="fw-assign-${idx}">
           ${assignedDef ? `
             <div class="fw-slot-assigned">${assignedDef.name} <button class="fw-unassign-btn" data-slot="${idx}">✕</button></div>
+          ` : `
             <div class="fw-slot-actions">
-              <button class="btn-primary fw-resolve-btn" data-slot="${idx}">Lancer</button>
-              <button class="btn-secondary fw-skip-btn" data-slot="${idx}">Passer (régénère l'Endurance)</button>
+              <button class="btn-primary fw-assign-btn" data-slot="${idx}">Assigner une personnage</button>
+              <button class="btn-secondary fw-plan-skip-btn" data-slot="${idx}">Passer ce créneau</button>
             </div>
-          ` : `<span class="defile-slot-empty">Choisis une personnage ci-dessous</span>`}
+          `}
         </div>
       </div>`;
   }
@@ -7628,12 +7652,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   const FW_STAT_LABEL_UI = { atk: '✨ Charisme', def: '🌹 Prestance', spd: '🕊️ Grâce' };
 
   function _fwBindDaySlots(run, cfg) {
-    document.querySelectorAll('.fw-slot-card[data-slot]:not(.resolved):not(.fw-slot-crisis)').forEach(card => {
-      const idx = parseInt(card.dataset.slot);
-      const slot = run.daySchedule[idx];
-      if (!slot.assignedTo) {
-        card.addEventListener('click', () => _fwOpenAssignPicker(idx, run));
-      }
+    document.querySelectorAll('.fw-assign-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _fwOpenAssignPicker(parseInt(btn.dataset.slot), run);
+      });
     });
     document.querySelectorAll('.fw-unassign-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -7642,41 +7665,17 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         renderFashionWeekDay();
       });
     });
-    document.querySelectorAll('.fw-resolve-btn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        btn.disabled = true;
-        const idx = parseInt(btn.dataset.slot);
-        const slot = run.daySchedule[idx];
-        const inst = CWGameState.getPlayerChar(slot.assignedTo);
-        const def = CWGameState.getCharDef(inst.charId);
-        const cardEl = btn.closest('.fw-slot-card');
-        await _fwPlayResolveSequence(cardEl, def, () => CWGameState.resolveFashionWeekActivity(idx));
-        renderFashionWeekDay();
-      });
-    });
-    document.querySelectorAll('.fw-skip-btn').forEach(btn => {
+    document.querySelectorAll('.fw-plan-skip-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        CWGameState.skipFashionWeekSlot(parseInt(btn.dataset.slot));
+        run.daySchedule[parseInt(btn.dataset.slot)].plannedSkip = true;
         renderFashionWeekDay();
       });
     });
-    document.querySelectorAll('.fw-crisis-self-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        const idx = parseInt(btn.dataset.slot);
-        const cardEl = btn.closest('.fw-slot-card');
-        await _fwPlayCrisisSequence(cardEl, () => CWGameState.resolveFashionWeekCrisis(idx, 'self'));
-        renderFashionWeekDay();
-      });
-    });
-    document.querySelectorAll('.fw-crisis-support-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        const idx = parseInt(btn.dataset.slot);
-        const cardEl = btn.closest('.fw-slot-card');
-        await _fwPlayCrisisSequence(cardEl, () => CWGameState.resolveFashionWeekCrisis(idx, 'support'));
+    document.querySelectorAll('.fw-cancel-skip-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        run.daySchedule[parseInt(btn.dataset.slot)].plannedSkip = false;
         renderFashionWeekDay();
       });
     });
@@ -7765,15 +7764,20 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
    * l'issue (vert=réussite, or=éclatante, rouge=échec) et points qui montent.
    */
   async function _fwPlayResolveSequence(cardEl, def, resolveFn) {
+    const cfg = CWGameState.get().config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
+    const flavor = cfg.flavorTexts?.[Math.floor(Math.random() * cfg.flavorTexts.length)] || '';
+
     const overlay = document.createElement('div');
     overlay.className = 'fw-resolve-overlay';
     overlay.innerHTML = `
       <div class="fw-resolve-portrait">${_combatPortraitImgHtml(def)}</div>
-      <div class="fw-resolve-caption">En cours...</div>
+      <div class="fw-resolve-caption">
+        <div class="fw-resolve-flavor">${flavor}</div>
+      </div>
     `;
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add('active'));
-    await _sleep(900); // suspense
+    await _sleep(1300); // suspense, temps de lire le texte d'ambiance
 
     const result = resolveFn(); // applique réellement le résultat en state.js
 
@@ -7781,10 +7785,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       : result.outcome === 'success' ? 'fw-tone-success'
       : result.outcome === 'fail' ? 'fw-tone-fail'
       : 'fw-tone-neutral';
+    const comments = cfg.outcomeComments?.[result.outcome] || [];
+    const comment = comments[Math.floor(Math.random() * comments.length)] || '';
     overlay.classList.add(toneClass, 'revealed');
     overlay.querySelector('.fw-resolve-caption').innerHTML = `
       <div class="fw-resolve-outcome">${FW_OUTCOME_LABEL[result.outcome]}</div>
       ${result.statVal != null ? `<div class="fw-resolve-detail">${result.statVal} / ${result.threshold} requis</div>` : ''}
+      <div class="fw-resolve-comment">${comment}</div>
       <div class="fw-resolve-points">+<span id="fw-resolve-points-num">0</span> pts</div>
     `;
     CWAudioSystem.playSfx(
@@ -7793,7 +7800,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       : CWAudioSystem.SFX_KEYS.defileTypeGood
     );
     if (result.pointsGained > 0) await _animateCountUp('fw-resolve-points-num', 0, result.pointsGained, 500);
-    await _sleep(1300);
+    await _sleep(1600);
 
     overlay.classList.remove('active');
     await _sleep(300);
@@ -7801,8 +7808,16 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     return result;
   }
 
-  /** Mise en scène plus tendue pour une Gestion de Crise : flash rouge immédiat, verdict après coup */
-  async function _fwPlayCrisisSequence(cardEl, resolveFn) {
+  /**
+   * Défi masqué de Gestion de Crise : révèle la rivale, puis attend que le
+   * joueur choisisse un des 3 choix thématiques avant de résoudre.
+   */
+  async function _fwPlayCrisisChallenge(slotIndex, run, cfg) {
+    const slot = run.daySchedule[slotIndex];
+    const inst = CWGameState.getPlayerChar(slot.assignedTo);
+    const def = CWGameState.getCharDef(inst.charId);
+    const crisis = cfg.crisisEvents.find(c => c.id === slot.refId);
+
     const flash = document.createElement('div');
     flash.className = 'fw-crisis-flash';
     document.body.appendChild(flash);
@@ -7810,25 +7825,96 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     await _sleep(250);
     flash.remove();
 
-    const result = resolveFn();
-
     const overlay = document.createElement('div');
-    const isGood = result.pointsGained >= 0;
-    overlay.className = `fw-resolve-overlay fw-crisis-overlay ${isGood ? 'fw-tone-success' : 'fw-tone-fail'}`;
+    overlay.className = 'fw-resolve-overlay fw-crisis-overlay';
     overlay.innerHTML = `
+      <div class="fw-crisis-vs">
+        <div class="fw-resolve-portrait">${_combatPortraitImgHtml(def)}</div>
+        <div class="fw-crisis-vs-label">VS</div>
+        <div class="fw-resolve-portrait fw-crisis-rival-portrait">?</div>
+      </div>
       <div class="fw-resolve-caption">
-        <div class="fw-resolve-outcome">${FW_OUTCOME_LABEL[result.outcome]}</div>
-        <div class="fw-resolve-points">${result.pointsGained >= 0 ? '+' : ''}${result.pointsGained} pts</div>
+        <div class="fw-resolve-outcome">${crisis?.label || 'Défi lancé !'}</div>
+        <div class="fw-crisis-choices" id="fw-crisis-choices">
+          ${cfg.challengeChoices.map(c => `<button class="fw-crisis-choice-btn" data-choice="${c.id}">${c.label}</button>`).join('')}
+        </div>
       </div>
     `;
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add('active', 'revealed'));
-    CWAudioSystem.playSfx(isGood ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose);
-    await _sleep(1600);
+
+    const choiceId = await new Promise(resolve => {
+      overlay.querySelectorAll('.fw-crisis-choice-btn').forEach(btn => {
+        btn.addEventListener('click', () => resolve(btn.dataset.choice));
+      });
+    });
+    overlay.querySelector('#fw-crisis-choices').innerHTML = '';
+
+    const result = CWGameState.resolveFashionWeekCrisis(slotIndex, choiceId);
+    await _sleep(400);
+
+    const rivalDef = result.rivalCharId ? CWGameState.getCharDef(result.rivalCharId) : null;
+    overlay.querySelector('.fw-crisis-rival-portrait').innerHTML = rivalDef ? _combatPortraitImgHtml(rivalDef) : '';
+    overlay.querySelector('.fw-crisis-rival-portrait').classList.remove('fw-crisis-rival-portrait');
+
+    const choiceLabel = cfg.challengeChoices.find(c => c.id === result.playerChoice)?.label || '';
+    const rivalChoiceLabel = cfg.challengeChoices.find(c => c.id === result.rivalChoice)?.label || '';
+    const toneClass = result.outcome === 'win' ? 'fw-tone-success' : result.outcome === 'lose' ? 'fw-tone-fail' : 'fw-tone-neutral';
+    overlay.classList.add(toneClass);
+    overlay.querySelector('.fw-resolve-caption').innerHTML = `
+      <div class="fw-resolve-outcome">${result.outcome === 'win' ? '✅ Défi remporté !' : result.outcome === 'lose' ? '❌ Défi perdu...' : '🤝 Égalité'}</div>
+      <div class="fw-resolve-detail">${result.rivalName} — ${choiceLabel} contre ${rivalChoiceLabel}</div>
+      <div class="fw-resolve-points">${result.pointsGained >= 0 ? '+' : ''}${result.pointsGained} pts</div>
+    `;
+    CWAudioSystem.playSfx(result.outcome === 'win' ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose);
+    await _sleep(1800);
+
     overlay.classList.remove('active');
     await _sleep(300);
     overlay.remove();
     return result;
+  }
+
+  /** Fondu au noir avec un texte d'ambiance, entre la fin des créneaux et le choix du bonus */
+  function _fwPlayNightFade() {
+    return new Promise(resolve => {
+      const fade = document.createElement('div');
+      fade.className = 'fw-night-fade';
+      const lines = [
+        "La journée s'achève enfin.",
+        "Le calme retombe sur l'agence.",
+        "Demain sera un autre jour.",
+        "Les lumières s'éteignent une à une.",
+      ];
+      fade.innerHTML = `<div class="fw-night-fade-text">${lines[Math.floor(Math.random() * lines.length)]}</div>`;
+      document.body.appendChild(fade);
+      requestAnimationFrame(() => fade.classList.add('active'));
+      setTimeout(() => {
+        fade.classList.remove('active');
+        setTimeout(() => { fade.remove(); resolve(); }, 500);
+      }, 1800);
+    });
+  }
+
+  /** Déroule la journée planifiée : chaque créneau se résout à la suite, dans l'ordre */
+  async function _fwRunDaySequence(run, cfg) {
+    for (let idx = 0; idx < run.daySchedule.length; idx++) {
+      const slot = run.daySchedule[idx];
+      if (slot.resolved) continue;
+      if (slot.plannedSkip) {
+        CWGameState.skipFashionWeekSlot(idx);
+        await _sleep(400);
+        continue;
+      }
+      if (slot.type === 'crisis') {
+        await _fwPlayCrisisChallenge(idx, run, cfg);
+      } else {
+        const inst = CWGameState.getPlayerChar(slot.assignedTo);
+        const def = CWGameState.getCharDef(inst.charId);
+        await _fwPlayResolveSequence(null, def, () => CWGameState.resolveFashionWeekActivity(idx));
+      }
+    }
+    await _fwPlayNightFade();
   }
 
   function renderFashionWeekGala() {

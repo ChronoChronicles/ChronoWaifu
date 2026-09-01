@@ -1424,30 +1424,52 @@ const CWGameState = (() => {
   }
 
   /** Résout une Gestion de Crise : choix binaire — "self" (risqué) ou "support" (sûr) */
-  function resolveFashionWeekCrisis(slotIndex, choice) {
+  /**
+   * Résout un défi de Gestion de Crise : une rivale aléatoire (hors du roster
+   * de la run) lance un défi masqué façon pierre-feuille-ciseaux thématique.
+   * La personnage assignée doit avoir été choisie au préalable (assignFashionWeekSlot).
+   */
+  function resolveFashionWeekCrisis(slotIndex, choiceId) {
     const run = _state.player.fashionWeekRun;
     if (!run || !run.active) return null;
     const cfg = _fwCfg();
     const slot = run.daySchedule[slotIndex];
-    if (!slot || slot.type !== 'crisis' || slot.resolved) return null;
+    if (!slot || slot.type !== 'crisis' || slot.resolved || !slot.assignedTo) return null;
     const crisis = cfg.crisisEvents.find(c => c.id === slot.refId);
-    if (!crisis) return null;
+    const choices = cfg.challengeChoices;
+    const playerChoice = choices.find(c => c.id === choiceId);
+    if (!crisis || !playerChoice) return null;
 
-    let result;
-    if (choice === 'support') {
-      result = { outcome: 'support', pointsGained: crisis.supportRewardPoints };
-    } else {
-      const immune = run.runMods.crisisImmunityCount > 0;
-      if (immune) run.runMods.crisisImmunityCount--;
-      const success = immune || Math.random() < 0.5; // pari 50/50, sauf immunité active
-      const boost = 1 + (run.runMods.crisisRewardBoostPct || 0) / 100;
-      result = success
-        ? { outcome: 'self_success', pointsGained: Math.round(crisis.selfRewardPoints * boost) }
-        : { outcome: 'self_fail', pointsGained: -crisis.selfFailPenalty };
-    }
+    // La rivale : une lignée au hasard, hors des personnages de la run
+    const rosterLines = new Set(run.roster.map(m => {
+      const inst = getPlayerChar(m.instanceId);
+      return getCharDef(inst.charId)?.evolutionLine;
+    }));
+    const rivalPool = _state.characters.filter(c => c.evolutionStage === 0 && !rosterLines.has(c.evolutionLine));
+    const rivalDef = rivalPool.length ? rivalPool[Math.floor(Math.random() * rivalPool.length)] : null;
+    const rivalChoice = choices[Math.floor(Math.random() * choices.length)];
+
+    const immune = run.runMods.crisisImmunityCount > 0;
+    if (immune) run.runMods.crisisImmunityCount--;
+
+    let outcome;
+    if (immune || playerChoice.beats === rivalChoice.id) outcome = 'win';
+    else if (playerChoice.id === rivalChoice.id) outcome = 'tie';
+    else outcome = 'lose';
+
+    const boost = 1 + (run.runMods.crisisRewardBoostPct || 0) / 100;
+    const pointsGained = outcome === 'win'  ? Math.round(crisis.selfRewardPoints * boost)
+      : outcome === 'tie'                   ? Math.round(crisis.supportRewardPoints)
+      :                                        -crisis.selfFailPenalty;
+
+    const result = {
+      outcome, pointsGained,
+      playerChoice: playerChoice.id, rivalChoice: rivalChoice.id,
+      rivalCharId: rivalDef?.id || null, rivalName: rivalDef?.name || 'Une rivale', crisisLabel: crisis.label,
+    };
     slot.resolved = true;
     slot.result = result;
-    run.totalPoints = Math.max(0, run.totalPoints + result.pointsGained);
+    run.totalPoints = Math.max(0, run.totalPoints + pointsGained);
     _autoSave();
     return result;
   }
