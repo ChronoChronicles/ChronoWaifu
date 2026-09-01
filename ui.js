@@ -7416,7 +7416,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   let _fwRosterSeen = [];
 
   /** Reproduit exactement la carte de personnage du Défilé (portrait, types, 3 stats) */
-  function _fwCharCardHtml(inst, extraFooterHtml = '') {
+  function _fwCharCardHtml(inst, extraFooterHtml = '', runMods = null) {
     const state = CWGameState.get();
     const def = CWGameState.getCharDef(inst.charId);
     const finalStats = CWGameState.getCharacterFinalStats(inst);
@@ -7425,6 +7425,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       if (!t) return '';
       return `<span class="defile-type-badge" style="background:${t.color}">${t.icon}</span>`;
     };
+    /** Applique le bonus de run (%) à une stat pour l'affichage, avec le delta visible si actif */
+    const displayStat = (statKey, baseVal) => {
+      const boostPct = runMods?.statBoosts?.[statKey] || 0;
+      if (!boostPct) return `${baseVal}`;
+      const boosted = Math.round(baseVal * (1 + boostPct / 100));
+      return `${boosted} <span class="fw-stat-boost-delta">(+${boosted - baseVal})</span>`;
+    };
     return `
       <div class="defile-fighter-card">
         <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
@@ -7432,9 +7439,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           <div class="defile-chip-name">${def.name}</div>
           <div class="defile-chip-types">${typeBadge(def.type1)}${typeBadge(def.type2)}</div>
           <div class="defile-chip-stats-grid">
-            <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">✨</span><span class="defile-chip-stat-value">${finalStats.atk}</span></div>
-            <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🌹</span><span class="defile-chip-stat-value">${finalStats.def}</span></div>
-            <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🕊️</span><span class="defile-chip-stat-value">${finalStats.spd}</span></div>
+            <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">✨</span><span class="defile-chip-stat-value">${displayStat('atk', finalStats.atk)}</span></div>
+            <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🌹</span><span class="defile-chip-stat-value">${displayStat('def', finalStats.def)}</span></div>
+            <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🕊️</span><span class="defile-chip-stat-value">${displayStat('spd', finalStats.spd)}</span></div>
           </div>
           ${extraFooterHtml}
         </div>
@@ -7532,6 +7539,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     el.innerHTML = `
       <div class="screen-header"><h2>🗓️ ${FW_DAY_NAMES[run.currentDay]} — Jour ${run.currentDay + 1}/${cfg.daysPerWeek}</h2></div>
+      <button class="fw-cashout-btn" id="fw-cashout-btn">🏳️ Arrêter la semaine et encaisser (${run.totalPoints} pts)</button>
       <div class="fw-summary-bar">
         <span>${cfg.currencyIcon} Points de la semaine : <strong>${run.totalPoints}</strong></span>
         ${rerollsLeft > 0 && !dayComplete ? `<button class="btn-secondary fw-reroll-btn" id="fw-reroll-btn">🎲 Re-tirer (${rerollsLeft})</button>` : ''}
@@ -7542,7 +7550,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           const enduranceFooter = `
             <div class="fw-endurance-bar-track"><div class="fw-endurance-bar-fill" style="width:${m.endurance}%"></div></div>
             <div class="fw-endurance-label">Forme : ${m.endurance}/100</div>`;
-          return `<div class="fw-roster-card-wrap">${_fwCharCardHtml(inst, enduranceFooter)}</div>`;
+          return `<div class="fw-roster-card-wrap">${_fwCharCardHtml(inst, enduranceFooter, run.runMods)}</div>`;
         }).join('')}
       </div>
       <div class="fw-calendar-title">Programme du jour</div>
@@ -7561,6 +7569,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     document.getElementById('fw-reroll-btn')?.addEventListener('click', () => {
       const result = CWGameState.rerollFashionWeekDay();
       if (result) renderFashionWeekDay();
+    });
+
+    document.getElementById('fw-cashout-btn')?.addEventListener('click', () => {
+      const ok = confirm(`Arrêter la semaine maintenant et encaisser ${run.totalPoints} points ? Cette action est irréversible, tu perds le reste de la semaine.`);
+      if (!ok) return;
+      CWGameState.endFashionWeekRun();
+      showScreen('fashion-week-gala');
     });
 
     document.getElementById('fw-launch-day-btn')?.addEventListener('click', async (e) => {
@@ -7626,7 +7641,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       <div class="fw-slot-card" data-slot="${idx}">
         <div class="fw-slot-time-label">${slotTimeLabel}</div>
         <div class="fw-slot-header">${act?.icon || ''} ${act?.label || '?'}</div>
-        ${act?.stat ? `<div class="fw-slot-req">${FW_STAT_LABEL_UI[act.stat]} requis : ≥ ${act.threshold}</div>` : ''}
+        ${act?.stat ? (() => {
+          const reduction = run.runMods.thresholdReductionPct || 0;
+          const adjThreshold = Math.round(act.threshold * (1 - reduction / 100));
+          return `<div class="fw-slot-req">${FW_STAT_LABEL_UI[act.stat]} requis : ≥ ${adjThreshold}${reduction > 0 ? ` <span class="fw-stat-boost-delta">(-${act.threshold - adjThreshold})</span>` : ''}</div>`;
+        })() : ''}
         <div class="fw-slot-endurance-cost">Coût : ${act?.enduranceCost > 0 ? `-${act.enduranceCost}` : `+${-act.enduranceCost}`} Endurance</div>
         <div class="fw-slot-assign-zone" id="fw-assign-${idx}">
           ${assignedDef ? `
@@ -7819,6 +7838,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     const overlay = document.createElement('div');
     overlay.className = 'fw-resolve-overlay fw-crisis-overlay';
+    overlay.style.pointerEvents = 'auto'; // garantie absolue, indépendante du CSS/timing d'animation
     overlay.innerHTML = `
       <div class="fw-crisis-vs">
         <div class="fw-resolve-portrait">${_combatPortraitImgHtml(def)}</div>
