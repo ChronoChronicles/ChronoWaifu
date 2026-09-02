@@ -1325,6 +1325,7 @@ const CWGameState = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // ─── SEMAINE DE MODE (mode roguelike) ───────────────────────────────────────
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1332,328 +1333,474 @@ const CWGameState = (() => {
 
   function _fwCfg() { return _state.config?.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek; }
 
-  /** Propose "rosterChoiceCount" personnages au hasard pour démarrer une run (pas encore lancée) */
   /** Propose 3 candidates au hasard pour UN tour de sélection, en excluant celles déjà choisies (tours précédents) */
   function proposeFashionWeekRoundCandidates(excludeInstanceIds = []) {
-    const cfg = _fwCfg();
     const excluded = new Set(excludeInstanceIds);
     const pool = _state.player.collection.filter(inst => !excluded.has(inst.instanceId));
     const shuffled = [...pool].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, Math.min(3, shuffled.length)).map(inst => inst.instanceId);
   }
 
-  /** Tire au sort le contenu d'une journée : "slotsPerDay" créneaux, chacun une activité OU une Gestion de Crise */
-  function _fwGenerateDay(cfg, runMods) {
-    const crisisChance = Math.max(0, cfg.crisisChance - (runMods.crisisChanceReductionPct || 0) / 100);
-    const slots = [];
-    for (let i = 0; i < cfg.slotsPerDay; i++) {
-      if (Math.random() < crisisChance) {
-        const crisis = cfg.crisisEvents[Math.floor(Math.random() * cfg.crisisEvents.length)];
-        slots.push({ type: 'crisis', refId: crisis.id, assignedTo: null, resolved: false, result: null });
-      } else {
-        const pool = cfg.activities.filter(a => a.id !== 'rest'); // le Repos est toujours proposable en plus, pas tiré au sort
-        const act = pool[Math.floor(Math.random() * pool.length)];
-        slots.push({ type: 'activity', refId: act.id, assignedTo: null, resolved: false, result: null });
-      }
-    }
-    return slots;
+  /**
+   * Construit un personnage DE RUN à partir d'une instance possédée : reset
+   * complet à Niveau 1, forme de base (evolutionStage 0), sans awakening ni
+   * aucun bonus persistant (joueur/individuel/affection/objets). Tout est
+   * recalculé depuis zéro, propre à cette run.
+   */
+  function _fwMakeRunChar(instanceId) {
+    const inst = getPlayerChar(instanceId);
+    const def = getCharDef(inst.charId);
+    if (!inst || !def) return null;
+    const baseDef = _state.characters.find(c => c.evolutionLine === def.evolutionLine && c.evolutionStage === 0) || def;
+    return {
+      originalInstanceId: instanceId,
+      currentCharId: baseDef.id,
+      evolutionLine: baseDef.evolutionLine,
+      evolutionStage: 0,
+      level: 1,
+      runStatBonus: { hp: 0, atk: 0, def: 0, spd: 0 },
+    };
   }
 
-  /** Démarre officiellement la run avec le roster choisi (instanceIds, taille = cfg.slotsPerDay) */
+  /** Stats d'un personnage DE RUN — uniquement niveau + bonus de run, jamais les bonus persistants du joueur */
+  function getRoguelikeCharStats(runChar) {
+    const def = getCharDef(runChar.currentCharId);
+    if (!def) return { hp: 1, atk: 1, def: 1, spd: 1 };
+    const computed = CWGameDatabase.computeStats(def, runChar.level, 0, _state.config.awakening, def.rarity, _state.config.level);
+    return {
+      hp:  computed.hp  + runChar.runStatBonus.hp,
+      atk: computed.atk + runChar.runStatBonus.atk,
+      def: computed.def + runChar.runStatBonus.def,
+      spd: computed.spd + runChar.runStatBonus.spd,
+    };
+  }
+
+  /** Tente de faire évoluer un personnage de run vers son stade suivant ; renvoie false si déjà au maximum */
+  function _fwTryEvolve(runChar) {
+    const next = _state.characters.find(c => c.evolutionLine === runChar.evolutionLine && c.evolutionStage === runChar.evolutionStage + 1);
+    if (!next) return false;
+    runChar.currentCharId = next.id;
+    runChar.evolutionStage += 1;
+    return true;
+  }
+
+  /** Génère la carte d'UN jour : nodesPerDay paliers, chacun 2-3 nœuds au choix */
+  function _fwGenerateDayMap(cfg, day) {
+    const categories = Object.keys(cfg.categoryWeights);
+    const totalWeight = categories.reduce((s, c) => s + cfg.categoryWeights[c], 0);
+    const pickCategory = () => {
+      if (Math.random() < cfg.encounterChance) return 'encounter';
+      let r = Math.random() * totalWeight;
+      for (const c of categories) { r -= cfg.categoryWeights[c]; if (r <= 0) return c; }
+      return categories[0];
+    };
+    const scenarioFor = (category) => {
+      const pool = cfg[`${category}Scenarios`] || [];
+      return pool.length ? pool[Math.floor(Math.random() * pool.length)] : { id: category, title: category, flavorText: '' };
+    };
+
+    const layers = [];
+    for (let i = 0; i < cfg.nodesPerDay; i++) {
+      const count = cfg.nodeChoicesMin + Math.floor(Math.random() * (cfg.nodeChoicesMax - cfg.nodeChoicesMin + 1));
+      const nodes = [];
+      for (let j = 0; j < count; j++) {
+        const category = pickCategory();
+        const scenario = scenarioFor(category);
+        nodes.push({ category, scenarioId: scenario.id, title: scenario.title, flavorText: scenario.flavorText, resolved: false });
+      }
+      layers.push(nodes);
+    }
+    return { day, layers, currentLayer: 0, bossResolved: false };
+  }
+
+  /** Multiplicateur de difficulté/récompense du jour courant (0-based) */
+  function _fwDayMultiplier(cfg, day, kind) {
+    const rate = kind === 'reward' ? cfg.rewardScalingPerDay : cfg.difficultyScalingPerDay;
+    return 1 + rate * day;
+  }
+
+  /** Démarre officiellement la run roguelike avec le roster choisi */
   function startFashionWeekRun(instanceIds) {
     const cfg = _fwCfg();
-    if (!Array.isArray(instanceIds) || instanceIds.length !== cfg.slotsPerDay) return null;
+    if (!Array.isArray(instanceIds) || instanceIds.length !== cfg.startingTeamSize) return null;
 
-    const roster = instanceIds.map(iid => ({
-      instanceId: iid,
-      endurance: 100,
-      usedThisDay: false,
-    }));
+    const roster = instanceIds.map(iid => _fwMakeRunChar(iid)).filter(Boolean);
+    if (roster.length !== instanceIds.length) return null;
 
     const runMods = {
       statBoosts: { atk: 0, def: 0, spd: 0 },
-      thresholdReductionPct: 0,
-      pointsMultiplierPct: 0,
-      enduranceCostReductionPct: 0,
-      exceptionalThresholdReductionPct: 0,
-      crisisChanceReductionPct: 0,
-      crisisRewardBoostPct: 0,
-      finalGalaBoostPct: 0,
-      extraRerolls: 0,
-      freeActivityCount: 0,
-      freeSkipCount: 0,
-      secondWindCount: 0,
-      crisisImmunityCount: 0,
-      doubleFirstSlotEachDay: false,
-      restGivesPoints: 0,
-      rerollsUsedToday: 0,
+      scoreMultiplierPct: 0,
+      formMaxBonus: 0,
+      defileLossImmunityCount: 0,
     };
 
     _state.player.fashionWeekRun = {
       active: true,
       roster,
-      currentDay: 0,           // 0-based, 0 = Lundi
-      daySchedule: _fwGenerateDay(cfg, runMods),
-      totalPoints: 0,
+      day: 0, // 0-based, 0 = Jour 1
+      map: _fwGenerateDayMap(cfg, 0),
+      teamForm: cfg.teamFormMax,
+      totalScore: 0,
+      currencyThisRun: 0,
       runMods,
-      pendingBonusChoice: null, // rempli en fin de journée, 3 choix proposés
+      pendingBossBuffChoice: null,
+      pendingGamble: null, // { nodeLayerIdx, nodeIdx, outcome } — résultat d'un pari en attente d'affichage
       finished: false,
+      failed: false,
     };
     _autoSave();
     return _state.player.fashionWeekRun;
   }
 
-  /** Assigne une personnage du roster à un créneau du jour (sans le résoudre tout de suite) */
-  function assignFashionWeekSlot(slotIndex, instanceId) {
-    const run = _state.player.fashionWeekRun;
-    if (!run || !run.active) return null;
-    const slot = run.daySchedule[slotIndex];
-    const member = run.roster.find(r => r.instanceId === instanceId);
-    if (!slot || !member || member.usedThisDay) return null;
-    // Libère cette personnage d'un éventuel autre créneau du même jour avant réaffectation
-    run.daySchedule.forEach(s => { if (s.assignedTo === instanceId) s.assignedTo = null; });
-    slot.assignedTo = instanceId;
-    return slot;
-  }
-
-  /** Retire l'assignation d'un créneau (redevient vide) */
-  function unassignFashionWeekSlot(slotIndex) {
-    const run = _state.player.fashionWeekRun;
-    if (!run || !run.active) return null;
-    const slot = run.daySchedule[slotIndex];
-    if (!slot) return null;
-    slot.assignedTo = null;
-    return slot;
-  }
-
-  /** Résout une Gestion de Crise : choix binaire — "self" (risqué) ou "support" (sûr) */
-  /**
-   * Résout un défi de Gestion de Crise : une rivale aléatoire (hors du roster
-   * de la run) lance un défi masqué façon pierre-feuille-ciseaux thématique.
-   * La personnage assignée doit avoir été choisie au préalable (assignFashionWeekSlot).
-   */
-  function resolveFashionWeekCrisis(slotIndex, choiceId) {
-    const run = _state.player.fashionWeekRun;
-    if (!run || !run.active) return null;
+  /** Applique un gain/perte de score de run (jamais négatif) */
+  function _fwAddScore(run, amount) {
     const cfg = _fwCfg();
-    const slot = run.daySchedule[slotIndex];
-    if (!slot || slot.type !== 'crisis' || slot.resolved || !slot.assignedTo) return null;
-    const crisis = cfg.crisisEvents.find(c => c.id === slot.refId);
-    const choices = cfg.challengeChoices;
-    const playerChoice = choices.find(c => c.id === choiceId);
-    if (!crisis || !playerChoice) return null;
-
-    // La rivale : une lignée au hasard, hors des personnages de la run
-    const rosterLines = new Set(run.roster.map(m => {
-      const inst = getPlayerChar(m.instanceId);
-      return getCharDef(inst.charId)?.evolutionLine;
-    }));
-    const rivalPool = _state.characters.filter(c => c.evolutionStage === 0 && !rosterLines.has(c.evolutionLine));
-    const rivalDef = rivalPool.length ? rivalPool[Math.floor(Math.random() * rivalPool.length)] : null;
-    const rivalChoice = choices[Math.floor(Math.random() * choices.length)];
-
-    const immune = run.runMods.crisisImmunityCount > 0;
-    if (immune) run.runMods.crisisImmunityCount--;
-
-    let outcome;
-    if (immune || playerChoice.beats === rivalChoice.id) outcome = 'win';
-    else if (playerChoice.id === rivalChoice.id) outcome = 'tie';
-    else outcome = 'lose';
-
-    const boost = 1 + (run.runMods.crisisRewardBoostPct || 0) / 100;
-    const pointsGained = outcome === 'win'  ? Math.round(crisis.selfRewardPoints * boost)
-      : outcome === 'tie'                   ? Math.round(crisis.supportRewardPoints)
-      :                                        -crisis.selfFailPenalty;
-
-    const result = {
-      outcome, pointsGained,
-      playerChoice: playerChoice.id, rivalChoice: rivalChoice.id,
-      rivalCharId: rivalDef?.id || null, rivalName: rivalDef?.name || 'Une rivale', crisisLabel: crisis.label,
-    };
-    slot.resolved = true;
-    slot.result = result;
-    run.totalPoints = Math.max(0, run.totalPoints + pointsGained);
-    _autoSave();
-    return result;
+    const mult = 1 + (run.runMods.scoreMultiplierPct || 0) / 100;
+    run.totalScore = Math.max(0, run.totalScore + Math.round(amount * mult));
   }
 
-  /** Passe un créneau (activité, pas crise) : régénère l'Endurance de la personnage assignée, aucun point (sauf bonus) */
-  function skipFashionWeekSlot(slotIndex) {
-    const run = _state.player.fashionWeekRun;
-    if (!run || !run.active) return null;
-    const slot = run.daySchedule[slotIndex];
-    if (!slot || slot.type !== 'activity' || slot.resolved || !slot.assignedTo) return null;
-    const member = run.roster.find(r => r.instanceId === slot.assignedTo);
-    if (!member) return null;
-
-    const freeSkip = run.runMods.freeSkipCount > 0;
-    if (freeSkip) run.runMods.freeSkipCount--;
-    member.endurance = Math.min(100, member.endurance + 25); // régénération forfaitaire au repos volontaire
-    slot.resolved = true;
-    slot.result = { outcome: 'skipped', pointsGained: 0 };
-    _autoSave();
-    return slot.result;
-  }
-
-  /** Résout un créneau "activité" assigné (pas crise) et applique son résultat à la run */
-  function resolveFashionWeekActivity(slotIndex) {
-    const run = _state.player.fashionWeekRun;
-    if (!run || !run.active) return null;
-    const cfg = _fwCfg();
-    const slot = run.daySchedule[slotIndex];
-    if (!slot || slot.type !== 'activity' || slot.resolved || !slot.assignedTo) return null;
-    const member = run.roster.find(r => r.instanceId === slot.assignedTo);
-    if (!member) return null;
-
-    const act = cfg.activities.find(a => a.id === slot.refId);
-    if (!act) return null;
-    const inst = getPlayerChar(member.instanceId);
-    const finalStats = getCharacterFinalStats(inst);
-
-    let enduranceCost = act.enduranceCost;
-    if (act.id !== 'rest') {
-      if (run.runMods.freeActivityCount > 0) { enduranceCost = 0; run.runMods.freeActivityCount--; }
-      else enduranceCost = Math.round(enduranceCost * (1 - (run.runMods.enduranceCostReductionPct || 0) / 100));
+  /** Applique un gain/perte de Forme d'équipe ; déclenche le game over (et finalise la run) si elle tombe à 0 */
+  function _fwApplyFormDelta(run, cfg, delta) {
+    const max = cfg.teamFormMax + (run.runMods.formMaxBonus || 0);
+    run.teamForm = Math.max(0, Math.min(max, run.teamForm + delta));
+    if (run.teamForm <= 0 && run.active) {
+      run.failed = true;
+      run.active = false;
+      endFashionWeekRun(); // game over : conversion immédiate en monnaie, quelle que soit la cause
     }
-    member.endurance = Math.max(0, Math.min(100, member.endurance - enduranceCost));
+  }
 
-    let result;
-    if (act.id === 'rest') {
-      result = { outcome: 'rest', pointsGained: run.runMods.restGivesPoints || 0, enduranceCost, statUsed: null };
+  /** Résout un nœud non-combat/non-rencontre (Shop est géré à part, via achats directs) */
+  function resolveFashionWeekNode(layerIdx, nodeIdx, optionIdx = null) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+    const node = run.map.layers[layerIdx]?.[nodeIdx];
+    if (!node || node.resolved || layerIdx !== run.map.currentLayer) return null;
+
+    let outcomeResult = null;
+
+    if (node.category === 'dialogue') {
+      const scenario = cfg.dialogueScenarios.find(s => s.id === node.scenarioId);
+      const option = scenario?.options?.[optionIdx];
+      if (!option) return null;
+      outcomeResult = _fwApplyDialogueOutcome(run, cfg, option.outcome);
+    } else if (node.category === 'heal') {
+      const before = run.teamForm;
+      _fwApplyFormDelta(run, cfg, cfg.teamFormMax); // soin complet
+      outcomeResult = { type: 'heal', formGained: run.teamForm - before };
+    } else if (node.category === 'treasure') {
+      const gain = Math.round(cfg.scoreRewards.treasureBonus * _fwDayMultiplier(cfg, run.day, 'reward'));
+      run.currencyThisRun += gain;
+      outcomeResult = { type: 'treasure', currencyGained: gain };
+    } else if (node.category === 'encounter') {
+      // Résolu séparément via resolveFashionWeekEncounter (accepter/refuser) — ne rien faire ici
+      return null;
     } else {
-      const statVal = finalStats[act.stat] * (1 + (run.runMods.statBoosts[act.stat] || 0) / 100);
-      const threshold = act.threshold * (1 - (run.runMods.thresholdReductionPct || 0) / 100);
-      const exceptionalMult = cfg.exceptionalThresholdMult * (1 - (run.runMods.exceptionalThresholdReductionPct || 0) / 100);
-
-      let outcome, pointsGained;
-      if (statVal >= threshold * exceptionalMult) { outcome = 'exceptional'; pointsGained = act.rewardPoints * 2; }
-      else if (statVal >= threshold)              { outcome = 'success';     pointsGained = act.rewardPoints; }
-      else                                          { outcome = 'fail';       pointsGained = 0; }
-      if (outcome !== 'fail') pointsGained = Math.round(pointsGained * (1 + (run.runMods.pointsMultiplierPct || 0) / 100));
-      result = { outcome, pointsGained, enduranceCost, statUsed: act.stat, statVal: Math.round(statVal), threshold: Math.round(threshold) };
+      return null; // 'defile' et 'shop' se résolvent via leurs propres fonctions dédiées
     }
 
-    slot.resolved = true;
-    slot.result = result;
-    run.totalPoints = Math.max(0, run.totalPoints + result.pointsGained);
+    node.resolved = true;
+    _fwAddScore(run, cfg.scoreRewards.nodeCompleted);
+    _fwAdvanceLayerIfComplete(run);
     _autoSave();
-    return result;
+    return outcomeResult;
   }
 
-  /** Vérifie si tous les créneaux du jour sont résolus (activité ou crise) */
-  function isFashionWeekDayComplete() {
-    const run = _state.player.fashionWeekRun;
-    if (!run || !run.active) return false;
-    return run.daySchedule.every(s => s.resolved);
+  /** Applique le résultat d'un choix de Dialogue (tous les types d'issue possibles) */
+  function _fwApplyDialogueOutcome(run, cfg, outcome, forcedGambleResult = null) {
+    if (!outcome) return null;
+
+    if (outcome.type === 'gamble') {
+      const success = forcedGambleResult != null ? forcedGambleResult : Math.random() < outcome.chance;
+      const sub = success ? outcome.success : outcome.fail;
+      const subResult = _fwApplyDialogueOutcome(run, cfg, sub);
+      return { type: 'gamble', success, sub: subResult };
+    }
+
+    const randomMember = () => run.roster[Math.floor(Math.random() * run.roster.length)];
+
+    switch (outcome.type) {
+      case 'levelUp': {
+        const member = randomMember();
+        member.level += outcome.amount;
+        return { type: 'levelUp', amount: outcome.amount, memberId: member.originalInstanceId };
+      }
+      case 'statBoost': {
+        const member = randomMember();
+        member.runStatBonus[outcome.stat] += outcome.amount;
+        return { type: 'statBoost', stat: outcome.stat, amount: outcome.amount, memberId: member.originalInstanceId };
+      }
+      case 'evolve': {
+        const eligible = run.roster.filter(m => _state.characters.some(c => c.evolutionLine === m.evolutionLine && c.evolutionStage === m.evolutionStage + 1));
+        if (!eligible.length) {
+          // Repli : personne n'est éligible, un boost de stat généreux à la place
+          const member = randomMember();
+          member.runStatBonus.atk += 20; member.runStatBonus.def += 20; member.runStatBonus.spd += 20;
+          return { type: 'statBoost', fallbackFromEvolve: true, memberId: member.originalInstanceId };
+        }
+        const member = eligible[Math.floor(Math.random() * eligible.length)];
+        _fwTryEvolve(member);
+        return { type: 'evolve', memberId: member.originalInstanceId, newCharId: member.currentCharId };
+      }
+      case 'currencyGain': {
+        const gain = Math.round(outcome.amount * _fwDayMultiplier(cfg, run.day, 'reward'));
+        run.currencyThisRun += gain;
+        return { type: 'currencyGain', amount: gain };
+      }
+      case 'runBuff': {
+        const buff = cfg.bossBuffChoices.find(b => b.id === outcome.buffId);
+        if (buff) _fwApplyBossBuff(run, buff);
+        return { type: 'runBuff', buffId: outcome.buffId };
+      }
+      case 'formLoss': {
+        _fwApplyFormDelta(run, cfg, -outcome.amount);
+        return { type: 'formLoss', amount: outcome.amount, gameOver: run.failed };
+      }
+      case 'formGain': {
+        _fwApplyFormDelta(run, cfg, outcome.amount);
+        return { type: 'formGain', amount: outcome.amount };
+      }
+      case 'triggerDefile': {
+        return { type: 'triggerDefile' }; // l'écran doit enchaîner sur un nœud Défilé à la résolution
+      }
+      default:
+        return null;
+    }
   }
 
-  /** Propose 3 bonus au hasard une fois la journée terminée */
-  function proposeFashionWeekDailyBonuses() {
+  /** Résout un nœud de Rencontre : accepter ou refuser une recrue aléatoire */
+  function resolveFashionWeekEncounter(layerIdx, nodeIdx, accept) {
     const run = _state.player.fashionWeekRun;
     if (!run || !run.active) return null;
     const cfg = _fwCfg();
-    const shuffled = [...cfg.dailyBonuses].sort(() => Math.random() - 0.5);
-    run.pendingBonusChoice = shuffled.slice(0, 3).map(b => b.id);
+    const node = run.map.layers[layerIdx]?.[nodeIdx];
+    if (!node || node.resolved || node.category !== 'encounter') return null;
+
+    let recruited = null;
+    if (accept) {
+      const rosterLines = new Set(run.roster.map(m => m.evolutionLine));
+      const pool = _state.characters.filter(c => c.evolutionStage === 0 && !rosterLines.has(c.evolutionLine));
+      if (pool.length) {
+        const picked = pool[Math.floor(Math.random() * pool.length)];
+        const newMember = { originalInstanceId: `fw_recruit_${picked.id}_${Date.now()}`, currentCharId: picked.id, evolutionLine: picked.evolutionLine, evolutionStage: 0, level: 1, runStatBonus: { hp:0, atk:0, def:0, spd:0 } };
+        run.roster.push(newMember);
+        recruited = picked.id;
+      }
+    }
+    node.resolved = true;
+    _fwAddScore(run, cfg.scoreRewards.nodeCompleted);
+    _fwAdvanceLayerIfComplete(run);
     _autoSave();
-    return run.pendingBonusChoice;
+    return { accepted: accept, recruitedCharId: recruited };
   }
 
-  /** Applique le bonus choisi par le joueur aux modificateurs de la run */
-  function chooseFashionWeekBonus(bonusId) {
+  /** Achète un objet du Shop (pendant la run, avec les Jetons de la run) */
+  function buyFashionWeekRunItem(itemId, targetMemberId = null) {
     const run = _state.player.fashionWeekRun;
-    if (!run || !run.active || !run.pendingBonusChoice?.includes(bonusId)) return null;
+    if (!run || !run.active) return { error: 'no_run' };
     const cfg = _fwCfg();
-    const bonus = cfg.dailyBonuses.find(b => b.id === bonusId);
-    if (!bonus) return null;
-    const m = run.runMods;
+    const item = cfg.shopItems.find(i => i.id === itemId);
+    if (!item) return { error: 'not_found' };
+    if (run.currencyThisRun < item.cost) return { error: 'insufficient' };
+    run.currencyThisRun -= item.cost;
 
-    if (bonus.statBoostPct)                    m.statBoosts[bonus.statBoostPct.stat] += bonus.statBoostPct.pct;
-    if (bonus.allStatsBoostPct)                 ['atk','def','spd'].forEach(s => m.statBoosts[s] += bonus.allStatsBoostPct);
-    if (bonus.instantEnduranceRestorePct)       run.roster.forEach(mem => mem.endurance = Math.min(100, mem.endurance + bonus.instantEnduranceRestorePct));
-    if (bonus.thresholdReductionPct)            m.thresholdReductionPct += bonus.thresholdReductionPct;
-    if (bonus.pointsMultiplierPct)              m.pointsMultiplierPct += bonus.pointsMultiplierPct;
-    if (bonus.crisisImmunityCount)              m.crisisImmunityCount += bonus.crisisImmunityCount;
-    if (bonus.extraRerolls)                     m.extraRerolls += bonus.extraRerolls;
-    if (bonus.enduranceCostReductionPct)        m.enduranceCostReductionPct += bonus.enduranceCostReductionPct;
-    if (bonus.exceptionalThresholdReductionPct) m.exceptionalThresholdReductionPct += bonus.exceptionalThresholdReductionPct;
-    if (bonus.freeActivityCount)                m.freeActivityCount += bonus.freeActivityCount;
-    if (bonus.doubleFirstSlotEachDay)           m.doubleFirstSlotEachDay = true;
-    if (bonus.instantCurrency)                  run.totalPoints += 0; // la monnaie s'obtient à la conversion finale — cf. note ci-dessous
-    if (bonus.crisisRewardBoostPct)             m.crisisRewardBoostPct += bonus.crisisRewardBoostPct;
-    if (bonus.freeSkipCount)                    m.freeSkipCount += bonus.freeSkipCount;
-    if (bonus.secondWindCount)                  m.secondWindCount += bonus.secondWindCount;
-    if (bonus.finalGalaBoostPct)                m.finalGalaBoostPct += bonus.finalGalaBoostPct;
-    if (bonus.restGivesPoints)                  m.restGivesPoints += bonus.restGivesPoints;
-    if (bonus.crisisChanceReductionPct)         m.crisisChanceReductionPct += bonus.crisisChanceReductionPct;
-    // "bonus_currency_10" (instantCurrency) est directement crédité en monnaie du mode, pas en points de run
-    if (bonus.instantCurrency) {
-      _state.player.currency = _state.player.currency || {};
-      _state.player.fashionWeekCurrency = (_state.player.fashionWeekCurrency || 0) + bonus.instantCurrency;
+    if (item.effect === 'form_restore') {
+      _fwApplyFormDelta(run, cfg, item.amount);
+    } else if (item.effect === 'stat_boost_random_member' || item.effect === 'level_up_random_member') {
+      const member = targetMemberId ? run.roster.find(m => m.originalInstanceId === targetMemberId) : run.roster[Math.floor(Math.random() * run.roster.length)];
+      if (member) {
+        if (item.effect === 'level_up_random_member') member.level += item.amount;
+        else { member.runStatBonus.atk += item.amount; member.runStatBonus.def += item.amount; member.runStatBonus.spd += item.amount; }
+      }
+    }
+    _autoSave();
+    return { success: true, item };
+  }
+
+  /** Marque le nœud Shop comme visité (résolution de palier, sans effet direct — les achats se font via buyFashionWeekRunItem) */
+  function resolveFashionWeekShopVisit(layerIdx, nodeIdx) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+    const node = run.map.layers[layerIdx]?.[nodeIdx];
+    if (!node || node.resolved || node.category !== 'shop') return null;
+    node.resolved = true;
+    _fwAddScore(run, cfg.scoreRewards.nodeCompleted);
+    _fwAdvanceLayerIfComplete(run);
+    _autoSave();
+    return { type: 'shop' };
+  }
+
+  /** Construit l'équipe adverse d'un nœud Défilé mineur ou du Boss, mise à l'échelle du jour */
+  function _fwBuildEnemyTeam(run, cfg, isBoss) {
+    const count = run.roster.length;
+    const rosterLines = new Set(run.roster.map(m => m.evolutionLine));
+    const usedLines = new Set();
+    const enemyDefs = [];
+    for (let i = 0; i < count; i++) {
+      const pool = _state.characters.filter(c => c.evolutionStage === 0 && !rosterLines.has(c.evolutionLine) && !usedLines.has(c.evolutionLine));
+      if (!pool.length) break;
+      const picked = pool[Math.floor(Math.random() * pool.length)];
+      usedLines.add(picked.evolutionLine);
+      enemyDefs.push(picked);
+    }
+    const scaleMult = _fwDayMultiplier(cfg, run.day, 'difficulty') * (isBoss ? 1.4 : 1);
+    const avgLevel = Math.max(1, Math.round(run.roster.reduce((s, m) => s + m.level, 0) / run.roster.length));
+    return enemyDefs.map(def => {
+      const computed = CWGameDatabase.computeStats(def, avgLevel, 0, _state.config.awakening, def.rarity, _state.config.level);
+      const scaled = { hp: Math.round(computed.hp * scaleMult), atk: Math.round(computed.atk * scaleMult), def: Math.round(computed.def * scaleMult), spd: Math.round(computed.spd * scaleMult) };
+      return CWDefileEngine.buildFighter({ instanceId: 'fw_enemy_' + def.id, level: avgLevel }, def, scaled, _state.config.combat);
+    });
+  }
+
+  /** Lance et résout un nœud Défilé mineur (combat court, 3 tournages) */
+  function resolveFashionWeekDefileNode(layerIdx, nodeIdx) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+    const node = run.map.layers[layerIdx]?.[nodeIdx];
+    if (!node || node.resolved || node.category !== 'defile') return null;
+
+    const playerTeam = run.roster.map(m => {
+      const def = getCharDef(m.currentCharId);
+      const stats = getRoguelikeCharStats(m);
+      const boosted = {
+        hp: stats.hp, atk: Math.round(stats.atk * (1 + (run.runMods.statBoosts.atk||0)/100)),
+        def: Math.round(stats.def * (1 + (run.runMods.statBoosts.def||0)/100)), spd: Math.round(stats.spd * (1 + (run.runMods.statBoosts.spd||0)/100)),
+      };
+      return CWDefileEngine.buildFighter({ instanceId: m.originalInstanceId, level: m.level }, def, boosted, _state.config.combat);
+    });
+    const enemyTeam = _fwBuildEnemyTeam(run, cfg, false);
+    const rounds = Math.min(3, playerTeam.length);
+    const programme = CWDefileEngine.generateProgramme({ ..._state.config.combat, defilePassageCount: rounds }, _state.types);
+    const pAssign = CWDefileEngine.autoAssign(programme, playerTeam, _state.typeMatrix, Math.ceil(rounds / playerTeam.length));
+    const eAssign = CWDefileEngine.autoAssign(programme, enemyTeam, _state.typeMatrix, Math.ceil(rounds / enemyTeam.length));
+    const duelResult = CWDefileEngine.resolveDuel(programme, pAssign, eAssign, playerTeam, enemyTeam, _state.config.combat, _state.typeMatrix);
+
+    const won = duelResult.winner === 'player';
+    if (won) {
+      run.roster.forEach(m => m.level += cfg.levelsPerDefileWin);
+      _fwAddScore(run, Math.round(cfg.scoreRewards.defileWin * _fwDayMultiplier(cfg, run.day, 'reward')));
+    } else {
+      if (run.runMods.defileLossImmunityCount > 0) run.runMods.defileLossImmunityCount--;
+      else _fwApplyFormDelta(run, cfg, -cfg.teamFormDefileLossPenalty);
     }
 
-    run.pendingBonusChoice = null;
+    node.resolved = true;
+    if (run.active) { _fwAddScore(run, cfg.scoreRewards.nodeCompleted); _fwAdvanceLayerIfComplete(run); }
+    _autoSave();
+    return { won, duelResult, gameOver: run.failed };
+  }
+
+  /** Fait avancer au palier suivant si tous les nœuds du palier courant sont résolus */
+  function _fwAdvanceLayerIfComplete(run) {
+    if (!run.active) return;
+    const layer = run.map.layers[run.map.currentLayer];
+    if (layer && layer.every(n => n.resolved)) {
+      run.map.currentLayer++;
+    }
+  }
+
+  /** Le palier courant est-il entièrement résolu (donc prêt pour le Boss si c'était le dernier) ? */
+  function isFashionWeekMapComplete() {
+    const run = _state.player.fashionWeekRun;
+    if (!run) return false;
+    return run.map.currentLayer >= run.map.layers.length;
+  }
+
+  /** Lance et résout le Boss du jour (combat complet, 9 tournages) */
+  function resolveFashionWeekBoss() {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+
+    const playerTeam = run.roster.map(m => {
+      const def = getCharDef(m.currentCharId);
+      const stats = getRoguelikeCharStats(m);
+      const boosted = {
+        hp: stats.hp, atk: Math.round(stats.atk * (1 + (run.runMods.statBoosts.atk||0)/100)),
+        def: Math.round(stats.def * (1 + (run.runMods.statBoosts.def||0)/100)), spd: Math.round(stats.spd * (1 + (run.runMods.statBoosts.spd||0)/100)),
+      };
+      return CWDefileEngine.buildFighter({ instanceId: m.originalInstanceId, level: m.level }, def, boosted, _state.config.combat);
+    });
+    const enemyTeam = _fwBuildEnemyTeam(run, cfg, true);
+    const rounds = Math.min(9, Math.max(playerTeam.length, enemyTeam.length) * 3);
+    const programme = CWDefileEngine.generateProgramme({ ..._state.config.combat, defilePassageCount: rounds }, _state.types);
+    const pAssign = CWDefileEngine.autoAssign(programme, playerTeam, _state.typeMatrix, Math.ceil(rounds / playerTeam.length));
+    const eAssign = CWDefileEngine.autoAssign(programme, enemyTeam, _state.typeMatrix, Math.ceil(rounds / enemyTeam.length));
+    const duelResult = CWDefileEngine.resolveDuel(programme, pAssign, eAssign, playerTeam, enemyTeam, _state.config.combat, _state.typeMatrix);
+
+    const won = duelResult.winner === 'player';
+    run.map.bossResolved = true;
+    let endSummary = null;
+    if (won) {
+      run.roster.forEach(m => m.level += cfg.levelsPerBossWin);
+      _fwAddScore(run, Math.round(cfg.scoreRewards.bossWin * _fwDayMultiplier(cfg, run.day, 'reward')));
+      run.pendingBossBuffChoice = [...cfg.bossBuffChoices].sort(() => Math.random() - 0.5).slice(0, 3).map(b => b.id);
+    } else {
+      run.failed = true;
+      run.active = false;
+      endSummary = endFashionWeekRun(); // game over : la run se termine et se convertit immédiatement
+    }
+    _autoSave();
+    return { won, duelResult, gameOver: run.failed, endSummary };
+  }
+
+  /** Applique un buff choisi après victoire de Boss */
+  function _fwApplyBossBuff(run, buff) {
+    const m = run.runMods;
+    if (buff.statBoostPct)          m.statBoosts[buff.statBoostPct.stat] += buff.statBoostPct.pct;
+    if (buff.instantFormRestorePct) { const cfg = _fwCfg(); _fwApplyFormDelta(run, cfg, cfg.teamFormMax); }
+    if (buff.formMaxIncrease)       m.formMaxBonus = (m.formMaxBonus || 0) + buff.formMaxIncrease;
+    if (buff.scoreMultiplierPct)    m.scoreMultiplierPct += buff.scoreMultiplierPct;
+    if (buff.instantCurrency)       run.currencyThisRun += buff.instantCurrency;
+    if (buff.defileLossImmunityCount) m.defileLossImmunityCount = (m.defileLossImmunityCount || 0) + buff.defileLossImmunityCount;
+    if (buff.instantLevelsAll)      run.roster.forEach(mem => mem.level += buff.instantLevelsAll);
+  }
+
+  function chooseFashionWeekBossBuff(buffId) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.pendingBossBuffChoice?.includes(buffId)) return null;
+    const cfg = _fwCfg();
+    const buff = cfg.bossBuffChoices.find(b => b.id === buffId);
+    if (!buff) return null;
+    _fwApplyBossBuff(run, buff);
+    run.pendingBossBuffChoice = null;
     _autoSave();
     return run.runMods;
   }
 
-  /** Passe au jour suivant (génère son planning), ou termine la run si Samedi est fini */
+  /** Passe au jour suivant (nouvelle carte), ou termine la run si le 5e Boss est passé */
   function advanceFashionWeekDay() {
     const run = _state.player.fashionWeekRun;
     if (!run || !run.active) return null;
     const cfg = _fwCfg();
-
-    run.currentDay++;
-    run.roster.forEach(m => m.usedThisDay = false);
-    run.runMods.rerollsUsedToday = 0;
-
-    if (run.currentDay >= cfg.daysPerWeek) {
+    run.day++;
+    if (run.day >= cfg.daysPerWeek) {
       return endFashionWeekRun();
     }
-    run.daySchedule = _fwGenerateDay(cfg, run.runMods);
+    run.map = _fwGenerateDayMap(cfg, run.day);
     _autoSave();
     return run;
   }
 
-  /** Re-tire les activités du jour en cours (si des re-tirages sont disponibles) */
-  function rerollFashionWeekDay() {
-    const run = _state.player.fashionWeekRun;
-    if (!run || !run.active) return null;
-    const cfg = _fwCfg();
-    const available = 1 + (run.runMods.extraRerolls || 0) - (run.runMods.rerollsUsedToday || 0);
-    if (available <= 0) return null;
-    run.runMods.rerollsUsedToday = (run.runMods.rerollsUsedToday || 0) + 1;
-    run.daySchedule = _fwGenerateDay(cfg, run.runMods);
-    _autoSave();
-    return run.daySchedule;
-  }
-
-  /** Termine la run (Gala final) : convertit les points en monnaie du mode, aucune autre récompense classique */
+  /** Termine la run (réussie ou en game over) : convertit le score en monnaie finale */
   function endFashionWeekRun() {
     const run = _state.player.fashionWeekRun;
     if (!run) return null;
     const cfg = _fwCfg();
-    const galaBoost = 1 + (run.runMods.finalGalaBoostPct || 0) / 100;
-    const currencyGained = Math.round(run.totalPoints * galaBoost / 10); // taux de conversion : 10 points = 1 pièce
+    const currencyFromScore = Math.round(run.totalScore / cfg.scoreToCurrencyRate);
+    const totalCurrency = currencyFromScore + (run.currencyThisRun || 0);
 
-    _state.player.fashionWeekCurrency = (_state.player.fashionWeekCurrency || 0) + currencyGained;
+    _state.player.fashionWeekCurrency = (_state.player.fashionWeekCurrency || 0) + totalCurrency;
+    const summary = { totalScore: run.totalScore, currencyGained: totalCurrency, failed: run.failed, dayReached: run.day + 1 };
     run.active = false;
     run.finished = true;
-    const summary = { totalPoints: run.totalPoints, currencyGained, roster: run.roster.map(m => m.instanceId) };
     _state.player.fashionWeekRun = null;
     _autoSave();
     _notify('fashionWeekEnded');
     return summary;
-  }
-
-  /** Achète un objet de la boutique dédiée avec la monnaie du mode (hors run, entre deux runs) */
-  function buyFashionWeekItem(itemId) {
-    const cfg = _fwCfg();
-    const item = cfg.shopItems.find(i => i.id === itemId);
-    if (!item) return { error: 'not_found' };
-    if ((_state.player.fashionWeekCurrency || 0) < item.cost) return { error: 'insufficient' };
-    _state.player.fashionWeekCurrency -= item.cost;
-    _autoSave();
-    return { success: true, item };
   }
 
   function _computeAuraTotals() {
@@ -2802,10 +2949,11 @@ const CWGameState = (() => {
     trackEventQuestProgress, claimEventQuest, planifyNextEvent, cancelNextEvent, getPlayerStatBonus,
     getCharacterAuraScore, getCharacterFinalStats, getCharacterStatBonus, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
     getCharacterAffectionTier, addCharacterAffection, giveGiftToCharacter,
-    proposeFashionWeekRoundCandidates, startFashionWeekRun, assignFashionWeekSlot, unassignFashionWeekSlot,
-    resolveFashionWeekActivity, resolveFashionWeekCrisis, skipFashionWeekSlot, isFashionWeekDayComplete,
-    proposeFashionWeekDailyBonuses, chooseFashionWeekBonus, advanceFashionWeekDay, rerollFashionWeekDay,
-    endFashionWeekRun, buyFashionWeekItem,
+    proposeFashionWeekRoundCandidates, startFashionWeekRun,
+    getRoguelikeCharStats, resolveFashionWeekNode, resolveFashionWeekEncounter,
+    buyFashionWeekRunItem, resolveFashionWeekShopVisit, resolveFashionWeekDefileNode,
+    isFashionWeekMapComplete, resolveFashionWeekBoss, chooseFashionWeekBossBuff,
+    advanceFashionWeekDay, endFashionWeekRun,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
     getAffinityPercent, registerAffinityGain, addAffinityDirect, getAllAffinityProgress, getOwnedLineageCount,

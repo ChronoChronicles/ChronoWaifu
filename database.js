@@ -356,101 +356,142 @@ const CWGameDatabase = (() => {
 
     // ─── SEMAINE DE MODE (roguelike) ──────────────────────────────────────────
     fashionWeek: {
-      // (le nombre de personnages du roster = slotsPerDay, calculé directement
-      // partout où c'est nécessaire — jamais stocké séparément, pour qu'aucune
-      // sauvegarde périmée ne puisse un jour désynchroniser les deux valeurs)
-      rosterChoiceCount: 6,    // parmi combien de candidates proposées
-      slotsPerDay: 3,          // créneaux par jour (Matin / Après-midi / Soir)
-      slotLabels: ['🌅 Matin', '☀️ Après-midi', '🌙 Soir'],
-      daysPerWeek: 6,          // Lundi à Samedi
-      crisisChance: 0.35,      // probabilité qu'un créneau devienne une Gestion de Crise
-      exceptionalThresholdMult: 1.5, // score ≥ seuil x ce multiplicateur = Réussite Éclatante
-      currencyName: 'Étoiles de Scène',
-      currencyIcon: '🌠',
-      // Choix masqués façon pierre-feuille-ciseaux thématique pour les défis de
-      // Gestion de Crise — Charme bat Mystère, Mystère bat Audace, Audace bat Charme.
-      challengeChoices: [
-        { id: 'charme',  label: '✨ Charme',  icon: '✨', beats: 'mystere' },
-        { id: 'audace',  label: '🔥 Audace',  icon: '🔥', beats: 'charme' },
-        { id: 'mystere', label: '🌙 Mystère', icon: '🌙', beats: 'audace' },
-      ],
-      // Textes d'ambiance tirés au sort avant la révélation du résultat d'une activité
-      flavorTexts: [
-        "Les projecteurs s'allument, tous les regards se tournent vers elle.",
-        "Une tension palpable règne dans la pièce.",
-        "Le public retient son souffle.",
-        "Elle inspire profondément avant d'entrer en scène.",
-        "Les caméras crépitent déjà, avant même le début.",
-        "Un murmure parcourt l'assistance.",
-        "Tout se joue maintenant, sans retour possible.",
-        "L'ambiance est électrique.",
-      ],
-      outcomeComments: {
-        exceptional: ["Un triomphe absolu !", "La salle est en délire !", "Personne n'oubliera ce moment."],
-        success:     ["Une prestation solide.", "Elle s'en sort très bien.", "Rien à redire, du travail propre."],
-        fail:        ["Ça ne s'est pas passé comme prévu...", "Un moment gênant, difficile à rattraper.", "La presse ne sera pas tendre."],
-        rest:        ["Un jour de calme, bien mérité.", "Elle recharge ses batteries."],
-      },
+      // ═══════════════════════════════════════════════════════════════════
+      // SEMAINE DE MODE — MODE ROGUELIKE
+      // Reset complet des personnages (Niveau 1, stats de base, forme de
+      // base) au démarrage. Rien ne persiste après la run, sauf la monnaie
+      // finale convertie depuis le score accumulé.
+      // ═══════════════════════════════════════════════════════════════════
+      daysPerWeek: 5,
+      nodesPerDay: 7,            // paliers séquentiels avant le Boss automatique
+      nodeChoicesMin: 2,
+      nodeChoicesMax: 3,
+      startingTeamSize: 3,        // sélection de départ (1 parmi 3, x3 tours)
+      teamCanExceedStarting: true, // la Rencontre peut faire grandir l'équipe au-delà de 3
 
-      // ── Activités — tirées aléatoirement pour remplir les créneaux du jour ──
-      activities: [
-        { id: 'interview',   label: 'Interview',          icon: '🎤', stat: 'def', threshold: 80,  enduranceCost: 30, rewardPoints: 40 },
-        { id: 'photoshoot',  label: 'Séance photo',       icon: '📸', stat: 'atk', threshold: 80,  enduranceCost: 25, rewardPoints: 40 },
-        { id: 'networking',  label: 'Networking',         icon: '🥂', stat: 'spd', threshold: 70,  enduranceCost: 15, rewardPoints: 25 },
-        { id: 'runway_test', label: 'Essayage podium',    icon: '👠', stat: 'atk', threshold: 100, enduranceCost: 35, rewardPoints: 55 },
-        { id: 'press_junket',label: 'Conférence presse',  icon: '📰', stat: 'def', threshold: 110, enduranceCost: 35, rewardPoints: 55 },
-        { id: 'charity_gala',label: 'Gala caritatif',     icon: '🎗️', stat: 'def', threshold: 90,  enduranceCost: 20, rewardPoints: 35 },
-        { id: 'magazine_cover', label: 'Couverture magazine', icon: '📖', stat: 'atk', threshold: 130, enduranceCost: 40, rewardPoints: 70 },
-        { id: 'social_post',  label: 'Post réseaux',      icon: '📱', stat: 'spd', threshold: 60,  enduranceCost: 10, rewardPoints: 20 },
-        { id: 'brand_deal',   label: 'Partenariat marque', icon: '🤝', stat: 'spd', threshold: 100, enduranceCost: 25, rewardPoints: 50 },
-        { id: 'rest',         label: 'Repos',             icon: '💤', stat: null,  threshold: 0,   enduranceCost: -40, rewardPoints: 0 },
-      ],
+      // ── Monnaies ─────────────────────────────────────────────────────────
+      currencyName: 'Jetons de Backstage',        // monnaie DE RUN, dépensée au Shop pendant la semaine
+      currencyIcon: '🎫',
+      finalCurrencyName: 'Étoiles de Scène',      // monnaie FINALE, score converti à la fin (réussie ou non)
+      finalCurrencyIcon: '🌠',
+      scoreToCurrencyRate: 10,   // 10 points de score = 1 Étoile de Scène
 
-      // ── Bonus quotidiens — un choix parmi 3, tirés dans cette liste ──
-      dailyBonuses: [
-        { id: 'bonus_atk_15',      label: '+15% Charisme (équipe, ce run)',              statBoostPct: { stat: 'atk', pct: 15 } },
-        { id: 'bonus_def_15',      label: '+15% Prestance (équipe, ce run)',             statBoostPct: { stat: 'def', pct: 15 } },
-        { id: 'bonus_spd_15',      label: '+15% Grâce (équipe, ce run)',                 statBoostPct: { stat: 'spd', pct: 15 } },
-        { id: 'bonus_endurance_20',label: 'Régénère 20% d\'Endurance (équipe, immédiat)', instantEnduranceRestorePct: 20 },
-        { id: 'bonus_threshold_10',label: 'Seuils de réussite -10% ce run',              thresholdReductionPct: 10 },
-        { id: 'bonus_points_20',   label: '+20% de points sur toute activité réussie',   pointsMultiplierPct: 20 },
-        { id: 'bonus_crisis_safe', label: 'La prochaine Gestion de Crise ne peut pas mal tourner', crisisImmunityCount: 1 },
-        { id: 'bonus_reroll',      label: 'Peut re-tirer les activités du jour une fois de plus', extraRerolls: 1 },
-        { id: 'bonus_endurance_cost_down', label: 'Coût en Endurance -20% ce run',        enduranceCostReductionPct: 20 },
-        { id: 'bonus_exceptional_easier', label: 'Réussite Éclatante 15% plus facile à atteindre', exceptionalThresholdReductionPct: 15 },
-        { id: 'bonus_free_activity', label: 'Le prochain créneau ne coûte aucune Endurance', freeActivityCount: 1 },
-        { id: 'bonus_double_first', label: 'Le 1er créneau de chaque jour rapporte double', doubleFirstSlotEachDay: true },
-        { id: 'bonus_currency_10',  label: '+10 🌠 immédiatement',                        instantCurrency: 10 },
-        { id: 'bonus_all_stats_5',  label: '+5% aux 3 stats jugées (équipe, ce run)',      allStatsBoostPct: 5 },
-        { id: 'bonus_crisis_reward',label: 'Les Gestions de Crise réussies rapportent +50%', crisisRewardBoostPct: 50 },
-        { id: 'bonus_skip_free',    label: 'Passer une activité ne coûte plus de score perdu', freeSkipCount: 1 },
-        { id: 'bonus_second_wind',  label: 'Une personnage épuisée peut agir une fois de plus', secondWindCount: 1 },
-        { id: 'bonus_gala_boost',   label: '+25% sur les récompenses du Gala final',       finalGalaBoostPct: 25 },
-        { id: 'bonus_rest_bonus',   label: 'Se reposer donne aussi 10 points',             restGivesPoints: 10 },
-        { id: 'bonus_lucky_crisis', label: 'Les Gestions de Crise apparaissent 20% moins souvent', crisisChanceReductionPct: 20 },
+      // ── Forme d'équipe (jauge partagée, game over si elle tombe à 0) ────
+      teamFormMax: 100,
+      teamFormDefileLossPenalty: 30,
+      teamFormDialogueLossPenaltyDefault: 20, // repli si un scénario ne précise pas son propre montant
+
+      // ── Progression (courbe dédiée à la run, sans rapport avec le jeu normal) ──
+      levelsPerDefileWin: 3,
+      levelsPerBossWin: 6,
+      levelsPerDialogueLevelUpMin: 2,
+      levelsPerDialogueLevelUpMax: 4,
+      // Cible indicative : ~10 niveaux gagnés par jour pour une run qui enchaîne les succès
+
+      // ── Génération des paliers ───────────────────────────────────────────
+      encounterChance: 0.06,     // probabilité qu'un nœud Rencontre apparaisse dans un palier (rare, additif)
+      categoryWeights: { defile: 30, shop: 15, dialogue: 30, heal: 15, treasure: 10 },
+
+      // ── Score & mise à l'échelle par jour ────────────────────────────────
+      scoreRewards: { nodeCompleted: 10, defileWin: 40, bossWin: 150, treasureBonus: 15 },
+      difficultyScalingPerDay: 0.22, // +22% de stats ennemies par jour (Jour1=x1 → Jour5≈x1.88)
+      rewardScalingPerDay: 0.18,     // +18% de score/Jetons gagnés par jour
+
+      // ── Buffs de run proposés après une victoire de Boss (3 au choix) ───
+      bossBuffChoices: [
+        { id: 'boss_atk_20',       label: '+20% Charisme (équipe, reste de la run)',   statBoostPct: { stat: 'atk', pct: 20 } },
+        { id: 'boss_def_20',       label: '+20% Prestance (équipe, reste de la run)',  statBoostPct: { stat: 'def', pct: 20 } },
+        { id: 'boss_spd_20',       label: '+20% Grâce (équipe, reste de la run)',      statBoostPct: { stat: 'spd', pct: 20 } },
+        { id: 'boss_form_heal',    label: 'Restaure entièrement la Forme d\'équipe',   instantFormRestorePct: 100 },
+        { id: 'boss_form_max',     label: '+30 Forme d\'équipe maximum (reste de la run)', formMaxIncrease: 30 },
+        { id: 'boss_score_20',     label: '+20% de score sur tous les gains futurs',   scoreMultiplierPct: 20 },
+        { id: 'boss_currency_50',  label: '+50 🎫 immédiatement',                       instantCurrency: 50 },
+        { id: 'boss_defile_safe',  label: 'Le prochain Défilé perdu ne coûte pas de Forme', defileLossImmunityCount: 1 },
+        { id: 'boss_level_5',      label: '+5 Niveaux à toute l\'équipe immédiatement', instantLevelsAll: 5 },
       ],
 
-      // ── Gestions de Crise — un événement imprévu remplace un créneau du jour ──
-      crisisEvents: [
-        { id: 'scandal_rumor',    label: 'Une rumeur circule sur elle',            selfRewardPoints: 60, selfFailPenalty: 40, supportRewardPoints: 15 },
-        { id: 'exclusive_offer',  label: 'Un magazine propose un shooting exclusif, aujourd\'hui seulement', selfRewardPoints: 70, selfFailPenalty: 30, supportRewardPoints: 10 },
-        { id: 'sick_day',         label: 'Elle se sent mal — activité du jour compromise', selfRewardPoints: 30, selfFailPenalty: 50, supportRewardPoints: 20 },
-        { id: 'rival_shade',      label: 'Une rivale la provoque publiquement',    selfRewardPoints: 65, selfFailPenalty: 35, supportRewardPoints: 15 },
-        { id: 'paparazzi_ambush', label: 'Des paparazzis l\'attendent à la sortie', selfRewardPoints: 55, selfFailPenalty: 45, supportRewardPoints: 15 },
-        { id: 'sponsor_pullout',  label: 'Un sponsor menace de se retirer',        selfRewardPoints: 75, selfFailPenalty: 40, supportRewardPoints: 20 },
-        { id: 'wardrobe_malfunction', label: 'Incident vestimentaire en direct',   selfRewardPoints: 50, selfFailPenalty: 55, supportRewardPoints: 10 },
-        { id: 'viral_moment',     label: 'Elle devient virale du jour au lendemain', selfRewardPoints: 80, selfFailPenalty: 25, supportRewardPoints: 20 },
-        { id: 'double_booking',   label: 'Double réservation le même jour',        selfRewardPoints: 45, selfFailPenalty: 30, supportRewardPoints: 25 },
-        { id: 'interview_trap',   label: 'Une question piège en interview',        selfRewardPoints: 60, selfFailPenalty: 45, supportRewardPoints: 15 },
-        { id: 'fan_incident',     label: 'Un incident avec une fan tourne mal',    selfRewardPoints: 55, selfFailPenalty: 50, supportRewardPoints: 15 },
-        { id: 'award_snub',       label: 'Elle est ignorée lors d\'une récompense', selfRewardPoints: 65, selfFailPenalty: 30, supportRewardPoints: 20 },
+      // ── SCÉNARIOS — pool par catégorie, pour éviter toute redondance ────
+      // Chaque scénario de Dialogue propose 3 choix aux issues variées.
+      dialogueScenarios: [
+        {
+          id: 'dlg_interview_surprise', title: 'Interview surprise',
+          flavorText: "Un journaliste l'aborde sans prévenir, micro tendu, caméra déjà allumée.",
+          options: [
+            { label: "Répondre avec assurance",      outcome: { type: 'statBoost', stat: 'atk', amount: 12 } },
+            { label: "Rester prudente et mesurée",    outcome: { type: 'currencyGain', amount: 20 } },
+            { label: "Improviser un show complet",    outcome: { type: 'gamble', chance: 0.5, success: { type: 'levelUp', amount: 3 }, fail: { type: 'formLoss', amount: 15 } } },
+          ],
+        },
+        {
+          id: 'dlg_mentor', title: 'Une mentor de passage',
+          flavorText: "Une figure respectée de l'industrie s'arrête, observe, puis s'approche.",
+          options: [
+            { label: "Accepter ses conseils",         outcome: { type: 'levelUp', amount: 3 } },
+            { label: "Décliner poliment",              outcome: { type: 'currencyGain', amount: 15 } },
+            { label: "Lui proposer un défi amical",     outcome: { type: 'triggerDefile' } },
+          ],
+        },
+        {
+          id: 'dlg_transformation', title: 'Une opportunité de transformation',
+          flavorText: "On lui propose une refonte complète de son image — risqué, mais potentiellement spectaculaire.",
+          options: [
+            { label: "Foncer, tant pis pour le risque", outcome: { type: 'evolve' } },
+            { label: "Trop risqué, mieux vaut refuser",  outcome: { type: 'formGain', amount: 20 } },
+            { label: "Demander plus de détails d'abord", outcome: { type: 'currencyGain', amount: 25 } },
+          ],
+        },
+        {
+          id: 'dlg_buzz_reseaux', title: 'Le buzz des réseaux',
+          flavorText: "Un post pourrait faire des étincelles — ou se retourner contre elle.",
+          options: [
+            { label: "Poster quelque chose d'audacieux", outcome: { type: 'gamble', chance: 0.5, success: { type: 'currencyGain', amount: 50 }, fail: { type: 'formLoss', amount: 20 } } },
+            { label: "Rester discrète",                    outcome: { type: 'runBuff', buffId: 'boss_score_20' } },
+            { label: "Collaborer avec une autre agence",   outcome: { type: 'statBoost', stat: 'def', amount: 12 } },
+          ],
+        },
+        {
+          id: 'dlg_dispute_coulisses', title: 'Dispute en coulisses',
+          flavorText: "Le ton monte entre deux équipes rivales, juste avant l'entrée en scène.",
+          options: [
+            { label: "Prendre parti fermement",   outcome: { type: 'triggerDefile' } },
+            { label: "Calmer le jeu",              outcome: { type: 'formGain', amount: 25 } },
+            { label: "Ignorer et continuer",       outcome: { type: 'levelUp', amount: 2 } },
+          ],
+        },
+      ],
+      // Défilé mineur : simple habillage narratif autour d'un combat réduit
+      defileScenarios: [
+        { id: 'dfl_agence_rivale',  title: 'Agence rivale', flavorText: "Une agence concurrente croise votre chemin — l'occasion de montrer qui domine." },
+        { id: 'dfl_casting_sauvage', title: 'Casting sauvage', flavorText: "Un casting improvisé s'organise sur place, sans prévenir personne." },
+        { id: 'dfl_defi_couloir',   title: 'Défi de couloir', flavorText: "Une provocation lancée entre deux portes, impossible à ignorer." },
+        { id: 'dfl_showcase',      title: 'Showcase impromptu', flavorText: "Les projecteurs s'allument plus tôt que prévu." },
+      ],
+      shopScenarios: [
+        { id: 'shp_vendeuse_ambulante', title: 'Vendeuse ambulante', flavorText: "Une marchande discrète propose ses services, loin des regards." },
+        { id: 'shp_boutique_ephemere', title: 'Boutique éphémère', flavorText: "Une échoppe monte puis disparaît en quelques heures à peine." },
+        { id: 'shp_marche_noir',      title: 'Petit marché parallèle', flavorText: "Tout s'y négocie, à condition d'avoir de quoi payer." },
+      ],
+      healScenarios: [
+        { id: 'hel_spa_prive',   title: 'Spa privé', flavorText: "Un moment de calme, loin de l'agitation du programme." },
+        { id: 'hel_repos_loge',  title: 'Repos en loge', flavorText: "Quelques instants pour souffler avant la suite." },
+        { id: 'hel_soin_equipe', title: 'Soin d\'équipe', flavorText: "Un temps collectif pour recoller les morceaux." },
+      ],
+      treasureScenarios: [
+        { id: 'trs_enveloppe_oubliee', title: 'Enveloppe oubliée', flavorText: "Quelqu'un a laissé traîner quelque chose d'intéressant." },
+        { id: 'trs_cadeau_fan',       title: 'Cadeau d\'une fan', flavorText: "Un mot glissé sous la porte, accompagné d'une petite surprise." },
+        { id: 'trs_prime_surprise',   title: 'Prime surprise', flavorText: "Une récompense inattendue tombe, sans grande explication." },
+      ],
+      encounterScenarios: [
+        { id: 'enc_recrue_couloir', title: 'Une recrue dans le couloir', flavorText: "Elle attend là, visiblement en quête d'une agence prête à la prendre." },
+        { id: 'enc_talent_perdu',  title: 'Un talent en perdition', flavorText: "Livrée à elle-même depuis trop longtemps, elle cherche une chance." },
       ],
 
-      // ── Objets achetables avec la monnaie du mode ──
+      // ── Objets du Shop (achetés avec 🎫, pendant la run) ────────────────
       shopItems: [
-        { id: 'fw_item_endurance', label: 'Kit Récupération',   cost: 30,  effect: 'endurance_restore_full' },
-        { id: 'fw_item_reroll',    label: 'Jeton de re-tirage', cost: 20,  effect: 'extra_reroll' },
-        { id: 'fw_item_insurance', label: 'Assurance Crise',    cost: 50,  effect: 'crisis_immunity' },
+        { id: 'fw_item_form_small',  label: 'Petit soin',     cost: 20, effect: 'form_restore', amount: 25 },
+        { id: 'fw_item_form_full',   label: 'Grand soin',     cost: 45, effect: 'form_restore', amount: 100 },
+        { id: 'fw_item_stat_boost',  label: 'Boost de stat',  cost: 35, effect: 'stat_boost_random_member', amount: 15 },
+        { id: 'fw_item_level',       label: 'Cours accéléré', cost: 40, effect: 'level_up_random_member', amount: 3 },
       ],
     },
   };

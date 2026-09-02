@@ -4249,6 +4249,76 @@
   .fw-bonus-choice-btn:active{ background:rgba(167,139,250,.18); }
 
   .fw-gala-summary{ text-align:center; padding:30px 0; }
+  /* ── Niveau de run affiché sur la fiche personnage ── */
+  .fw-run-level{ font-size:.68rem; color:#fbbf24; font-weight:800; }
+
+  /* ── Jauge de Forme d'équipe ── */
+  .fw-form-gauge-wrap{ margin-bottom:14px; }
+  .fw-form-gauge-label{ font-size:.72rem; color:#f87171; font-weight:700; margin-bottom:4px; }
+  .fw-form-gauge-track{ height:12px; border-radius:6px; background:rgba(255,255,255,.08); overflow:hidden; }
+  .fw-form-gauge-fill{ height:100%; background:linear-gradient(90deg,#f87171,#fca5a5); transition:width .4s ease; }
+  .fw-form-gauge-value{ font-size:.68rem; color:var(--text-dim); text-align:right; font-family:var(--font-mono); margin-top:2px; }
+
+  /* ── Barre de progression de la carte (points par palier + Boss) ── */
+  .fw-map-progress{ display:flex; align-items:center; gap:6px; justify-content:center; margin:14px 0; }
+  .fw-map-dot{
+    width:14px; height:14px; border-radius:50%; background:rgba(255,255,255,.12);
+    border:2px solid rgba(255,255,255,.2);
+  }
+  .fw-map-dot.done{ background:#a78bfa; border-color:#a78bfa; }
+  .fw-map-dot.current{ background:#fbbf24; border-color:#fbbf24; box-shadow:0 0 8px rgba(251,191,36,.6); animation:fwDotPulse 1.4s ease-in-out infinite; }
+  @keyframes fwDotPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.3); } }
+  .fw-map-dot-boss{
+    width:24px; height:24px; font-size:.8rem; display:flex; align-items:center; justify-content:center;
+    border-radius:8px; margin-left:6px;
+  }
+
+  /* ── Nœuds du palier courant ── */
+  .fw-node-choices{ display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:10px; }
+  .fw-node-card{
+    background:rgba(255,255,255,.05); border:1.5px solid; border-radius:12px;
+    padding:14px 8px; text-align:center; cursor:pointer;
+    transition:transform .15s ease, background .15s ease;
+  }
+  .fw-node-card:active{ transform:scale(.96); background:rgba(255,255,255,.09); }
+  .fw-node-icon{
+    width:40px; height:40px; border-radius:50%; margin:0 auto 8px;
+    display:flex; align-items:center; justify-content:center; font-size:1.3rem;
+  }
+  .fw-node-label{ font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.03em; color:var(--text-dim); }
+  .fw-node-title{ font-size:.78rem; font-weight:700; margin-top:4px; }
+
+  .fw-boss-btn{
+    background:linear-gradient(135deg,#fbbf24,#f59e0b) !important; color:#1b1330 !important;
+    font-weight:900; box-shadow:0 0 20px rgba(251,191,36,.4);
+  }
+
+  /* ── Modale de Dialogue / Rencontre ── */
+  .fw-dialogue-modal{ max-width:420px; }
+  .fw-dialogue-title{ font-family:var(--font-display); font-size:1.05rem; font-weight:800; margin-bottom:8px; }
+  .fw-dialogue-flavor{ font-size:.82rem; color:var(--text-dim); font-style:italic; margin-bottom:16px; line-height:1.5; }
+  .fw-dialogue-options{ display:flex; flex-direction:column; gap:8px; }
+  .fw-dialogue-option-btn{
+    background:rgba(255,255,255,.06); border:1px solid rgba(167,139,250,.35);
+    border-radius:10px; padding:12px 14px; font-size:.82rem; font-weight:700;
+    color:var(--text); text-align:left;
+  }
+  .fw-dialogue-option-btn:active{ background:rgba(167,139,250,.18); }
+  .fw-dialogue-option-btn:disabled{ opacity:.4; }
+
+  /* ── Modale Shop ── */
+  .fw-shop-balance{ font-size:.85rem; font-weight:800; color:#fbbf24; text-align:center; margin-bottom:12px; }
+  .fw-shop-items{ display:flex; flex-direction:column; gap:8px; }
+  .fw-shop-item-row{
+    display:flex; justify-content:space-between; align-items:center;
+    background:rgba(255,255,255,.05); border-radius:10px; padding:10px 12px;
+  }
+  .fw-shop-item-label{ font-size:.8rem; font-weight:700; }
+
+  /* ── Overlay Boss (variante plus intense de l'overlay de résolution) ── */
+  .fw-boss-overlay{ background:rgba(20,5,5,0); }
+  .fw-boss-overlay.active{ background:rgba(30,5,5,.9); }
+
   .fw-gala-currency{
     font-size:2.2rem; font-weight:900; color:#fbbf24; font-family:var(--font-display);
     text-shadow:0 0 24px rgba(251,191,36,.5);
@@ -4303,6 +4373,7 @@
   .fw-tone-fail .fw-resolve-outcome{ color:#f87171; animation:fwFailShake .4s ease; }
   @keyframes fwFailShake{ 0%,100%{ transform:translateX(0); } 25%{ transform:translateX(-6px); } 75%{ transform:translateX(6px); } }
   .fw-resolve-detail{ font-size:.78rem; color:var(--text-dim); margin-top:4px; font-family:var(--font-mono); }
+  .fw-resolve-exhaustion{ font-size:.74rem; color:#fb923c; font-weight:700; margin-top:4px; }
   .fw-resolve-points{ font-size:1.1rem; font-weight:900; margin-top:8px; color:#fff; }
 
   /* ── Flash de Gestion de Crise ── */
