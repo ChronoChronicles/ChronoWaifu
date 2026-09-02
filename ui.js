@@ -6216,7 +6216,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     return CWGameDatabase.getDefileTalentDisplay(typeId, cfg);
   }
 
-  function _buildDefileEnemyTeam(playerTeam, cfg, state, count = 3) {
+  function _buildDefileEnemyTeam(playerTeam, cfg, state, count = 3, scaleMult = 1) {
     const avgLevel = Math.max(1, Math.round(
       playerTeam.reduce((s, f) => s + (f.level || 1), 0) / playerTeam.length
     ));
@@ -6242,31 +6242,45 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
     return enemyDefs.map((def, i) => {
       const baseStats = CWGameDatabase.computeStats(def, avgLevel, 0, state.config.awakening, def.rarity, state.config.level);
-      const fighter = CWDefileEngine.buildFighter({ instanceId: `enemy_${i}` }, def, baseStats, cfg);
+      const scaledStats = scaleMult === 1 ? baseStats : {
+        hp: Math.round(baseStats.hp * scaleMult), atk: Math.round(baseStats.atk * scaleMult),
+        def: Math.round(baseStats.def * scaleMult), spd: Math.round(baseStats.spd * scaleMult),
+      };
+      const fighter = CWDefileEngine.buildFighter({ instanceId: `enemy_${i}` }, def, scaledStats, cfg);
       fighter.level = avgLevel;
       return fighter;
     });
   }
 
-  function renderDefilePlanning(randomModeSelection = null) {
+  function renderDefilePlanning(randomModeSelection = null, fwContext = null) {
     const el = document.getElementById('screen-defile-planning');
     if (!el) return;
     const state = CWGameState.get();
     const cfg   = state.config.combat;
-    const isRandomMode = Array.isArray(randomModeSelection);
+    const fashionWeekMode = !!fwContext;
+    const isRandomMode = Array.isArray(randomModeSelection) && !fashionWeekMode;
     const REQUIRED_RANDOM = 9;
-    const teamInstances = isRandomMode
-      ? randomModeSelection.map(iid => CWGameState.getPlayerChar(iid)).filter(Boolean)
-      : CWGameState.getTeam();
 
-    if (!isRandomMode && teamInstances.length < 3) {
+    let teamInstances;
+    let fwRun = null;
+    if (fashionWeekMode) {
+      fwRun = state.player.fashionWeekRun;
+      if (!fwRun || !fwRun.active) { showScreen('fashion-week-day'); return; }
+      teamInstances = fwRun.roster; // personnages DE RUN, pas des instances persistantes
+    } else {
+      teamInstances = isRandomMode
+        ? randomModeSelection.map(iid => CWGameState.getPlayerChar(iid)).filter(Boolean)
+        : CWGameState.getTeam();
+    }
+
+    if (!fashionWeekMode && !isRandomMode && teamInstances.length < 3) {
       el.innerHTML = `
         <div class="screen-header"><h2>💃 Défilé</h2></div>
         <p class="empty-msg">Compose une équipe complète (3 personnages) avant de te lancer dans un défilé.</p>
       `;
       return;
     }
-    if (isRandomMode && teamInstances.length !== REQUIRED_RANDOM) {
+    if (!fashionWeekMode && isRandomMode && teamInstances.length !== REQUIRED_RANDOM) {
       el.innerHTML = `
         <div class="screen-header"><h2>🎲 Défilé Aléatoire</h2></div>
         <p class="empty-msg">Sélection invalide — reviens à l'écran précédent et choisis exactement ${REQUIRED_RANDOM} personnages.</p>
@@ -6277,16 +6291,39 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     if (!_defileState) {
       _defileInProgress = true;
       const programme = CWDefileEngine.generateProgramme(cfg, state.types);
-      const playerTeam = teamInstances.map(inst => {
-        const def = CWGameState.getCharDef(inst.charId);
-        const finalStats = CWGameState.getCharacterFinalStats(inst);
-        const fighter = CWDefileEngine.buildFighter(inst, def, finalStats, cfg);
-        fighter.portrait = def.portrait; // pour l'affichage façon fiche Collection
-        fighter.level = inst.level;      // pour calquer le niveau de l'équipe adverse
-        return fighter;
-      });
-      const usesPerChar = isRandomMode ? 1 : (cfg.defileUsesPerChar ?? 3);
-      const enemyTeam = _buildDefileEnemyTeam(playerTeam, cfg, state, playerTeam.length);
+
+      let playerTeam;
+      if (fashionWeekMode) {
+        playerTeam = teamInstances.map(m => {
+          const def = CWGameState.getCharDef(m.currentCharId);
+          const stats = CWGameState.getRoguelikeCharStats(m); // JAMAIS les bonus persistants
+          const boosts = fwRun.runMods.statBoosts || {};
+          const boosted = {
+            hp: stats.hp,
+            atk: Math.round(stats.atk * (1 + (boosts.atk||0)/100)),
+            def: Math.round(stats.def * (1 + (boosts.def||0)/100)),
+            spd: Math.round(stats.spd * (1 + (boosts.spd||0)/100)),
+          };
+          const fighter = CWDefileEngine.buildFighter({ instanceId: m.originalInstanceId, level: m.level }, def, boosted, cfg);
+          fighter.portrait = def.portrait;
+          fighter.level = m.level;
+          return fighter;
+        });
+      } else {
+        playerTeam = teamInstances.map(inst => {
+          const def = CWGameState.getCharDef(inst.charId);
+          const finalStats = CWGameState.getCharacterFinalStats(inst);
+          const fighter = CWDefileEngine.buildFighter(inst, def, finalStats, cfg);
+          fighter.portrait = def.portrait; // pour l'affichage façon fiche Collection
+          fighter.level = inst.level;      // pour calquer le niveau de l'équipe adverse
+          return fighter;
+        });
+      }
+      const usesPerChar = fashionWeekMode ? 3 : (isRandomMode ? 1 : (cfg.defileUsesPerChar ?? 3));
+      const fwScaleMult = fashionWeekMode
+        ? (1 + (state.config.fashionWeek.difficultyScalingPerDay || 0) * fwRun.day)
+        : 1;
+      const enemyTeam = _buildDefileEnemyTeam(playerTeam, cfg, state, playerTeam.length, fwScaleMult);
       const enemyAssignment = CWDefileEngine.autoAssign(programme, enemyTeam, state.typeMatrix, usesPerChar);
       _defileState = {
         programme,
@@ -6297,6 +6334,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         talentPlacement: {},                                 // { round: { instanceId, typeId } } — Talent placé (libre, par personnage + type)
         usesPerChar,
         isRandomMode,      // pour le calcul des récompenses (XP perso à 70% au lieu du taux normal)
+        isFashionWeekMode: fashionWeekMode, // récompenses et fin de combat entièrement différentes
+        fwContext,                          // { kind: 'node'|'boss'|'adhoc', layerIdx, nodeIdx } — pour la suite après le duel
         legendeCopyTypeId: null,       // choix de Légende (Polyvalence), tranché avant la planification
         legendeChoicePending: playerTeam.some(f => f.type1 === 'Legende' || f.type2 === 'Legende'),
         mystiqueSwapRounds: {},        // { round (1-based) du talent Mystique : [round1, round2] adverses échangés }
@@ -7222,6 +7261,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       }
     );
 
+    if (_defileState.isFashionWeekMode) {
+      _fwPendingDefileContext = _defileState.fwContext;
+      _defileLastResult = result;
+      _defileState = null;
+      showScreen('defile-playback');
+      return;
+    }
+
     _applyDefileStats(result, playerAssignment);
     _defileRewardsPlan = _computeDefileRewardsPlan(result, playerAssignment);
 
@@ -7231,6 +7278,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   }
 
   let _defileRewardsPlan = null;
+  let _fwPendingDefileContext = null; // { kind, layerIdx, nodeIdx } — survit à la remise à zéro de _defileState
 
   /**
    * Met à jour les stats joueur ET personnage après un défilé : Défilés
@@ -7492,8 +7540,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       </p>
       <div class="fw-roster-pick-grid">
         ${candidates.map(iid => {
-          const inst = CWGameState.getPlayerChar(iid);
-          return `<div class="fw-roster-pick-card" data-iid="${iid}">${_fwCharCardHtml(inst)}</div>`;
+          const previewChar = CWGameState.previewFashionWeekRunChar(iid);
+          return `<div class="fw-roster-pick-card" data-iid="${iid}">${_fwRunCharCardHtml(previewChar)}</div>`;
         }).join('')}
       </div>
       ${_fwRosterSelection.length > 0 ? `
@@ -7874,138 +7922,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     document.getElementById('fw-enc-decline')?.addEventListener('click', () => resolve(false));
   }
 
-  /** Mise en scène d'un Défilé mineur : VS, suspense, résultat */
-  /** Ouvre l'écran de planification manuelle d'un défilé jouable (nœud mineur, Boss, ou défi ad-hoc de Dialogue) */
+  /** Lance un VRAI Défilé (moteur classique) pour la Semaine de Mode — nœud mineur, Boss, ou défi ad-hoc de Dialogue */
   function _fwStartDefileEncounter(kind, layerIdx = null, nodeIdx = null) {
-    const pending = CWGameState.startFashionWeekDefileEncounter(kind, layerIdx, nodeIdx);
-    if (!pending) return;
-    _fwRenderDefilePlanningModal(pending);
+    showScreen('defile-planning');
+    CWAudioSystem.playCombat();
+    renderDefilePlanning(null, { kind, layerIdx, nodeIdx });
   }
 
-  function _fwRenderDefilePlanningModal(pending) {
-    const modal = document.getElementById('modal');
-    modal.style.display = 'block';
-    const allAssigned = pending.assignment.every(Boolean);
-
-    modal.innerHTML = `
-      <div class="modal-backdrop" id="modal-backdrop">
-        <div class="modal-box fw-defile-modal">
-          <div class="fw-dialogue-title">${pending.isBoss ? '👑 Défilé de Boss' : '🎭 Défilé'}</div>
-          <p class="defile-help" style="margin:4px 0 12px;">Assigne une personnage à chaque tournage, puis lance le défilé.</p>
-          <div class="fw-defile-programme">
-            ${pending.programme.map((round, i) => {
-              const assigned = pending.assignment[i];
-              const assignedDef = assigned ? CWGameState.getCharDef(CWGameState.get().player.fashionWeekRun.roster.find(m => m.originalInstanceId === assigned.instanceId)?.currentCharId) : null;
-              return `
-                <div class="fw-defile-slot ${assigned ? 'filled' : ''}" data-slot="${i}">
-                  <div class="fw-defile-slot-type">${round.type1 || ''}${round.type2 ? '/' + round.type2 : ''}</div>
-                  ${assigned ? `<div class="fw-defile-slot-name">${assignedDef?.name || assigned.name}</div>` : `<div class="fw-defile-slot-empty">Assigner</div>`}
-                </div>`;
-            }).join('')}
-          </div>
-          <div class="fw-defile-roster">
-            ${pending.playerTeam.map(f => {
-              const used = pending.assignment.some(a => a?.instanceId === f.instanceId);
-              return `<div class="fw-defile-roster-card ${used ? 'used' : ''}" data-fighter="${f.instanceId}">${f.name}</div>`;
-            }).join('')}
-          </div>
-          <button class="btn-primary fw-boss-btn" id="fw-defile-launch" style="width:100%;margin-top:14px;" ${allAssigned ? '' : 'disabled'}>
-            ▶ Lancer le Défilé
-          </button>
-        </div>
-      </div>`;
-
-    let selectedFighterId = null;
-    modal.querySelectorAll('.fw-defile-roster-card:not(.used)').forEach(card => {
-      card.addEventListener('click', () => {
-        modal.querySelectorAll('.fw-defile-roster-card').forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-        selectedFighterId = card.dataset.fighter;
-      });
-    });
-    modal.querySelectorAll('.fw-defile-slot').forEach(slot => {
-      slot.addEventListener('click', () => {
-        const slotIdx = parseInt(slot.dataset.slot);
-        if (slot.classList.contains('filled')) {
-          CWGameState.unassignFashionWeekDefileSlot(slotIdx);
-        } else if (selectedFighterId) {
-          CWGameState.assignFashionWeekDefileSlot(slotIdx, selectedFighterId);
-          selectedFighterId = null;
-        } else return;
-        _fwRenderDefilePlanningModal(CWGameState.get().player.fashionWeekRun.pendingDefile);
-      });
-    });
-    document.getElementById('fw-defile-launch')?.addEventListener('click', async () => {
-      _closeModal();
-      await _fwPlayDefileResolution();
-    });
-  }
-
-  /** Résout le défilé planifié : déroulé tour par tour, puis résultat final avec récompenses spécifiques au mode */
-  async function _fwPlayDefileResolution() {
-    const cfg = CWGameState.get().config.fashionWeek;
-    const flash = document.createElement('div');
-    flash.className = 'fw-crisis-flash';
-    document.body.appendChild(flash);
-    await _sleep(200);
-    flash.remove();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'fw-resolve-overlay';
-    overlay.style.pointerEvents = 'auto';
-    overlay.innerHTML = `<div class="fw-resolve-caption"><div class="fw-resolve-outcome">Le défilé commence...</div></div>`;
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('active'));
-    await _sleep(700);
-
-    const result = CWGameState.submitFashionWeekDefile();
-    if (!result) { overlay.remove(); return; }
-    await _fwPlayRoundByRoundLog(overlay, result.duelResult.log);
-
-    const toneClass = result.won ? 'fw-tone-success' : 'fw-tone-fail';
-    overlay.classList.add(toneClass, 'revealed');
-    overlay.querySelector('.fw-resolve-caption').innerHTML = `
-      <div class="fw-resolve-outcome">${result.won ? '✅ Défilé remporté !' : '❌ Défilé perdu...'}</div>
-      ${result.won ? `
-        <div class="fw-resolve-detail">📈 +${result.levelsGained} Niveaux (${result.xpGained} XP)</div>
-        <div class="fw-resolve-detail">${cfg.currencyIcon} +${result.ticketsGained} ${cfg.currencyName}</div>
-      ` : `<div class="fw-resolve-detail">-${cfg.teamFormDefileLossPenalty} Forme d'équipe</div>`}
-    `;
-    CWAudioSystem.playSfx(result.won ? CWAudioSystem.SFX_KEYS.defileRoundWin : CWAudioSystem.SFX_KEYS.defileRoundLose);
-    await _sleep(2200);
-    overlay.classList.remove('active');
-    await _sleep(300);
-    overlay.remove();
-
-    if (result.gameOver) { showScreen('fashion-week-gala'); return; }
-    if (result.won && CWGameState.get().player.fashionWeekRun?.pendingBossBuffChoice) { _fwShowBossBuffChoice(); return; }
-    _fwCheckGameOverThenRender();
-  }
-
-  /** Affiche chaque tournage du journal de combat l'un après l'autre, avec le score qui défile */
-  async function _fwPlayRoundByRoundLog(overlay, log) {
-    let pTotal = 0, eTotal = 0;
-    const caption = overlay.querySelector('.fw-resolve-caption');
-    for (let i = 0; i < log.length; i++) {
-      const entry = log[i];
-      pTotal += entry.playerScore || 0;
-      eTotal += entry.enemyScore || 0;
-      const pWon = (entry.playerScore || 0) > (entry.enemyScore || 0);
-      caption.innerHTML = `
-        <div class="fw-round-counter">Tournage ${i + 1} / ${log.length}</div>
-        <div class="fw-round-matchup">
-          <span class="${pWon ? 'fw-round-winner' : ''}">${entry.playerFighter || '—'} (${entry.playerScore ?? 0})</span>
-          <span class="fw-round-vs">vs</span>
-          <span class="${!pWon ? 'fw-round-winner' : ''}">${entry.enemyFighter || '—'} (${entry.enemyScore ?? 0})</span>
-        </div>
-        <div class="fw-round-total">Total : ${pTotal} — ${eTotal}</div>
-      `;
-      overlay.classList.add('active', 'revealed');
-      CWAudioSystem.playSfx(pWon ? CWAudioSystem.SFX_KEYS.defileTypeGood : CWAudioSystem.SFX_KEYS.defileTypeBad);
-      await _sleep(550);
-    }
-    await _sleep(400);
-  }
 
   /** Mise en scène simple (Heal / Trésor) : révélation directe du gain */
   async function _fwPlaySimpleNodeSequence(layerIdx, nodeIdx, node, cfg, category) {
@@ -8025,6 +7948,24 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
   /** Mise en scène du Boss : combat décisif, puis choix de buff ou game over */
   /** Affiche le choix de 3 buffs après une victoire de Boss */
+  /** Applique les récompenses Semaine de Mode après un VRAI combat de Défilé, puis enchaîne correctement */
+  function _fwApplyDefileResultAndContinue() {
+    const ctx = _fwPendingDefileContext;
+    _fwPendingDefileContext = null;
+    const result = _defileLastResult;
+    _defileInProgress = false; // la séquence Défilé est réellement terminée, navigation débloquée
+    if (!ctx || !result) { _showCombatSelect(); return; }
+
+    const won = result.winner === 'player';
+    const finalScore = result.log.reduce((s, e) => s + (e.playerScore || 0), 0);
+    const outcome = CWGameState.applyFashionWeekDefileResult(ctx, won, finalScore);
+
+    if (outcome?.gameOver) { showScreen('fashion-week-gala'); return; }
+    const run = CWGameState.get().player.fashionWeekRun;
+    if (won && run?.pendingBossBuffChoice) { _fwShowBossBuffChoice(); return; }
+    showScreen('fashion-week-day');
+  }
+
   function _fwShowBossBuffChoice() {
     const state = CWGameState.get();
     const run = state.player.fashionWeekRun;
@@ -8541,7 +8482,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       </div>
       <button class="btn-primary" id="btn-defile-continue" style="width:100%;margin-top:14px;">Voir les récompenses ›</button>
     `;
-    document.getElementById('btn-defile-continue')?.addEventListener('click', () => showScreen('defile-rewards'));
+    document.getElementById('btn-defile-continue')?.addEventListener('click', () => {
+      if (_fwPendingDefileContext) { _fwApplyDefileResultAndContinue(); return; }
+      showScreen('defile-rewards');
+    });
   }
 
 

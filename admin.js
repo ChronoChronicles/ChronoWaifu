@@ -47,6 +47,7 @@ const CWAdminPanel = (() => {
     { id: 'player-bonus',    label: '🌟 Paliers Stats Joueur',      group: 'Nouveaux Modes' },
     { id: 'character-bonus', label: '💃 Paliers Stats Personnages', group: 'Nouveaux Modes' },
     { id: 'affection',       label: '💞 Affection',                 group: 'Nouveaux Modes' },
+    { id: 'fashion-week',    label: '🗓️ Semaine de Mode',           group: 'Nouveaux Modes' },
     // ── Système ──────────────────────────────────────────────────────────────
     { id: 'player',     label: '🎮 Joueur',      group: 'Système'    },
     { id: 'resources',  label: '💎 Ressources',  group: 'Système'    },
@@ -682,6 +683,7 @@ const CWAdminPanel = (() => {
           case 'player-bonus':    content.innerHTML = _renderPlayerBonusTab();    break;
           case 'character-bonus': content.innerHTML = _renderCharacterBonusTab(); break;
           case 'affection':       content.innerHTML = _renderAffectionTab();      break;
+          case 'fashion-week':    content.innerHTML = _renderFashionWeekTab();    break;
           case 'items':      content.innerHTML = _renderItemsTab();      break;
           case 'shop':       content.innerHTML = _renderShopTab();       break;
           case 'daily':      content.innerHTML = _renderDailyTab();      _rebuildCycleDayRows();      break;
@@ -4932,6 +4934,74 @@ const CWAdminPanel = (() => {
 
   // ─── ONGLET AFFECTION ───────────────────────────────────────────────────────────
 
+  function _renderFashionWeekTab() {
+    const state = CWGameState.get();
+    const cfg   = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
+
+    const field = (id, label, value, hint = '') => `
+      <div class="admin-field">
+        <label>${label}${hint ? `<span style="font-size:.68rem;color:#888;margin-left:4px">(${hint})</span>` : ''}</label>
+        <input type="number" id="${id}" value="${value}" step="any" style="width:100px">
+      </div>`;
+
+    return `
+      <div class="admin-section">
+        <div class="admin-section-title">🗓️ Semaine de Mode — Structure de la run</div>
+        <div class="admin-grid">
+          ${field('fw-daysPerWeek', 'Jours par semaine', cfg.daysPerWeek)}
+          ${field('fw-nodesPerDay', 'Paliers par jour', cfg.nodesPerDay)}
+          ${field('fw-nodeChoicesMin', 'Choix min par palier', cfg.nodeChoicesMin)}
+          ${field('fw-nodeChoicesMax', 'Choix max par palier', cfg.nodeChoicesMax)}
+          ${field('fw-startingTeamSize', 'Taille du roster de départ', cfg.startingTeamSize)}
+          ${field('fw-encounterChance', 'Chance de Rencontre par nœud', cfg.encounterChance, '0 à 1')}
+        </div>
+      </div>
+
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">❤️ Forme d'équipe</div>
+        <div class="admin-grid">
+          ${field('fw-teamFormMax', 'Forme maximum', cfg.teamFormMax)}
+          ${field('fw-teamFormDefileLossPenalty', 'Perte si Défilé perdu', cfg.teamFormDefileLossPenalty)}
+          ${field('fw-teamFormDialogueLossPenaltyDefault', 'Perte par défaut (Dialogue)', cfg.teamFormDialogueLossPenaltyDefault)}
+        </div>
+      </div>
+
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">📈 Progression &amp; récompenses</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          L'XP d'un Défilé = score total du combat × 10. "XP par niveau" détermine
+          combien de niveaux ça convertit — augmente cette valeur si les personnages
+          montent trop vite (ou inversement).
+        </p>
+        <div class="admin-grid">
+          ${field('fw-runXpPerLevel', 'XP nécessaire par niveau', cfg.runXpPerLevel)}
+          ${field('fw-levelsPerDialogueLevelUpMin', 'Niveaux gagnés (Dialogue) — min', cfg.levelsPerDialogueLevelUpMin)}
+          ${field('fw-levelsPerDialogueLevelUpMax', 'Niveaux gagnés (Dialogue) — max', cfg.levelsPerDialogueLevelUpMax)}
+          ${field('fw-scoreToCurrencyRate', 'Score requis pour 1 Étoile de Scène', cfg.scoreToCurrencyRate)}
+          ${field('fw-difficultyScalingPerDay', 'Difficulté ennemie / jour', cfg.difficultyScalingPerDay, 'ex: 0.22 = +22%/jour')}
+          ${field('fw-rewardScalingPerDay', 'Récompenses / jour', cfg.rewardScalingPerDay, 'ex: 0.18 = +18%/jour')}
+        </div>
+      </div>
+
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">🏆 Gains de score par type de nœud</div>
+        <div class="admin-grid">
+          ${field('fw-score-nodeCompleted', 'Nœud passé (peu importe le résultat)', cfg.scoreRewards.nodeCompleted)}
+          ${field('fw-score-defileWin', 'Défilé mineur remporté', cfg.scoreRewards.defileWin)}
+          ${field('fw-score-bossWin', 'Boss remporté', cfg.scoreRewards.bossWin)}
+          ${field('fw-score-treasureBonus', 'Nœud Trésor', cfg.scoreRewards.treasureBonus)}
+        </div>
+      </div>
+
+      <div class="admin-actions">
+        <button class="admin-btn admin-btn-success" onclick="CWAdminPanel._saveCombatConfig()">💾 Sauver tous les paramètres</button>
+      </div>
+    `;
+  }
+
   function _renderAffectionTab() {
     const state = CWGameState.get();
     const cfg   = state.config;
@@ -7071,7 +7141,41 @@ const CWAdminPanel = (() => {
       affection = { tiers, gifts };
     }
 
-    CWGameState.updateConfig({ ...newCfg, playerBonus, characterBonus, affection });
+    // Semaine de Mode — préserve les valeurs actuelles si cet onglet n'est pas affiché
+    const defaultFw = CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
+    const currentFw = state.config.fashionWeek || defaultFw;
+    const fwVal = (id, currentVal, defaultVal) => {
+      const el = document.getElementById(id);
+      const parsed = el ? parseFloat(el.value) : NaN;
+      return isNaN(parsed) ? (currentVal ?? defaultVal) : parsed;
+    };
+    const fashionWeek = {
+      ...currentFw,
+      daysPerWeek: fwVal('fw-daysPerWeek', currentFw.daysPerWeek, defaultFw.daysPerWeek),
+      nodesPerDay: fwVal('fw-nodesPerDay', currentFw.nodesPerDay, defaultFw.nodesPerDay),
+      nodeChoicesMin: fwVal('fw-nodeChoicesMin', currentFw.nodeChoicesMin, defaultFw.nodeChoicesMin),
+      nodeChoicesMax: fwVal('fw-nodeChoicesMax', currentFw.nodeChoicesMax, defaultFw.nodeChoicesMax),
+      startingTeamSize: fwVal('fw-startingTeamSize', currentFw.startingTeamSize, defaultFw.startingTeamSize),
+      encounterChance: fwVal('fw-encounterChance', currentFw.encounterChance, defaultFw.encounterChance),
+      teamFormMax: fwVal('fw-teamFormMax', currentFw.teamFormMax, defaultFw.teamFormMax),
+      teamFormDefileLossPenalty: fwVal('fw-teamFormDefileLossPenalty', currentFw.teamFormDefileLossPenalty, defaultFw.teamFormDefileLossPenalty),
+      teamFormDialogueLossPenaltyDefault: fwVal('fw-teamFormDialogueLossPenaltyDefault', currentFw.teamFormDialogueLossPenaltyDefault, defaultFw.teamFormDialogueLossPenaltyDefault),
+      runXpPerLevel: fwVal('fw-runXpPerLevel', currentFw.runXpPerLevel, defaultFw.runXpPerLevel),
+      levelsPerDialogueLevelUpMin: fwVal('fw-levelsPerDialogueLevelUpMin', currentFw.levelsPerDialogueLevelUpMin, defaultFw.levelsPerDialogueLevelUpMin),
+      levelsPerDialogueLevelUpMax: fwVal('fw-levelsPerDialogueLevelUpMax', currentFw.levelsPerDialogueLevelUpMax, defaultFw.levelsPerDialogueLevelUpMax),
+      scoreToCurrencyRate: fwVal('fw-scoreToCurrencyRate', currentFw.scoreToCurrencyRate, defaultFw.scoreToCurrencyRate),
+      difficultyScalingPerDay: fwVal('fw-difficultyScalingPerDay', currentFw.difficultyScalingPerDay, defaultFw.difficultyScalingPerDay),
+      rewardScalingPerDay: fwVal('fw-rewardScalingPerDay', currentFw.rewardScalingPerDay, defaultFw.rewardScalingPerDay),
+      scoreRewards: {
+        ...currentFw.scoreRewards,
+        nodeCompleted: fwVal('fw-score-nodeCompleted', currentFw.scoreRewards?.nodeCompleted, defaultFw.scoreRewards.nodeCompleted),
+        defileWin: fwVal('fw-score-defileWin', currentFw.scoreRewards?.defileWin, defaultFw.scoreRewards.defileWin),
+        bossWin: fwVal('fw-score-bossWin', currentFw.scoreRewards?.bossWin, defaultFw.scoreRewards.bossWin),
+        treasureBonus: fwVal('fw-score-treasureBonus', currentFw.scoreRewards?.treasureBonus, defaultFw.scoreRewards.treasureBonus),
+      },
+    };
+
+    CWGameState.updateConfig({ ...newCfg, playerBonus, characterBonus, affection, fashionWeek });
     _notify('✅ Tous les paramètres ont été sauvegardés.');
   }
 
