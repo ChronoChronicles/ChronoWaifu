@@ -1882,7 +1882,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   function _openCharDetail(instanceId) {
     const inst  = CWGameState.getPlayerChar(instanceId);
     if (!inst) return;
-    const def   = CWGameState.getCharDef(inst.charId);
+    const realDef = CWGameState.getCharDef(inst.charId);
+    if (!realDef) return;
+    // Portrait équipé (stade choisi ou image de Prestige) — copie locale pour
+    // ne jamais modifier la vraie définition du personnage.
+    const displayUrl = CWGameState.getDisplayPortraitUrl(instanceId);
+    const def = displayUrl && displayUrl !== realDef.portrait ? { ...realDef, portrait: displayUrl } : realDef;
     const state = CWGameState.get();
     const _fs   = _computeFullStats(inst, def);
     const stats  = _fs.total;
@@ -2067,7 +2072,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                       : 100;
                     return `
                       <div class="detail-affection-header">
-                        <span>💞 Affection — Niveau ${tier.level}</span>
+                        <span>💞 Affection — Niveau ${tier.level}${tier.isPrestige ? ' <span class="prestige-badge">✨ PRESTIGE</span>' : ''}</span>
                         <strong style="color:#f472b6;">+${tier.bonus}</strong>
                       </div>
                       <div class="pm-stat-progress">
@@ -2083,6 +2088,24 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                           <button class="btn-gift" data-gift="${g.id}" data-instance="${inst.instanceId}">
                             🎁 ${g.label}<br><span style="font-size:.68rem;color:var(--text-dim);">${g.cost.toLocaleString('fr-FR')} $ — +${g.affectionGiven} Affection</span>
                           </button>
+                        `).join('')}
+                      </div>`;
+                  })()}
+                </div>
+                <div class="detail-portraits-section">
+                  ${(() => {
+                    const portraits = CWGameState.getUnlockedPortraits(inst.instanceId);
+                    if (portraits.length <= 1) return ''; // rien à choisir si une seule forme possédée
+                    const equippedId = inst.equippedPortraitId || `stage_${CWGameState.getCharDef(inst.charId)?.evolutionStage ?? 0}`;
+                    return `
+                      <div class="detail-affection-header"><span>🖼️ Portrait équipé</span></div>
+                      <div class="portrait-picker-grid">
+                        ${portraits.map(p => `
+                          <div class="portrait-picker-card ${p.id === equippedId ? 'equipped' : ''} ${p.kind === 'prestige' ? 'is-prestige' : ''}" data-portrait="${p.id}">
+                            <img src="${p.url}" alt="${p.label}" loading="lazy">
+                            <div class="portrait-picker-label">${p.label}</div>
+                            ${p.id === equippedId ? '<div class="portrait-picker-check">✓</div>' : ''}
+                          </div>
                         `).join('')}
                       </div>`;
                   })()}
@@ -2122,6 +2145,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           _showToast(`🎁 ${result.gift.label} offert — +${result.gift.affectionGiven} Affection !`, 'success');
           _openCharDetail(inst.instanceId); // re-rendu pour voir la jauge mise à jour
         }
+      });
+    });
+    modal.querySelectorAll('.portrait-picker-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const result = CWGameState.setEquippedPortrait(inst.instanceId, card.dataset.portrait);
+        if (result) _openCharDetail(inst.instanceId); // re-rendu pour voir le nouveau portrait équipé
       });
     });
   }

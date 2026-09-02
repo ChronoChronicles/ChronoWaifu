@@ -352,7 +352,21 @@ const CWGameDatabase = (() => {
         { id: 'medium', label: 'Cadeau moyen',  cost: 2000,  affectionGiven: 120 },
         { id: 'large',  label: 'Grand cadeau',  cost: 6000,  affectionGiven: 350 },
       ],
+      // ── Paliers de PRESTIGE — prolongent la MÊME jauge d'Affection au-delà du
+      // Niveau 10, mais ne comptent QUE si la personnage est à son stade
+      // d'évolution final. Certains paliers débloquent une nouvelle image
+      // (portrait alternatif), stockée par lignée dans prestigeImages.
+      prestigeTiers: [
+        { level: 11, threshold: 4200,  bonus: 6, hasImage: true  },
+        { level: 12, threshold: 5300,  bonus: 6, hasImage: false },
+        { level: 13, threshold: 6600,  bonus: 7, hasImage: true  },
+        { level: 14, threshold: 8100,  bonus: 7, hasImage: false },
+        { level: 15, threshold: 9800,  bonus: 8, hasImage: true  },
+      ],
     },
+
+    // Images de Prestige débloquées, par lignée évolutive : { [lineId]: { [tierLevel]: {url, label} } }
+    prestigeImages: {},
 
     // ─── SEMAINE DE MODE (roguelike) ──────────────────────────────────────────
     fashionWeek: {

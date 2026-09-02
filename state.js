@@ -1226,25 +1226,88 @@ const CWGameState = (() => {
    * seuil cumulé est atteint, plus la progression vers le suivant (s'il y en
    * a un — le tableau des paliers est extensible, peut être vide au-delà).
    */
+  /** Une personnage est-elle à son stade d'évolution FINAL (aucune forme suivante dans sa lignée) ? */
+  function isCharAtFinalEvolutionStage(inst) {
+    const def = getCharDef(inst.charId);
+    if (!def) return false;
+    return !_state.characters.some(c => c.evolutionLine === def.evolutionLine && c.evolutionStage === def.evolutionStage + 1);
+  }
+
   function getCharacterAffectionTier(inst) {
-    if (!inst) return { level: 0, bonus: 0, points: inst?.affection || 0, nextThreshold: null, prevThreshold: 0 };
-    const tiers = _state.config?.affection?.tiers || CWGameDatabase.DEFAULT_CONFIG.affection.tiers;
+    if (!inst) return { level: 0, bonus: 0, points: inst?.affection || 0, nextThreshold: null, prevThreshold: 0, isPrestige: false, unlockedImageTiers: [] };
+    const cfg = _state.config?.affection || CWGameDatabase.DEFAULT_CONFIG.affection;
     const points = inst.affection || 0;
+
+    // Les paliers de Prestige ne comptent QUE si le stade final d'évolution est
+    // atteint — sinon on s'arrête au Niveau 10 normal, même si les points
+    // continuent d'être comptés (ils "attendent" que l'évolution finale arrive).
+    const eligibleForPrestige = isCharAtFinalEvolutionStage(inst);
+    const allTiers = eligibleForPrestige ? [...cfg.tiers, ...(cfg.prestigeTiers || [])] : cfg.tiers;
+
     let current = null, next = null;
-    for (const t of tiers) {
+    for (const t of allTiers) {
       if (points >= t.threshold) current = t;
       else { next = t; break; }
     }
+    const unlockedImageTiers = allTiers.filter(t => t.hasImage && points >= t.threshold).map(t => t.level);
     return {
       level: current?.level || 0,
       bonus: current?.bonus || 0,
       points,
       prevThreshold: current?.threshold || 0,
       nextThreshold: next?.threshold ?? null, // null = tous les paliers actuels sont dépassés
+      isPrestige: (current?.level || 0) > (cfg.tiers[cfg.tiers.length - 1]?.level || 10),
+      unlockedImageTiers, // niveaux de palier dont l'image a été débloquée
     };
   }
 
-  /** Ajoute de l'Affection (usage passif en Défilé, ou cadeau) à un personnage */
+  /** Tous les portraits disponibles pour une personnage : ses 4 stades d'évolution + ses images de Prestige débloquées */
+  function getUnlockedPortraits(instanceId) {
+    const inst = getPlayerChar(instanceId);
+    if (!inst) return [];
+    const def = getCharDef(inst.charId);
+    if (!def) return [];
+    const lineChars = _state.characters
+      .filter(c => c.evolutionLine === def.evolutionLine)
+      .sort((a, b) => a.evolutionStage - b.evolutionStage);
+
+    const portraits = lineChars.map(c => ({
+      id: `stage_${c.evolutionStage}`, url: c.portrait, label: `Stade ${c.evolutionStage}`, kind: 'evolution',
+    }));
+
+    const tier = getCharacterAffectionTier(inst);
+    const prestigeImgs = _state.config?.prestigeImages?.[def.evolutionLine] || {};
+    tier.unlockedImageTiers.forEach(level => {
+      const img = prestigeImgs[level];
+      if (img?.url) portraits.push({ id: `prestige_${level}`, url: img.url, label: img.label || `Prestige Niv.${level}`, kind: 'prestige' });
+    });
+    return portraits;
+  }
+
+  /** Équipe un portrait précis (stade d'évolution ou image de Prestige) pour l'affichage */
+  function setEquippedPortrait(instanceId, portraitId) {
+    const inst = getPlayerChar(instanceId);
+    if (!inst) return null;
+    const available = getUnlockedPortraits(instanceId);
+    if (!available.some(p => p.id === portraitId)) return null;
+    inst.equippedPortraitId = portraitId;
+    _autoSave();
+    return inst;
+  }
+
+  /** Renvoie l'URL du portrait actuellement équipé pour l'affichage (ou le portrait par défaut de son stade actuel) */
+  function getDisplayPortraitUrl(instanceId) {
+    const inst = getPlayerChar(instanceId);
+    if (!inst) return null;
+    const def = getCharDef(inst.charId);
+    if (inst.equippedPortraitId) {
+      const chosen = getUnlockedPortraits(instanceId).find(p => p.id === inst.equippedPortraitId);
+      if (chosen) return chosen.url;
+    }
+    return def?.portrait || null;
+  }
+
+
   function addCharacterAffection(instanceId, amount) {
     const inst = getPlayerChar(instanceId);
     if (!inst || !amount) return;
@@ -2909,6 +2972,7 @@ const CWGameState = (() => {
     trackEventQuestProgress, claimEventQuest, planifyNextEvent, cancelNextEvent, getPlayerStatBonus,
     getCharacterAuraScore, getCharacterFinalStats, getCharacterStatBonus, getPlayerAuraScoreTotal, getPlayerAuraScoreTeam,
     getCharacterAffectionTier, addCharacterAffection, giveGiftToCharacter,
+    isCharAtFinalEvolutionStage, getUnlockedPortraits, setEquippedPortrait, getDisplayPortraitUrl,
     proposeFashionWeekRoundCandidates, previewFashionWeekRunChar, startFashionWeekRun,
     getRoguelikeCharStats, resolveFashionWeekNode, resolveFashionWeekEncounter,
     buyFashionWeekRunItem, resolveFashionWeekShopVisit,

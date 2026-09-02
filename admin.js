@@ -213,6 +213,35 @@ const CWAdminPanel = (() => {
         font-size:.7rem; background:#2a2540; color:#888; 
         padding:1px 7px; border-radius:99px; font-weight:500;
       }
+      /* ── Contenu Semaine de Mode : scénarios, options, buffs ── */
+      .fw-scenario-card{
+        background:rgba(255,255,255,.03); border:1px solid #2a2540; border-radius:10px;
+        padding:12px; margin-bottom:12px;
+      }
+      .fw-scenario-card-header{
+        display:flex; justify-content:space-between; align-items:center;
+        font-size:.78rem; font-weight:700; color:#e8d5b7; margin-bottom:8px;
+      }
+      .fw-scenario-options{ margin-top:10px; display:flex; flex-direction:column; gap:10px; }
+      .fw-option-block{
+        background:rgba(167,139,250,.05); border:1px solid rgba(167,139,250,.25);
+        border-radius:8px; padding:10px;
+      }
+      .fw-option-block-header{
+        display:flex; justify-content:space-between; align-items:center;
+        font-size:.72rem; font-weight:700; color:#c4b5fd; margin-bottom:6px;
+      }
+      .fw-outcome-editor{ margin-top:6px; }
+      .fw-outcome-editor-title{ font-size:.72rem; font-weight:700; color:#888; margin-bottom:4px; }
+      .fw-outcome-fields{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+      .fw-gamble-sub{
+        background:rgba(0,0,0,.2); border-radius:8px; padding:8px; margin-top:8px;
+        border-left:3px solid #a78bfa;
+      }
+      .fw-gamble-sub-title{ font-size:.7rem; font-weight:700; color:#a78bfa; margin-bottom:6px; }
+      .fw-scenario-subsection{ margin-bottom:16px; }
+      .fw-scenario-subsection-title{ font-size:.76rem; font-weight:700; color:#e8d5b7; margin-bottom:6px; }
+      .fw-simple-scenario-row{ display:flex; gap:6px; margin-bottom:6px; align-items:center; }
       /* ── SOUS-SECTIONS dans un formulaire ── */
       .admin-form-block {
         background:#0e0c1a; border:1px solid #2a2540; border-radius:8px;
@@ -3573,6 +3602,24 @@ const CWAdminPanel = (() => {
 
   // ─── ONGLET ÉVOLUTIONS ───────────────────────────────────────────────────────
 
+  /** Sauvegarde les URL/noms des images de Prestige saisies pour une lignée précise */
+  function _savePrestigeImages(lineId) {
+    const state = CWGameState.get();
+    const defaultTiers = CWGameDatabase.DEFAULT_CONFIG.affection.prestigeTiers;
+    const tiers = (state.config.affection?.prestigeTiers || defaultTiers).filter(t => t.hasImage);
+    const prestigeImages = { ...(state.config.prestigeImages || {}) };
+    const lineImages = { ...(prestigeImages[lineId] || {}) };
+    tiers.forEach(t => {
+      const url = document.getElementById(`prestige-img-url-${lineId}-${t.level}`)?.value.trim();
+      const label = document.getElementById(`prestige-img-label-${lineId}-${t.level}`)?.value.trim();
+      if (url) lineImages[t.level] = { url, label };
+      else delete lineImages[t.level];
+    });
+    prestigeImages[lineId] = lineImages;
+    CWGameState.updateConfig({ prestigeImages });
+    _notify(`✅ Images de Prestige sauvegardées pour ${lineId}.`);
+  }
+
   function _renderEvolutionsTab() {
     const state = CWGameState.get();
     const chars = state.characters;
@@ -3680,6 +3727,22 @@ const CWAdminPanel = (() => {
                 <button class="admin-btn admin-btn-secondary admin-btn-sm" onclick="CWAdminPanel._upgradeCharacter('${c.id}')">⬆️ Upgrade</button>
               </div>
             `).join('')}
+          </div>
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(251,191,36,.25);">
+            <div style="font-size:.74rem;font-weight:800;color:#fbbf24;margin-bottom:6px;">🌟 Images de Prestige</div>
+            <p style="font-size:.62rem;color:#666;margin:0 0 8px;">
+              Débloquées une fois la forme finale ET le Niveau 10 d'Affection atteints. Une URL par palier marqué "avec image".
+            </p>
+            ${(state.config.affection?.prestigeTiers || CWGameDatabase.DEFAULT_CONFIG.affection.prestigeTiers).filter(t => t.hasImage).map(t => {
+              const stored = state.config.prestigeImages?.[lineId]?.[t.level] || {};
+              return `
+                <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+                  <span style="font-size:.68rem;color:#fbbf24;width:70px;flex-shrink:0;">Niveau ${t.level}</span>
+                  <input type="text" id="prestige-img-url-${lineId}-${t.level}" value="${stored.url || ''}" placeholder="https://..." style="flex:1;min-width:140px;">
+                  <input type="text" id="prestige-img-label-${lineId}-${t.level}" value="${stored.label || ''}" placeholder="Nom (ex: Tenue de Gala)" style="width:130px;">
+                </div>`;
+            }).join('')}
+            <button class="admin-btn admin-btn-secondary admin-btn-sm" onclick="CWAdminPanel._savePrestigeImages('${lineId}')">💾 Sauver les images de cette lignée</button>
           </div>
         </div>
       `;
@@ -4934,6 +4997,200 @@ const CWAdminPanel = (() => {
 
   // ─── ONGLET AFFECTION ───────────────────────────────────────────────────────────
 
+  // ═══ Éditeur d'ISSUE réutilisable (le "quoi ça donne" d'un choix) ═══
+  // Un seul système de champs, utilisé pour chaque option de Dialogue — y
+  // compris récursivement pour les 2 issues d'un Pari (succès / échec).
+
+  const FW_OUTCOME_TYPES = [
+    { id: 'levelUp',       label: 'Niveau(x) gagné(s)' },
+    { id: 'statBoost',     label: 'Bonus de stat' },
+    { id: 'evolve',        label: 'Évolution' },
+    { id: 'currencyGain',  label: 'Gain de Jetons' },
+    { id: 'runBuff',       label: 'Bonus de run (réutilise un buff de Boss)' },
+    { id: 'formLoss',      label: 'Perte de Forme d\'équipe' },
+    { id: 'formGain',      label: 'Gain de Forme d\'équipe' },
+    { id: 'triggerDefile', label: 'Déclenche un Défilé (défi)' },
+    { id: 'gamble',        label: 'Pari (chance de succès/échec)' },
+  ];
+  const FW_STAT_OPTIONS = [ { id: 'atk', label: 'Charisme' }, { id: 'def', label: 'Prestance' }, { id: 'spd', label: 'Grâce' } ];
+  const FW_TARGET_OPTIONS = [
+    { id: 'random_one', label: 'Une personnage au hasard' },
+    { id: 'choice_one',  label: 'Une personnage au choix du joueur' },
+    { id: 'team',        label: 'Toute l\'équipe' },
+  ];
+
+  function _fwSelectHtml(id, options, selected, onchange = '') {
+    return `<select id="${id}" ${onchange ? `onchange="${onchange}"` : ''}>
+      ${options.map(o => `<option value="${o.id}" ${o.id === selected ? 'selected' : ''}>${o.label}</option>`).join('')}
+    </select>`;
+  }
+
+  /** Les champs SPÉCIFIQUES au type d'issue choisi (tout sauf le sélecteur de type lui-même) */
+  function _fwOutcomeFieldsHtml(prefix, outcome) {
+    const o = outcome || {};
+    const state = CWGameState.get();
+    const cfg = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
+    switch (o.type) {
+      case 'levelUp':
+        return `
+          <div class="admin-field"><label>Nombre de niveaux</label><input type="number" id="${prefix}-amount" value="${o.amount ?? 2}" min="1"></div>
+          <div class="admin-field"><label>Sur qui</label>${_fwSelectHtml(`${prefix}-target`, FW_TARGET_OPTIONS, o.target || 'random_one')}</div>`;
+      case 'statBoost':
+        return `
+          <div class="admin-field"><label>Stat concernée</label>${_fwSelectHtml(`${prefix}-stat`, FW_STAT_OPTIONS, o.stat || 'atk')}</div>
+          <div class="admin-field"><label>Montant</label><input type="number" id="${prefix}-amount" value="${o.amount ?? 12}" min="1"></div>
+          <div class="admin-field"><label>Sur qui</label>${_fwSelectHtml(`${prefix}-target`, FW_TARGET_OPTIONS, o.target || 'random_one')}</div>`;
+      case 'evolve':
+        return `
+          <div class="admin-field"><label>Sur qui</label>${_fwSelectHtml(`${prefix}-target`, FW_TARGET_OPTIONS.filter(t => t.id !== 'team'), o.target || 'random_one')}</div>
+          <p style="font-size:.66rem;color:#666;margin:4px 0 0;">Si personne n'est éligible (déjà au stade final), un gros bonus de stat est donné à la place, automatiquement.</p>`;
+      case 'currencyGain':
+        return `<div class="admin-field"><label>Jetons gagnés</label><input type="number" id="${prefix}-amount" value="${o.amount ?? 20}" min="0"></div>`;
+      case 'runBuff': {
+        const buffs = cfg.bossBuffChoices || [];
+        return `<div class="admin-field"><label>Quel buff appliquer</label>${_fwSelectHtml(`${prefix}-buffId`, buffs.map(b => ({id: b.id, label: b.label})), o.buffId || buffs[0]?.id)}</div>`;
+      }
+      case 'formLoss':
+        return `<div class="admin-field"><label>Forme perdue</label><input type="number" id="${prefix}-amount" value="${o.amount ?? 15}" min="0"></div>`;
+      case 'formGain':
+        return `<div class="admin-field"><label>Forme regagnée</label><input type="number" id="${prefix}-amount" value="${o.amount ?? 20}" min="0"></div>`;
+      case 'triggerDefile':
+        return `<p style="font-size:.7rem;color:#888;margin:4px 0 0;">Aucun réglage — lance un vrai Défilé jouable au moment de la résolution.</p>`;
+      case 'gamble':
+        return `
+          <div class="admin-field"><label>Chance de succès</label><input type="number" id="${prefix}-chance" value="${o.chance ?? 0.5}" min="0" max="1" step="0.05"></div>
+          <div class="fw-gamble-sub">
+            <div class="fw-gamble-sub-title">✅ Si succès</div>
+            ${_fwOutcomeEditorHtml(`${prefix}-succ`, o.success, null)}
+          </div>
+          <div class="fw-gamble-sub">
+            <div class="fw-gamble-sub-title">❌ Si échec</div>
+            ${_fwOutcomeEditorHtml(`${prefix}-fail`, o.fail, null)}
+          </div>`;
+      default:
+        return '';
+    }
+  }
+
+  /** Bloc complet : sélecteur de type + champs qui changent dynamiquement selon le type choisi */
+  function _fwOutcomeEditorHtml(prefix, outcome, title) {
+    const o = outcome || { type: 'currencyGain', amount: 20 };
+    return `
+      <div class="fw-outcome-editor">
+        ${title ? `<div class="fw-outcome-editor-title">${title}</div>` : ''}
+        <div class="admin-field">
+          <label>Type d'issue</label>
+          ${_fwSelectHtml(`${prefix}-type`, FW_OUTCOME_TYPES, o.type, `CWAdminPanel._fwOnOutcomeTypeChange('${prefix}')`)}
+        </div>
+        <div id="${prefix}-fields" class="fw-outcome-fields">${_fwOutcomeFieldsHtml(prefix, o)}</div>
+      </div>`;
+  }
+
+  /** Ré-affiche uniquement les champs spécifiques quand le type d'issue change (sans tout re-générer) */
+  function _fwOnOutcomeTypeChange(prefix) {
+    const typeEl = document.getElementById(`${prefix}-type`);
+    const fieldsEl = document.getElementById(`${prefix}-fields`);
+    if (!typeEl || !fieldsEl) return;
+    fieldsEl.innerHTML = _fwOutcomeFieldsHtml(prefix, { type: typeEl.value });
+  }
+
+  /** Relit le formulaire pour reconstruire l'objet "outcome" correspondant (récursif pour un Pari) */
+  function _fwReadOutcomeFromForm(prefix) {
+    const type = document.getElementById(`${prefix}-type`)?.value;
+    if (!type) return null;
+    const numVal = (id, def) => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) ? def : v; };
+    const strVal = (id, def) => document.getElementById(id)?.value || def;
+    switch (type) {
+      case 'levelUp':      return { type, amount: numVal(`${prefix}-amount`, 2), target: strVal(`${prefix}-target`, 'random_one') };
+      case 'statBoost':    return { type, stat: strVal(`${prefix}-stat`, 'atk'), amount: numVal(`${prefix}-amount`, 12), target: strVal(`${prefix}-target`, 'random_one') };
+      case 'evolve':       return { type, target: strVal(`${prefix}-target`, 'random_one') };
+      case 'currencyGain': return { type, amount: numVal(`${prefix}-amount`, 20) };
+      case 'runBuff':      return { type, buffId: strVal(`${prefix}-buffId`, '') };
+      case 'formLoss':     return { type, amount: numVal(`${prefix}-amount`, 15) };
+      case 'formGain':     return { type, amount: numVal(`${prefix}-amount`, 20) };
+      case 'triggerDefile':return { type };
+      case 'gamble':       return { type, chance: numVal(`${prefix}-chance`, 0.5), success: _fwReadOutcomeFromForm(`${prefix}-succ`), fail: _fwReadOutcomeFromForm(`${prefix}-fail`) };
+      default: return null;
+    }
+  }
+
+  function _fwAddDialogueScenario() {
+    const state = CWGameState.get();
+    const cfg = state.config.fashionWeek || (state.config.fashionWeek = { ...CWGameDatabase.DEFAULT_CONFIG.fashionWeek });
+    cfg.dialogueScenarios = cfg.dialogueScenarios || [];
+    cfg.dialogueScenarios.push({
+      id: `dlg_custom_${Date.now()}`, title: 'Nouveau scénario', flavorText: '',
+      options: [{ label: 'Choix 1', outcome: { type: 'currencyGain', amount: 20 } }],
+    });
+    switchTab('fashion-week');
+  }
+  function _fwRemoveDialogueScenario(si) {
+    const state = CWGameState.get();
+    state.config.fashionWeek.dialogueScenarios.splice(si, 1);
+    switchTab('fashion-week');
+  }
+  function _fwAddDialogueOption(si) {
+    const state = CWGameState.get();
+    const scenario = state.config.fashionWeek.dialogueScenarios[si];
+    scenario.options = scenario.options || [];
+    scenario.options.push({ label: `Choix ${scenario.options.length + 1}`, outcome: { type: 'currencyGain', amount: 20 } });
+    switchTab('fashion-week');
+  }
+  function _fwRemoveDialogueOption(si, oi) {
+    const state = CWGameState.get();
+    state.config.fashionWeek.dialogueScenarios[si].options.splice(oi, 1);
+    switchTab('fashion-week');
+  }
+
+  // ═══ Éditeur de BUFF DE BOSS (structure différente d'une issue de Dialogue) ═══
+  const FW_BUFF_TYPES = [
+    { id: 'statBoostPct',             label: 'Bonus de stat en % (équipe, reste de la run)' },
+    { id: 'instantFormRestorePct',    label: 'Restaure la Forme d\'équipe (%)' },
+    { id: 'formMaxIncrease',          label: 'Augmente le maximum de Forme' },
+    { id: 'scoreMultiplierPct',       label: 'Multiplicateur de score (%)' },
+    { id: 'instantCurrency',          label: 'Jetons immédiats' },
+    { id: 'defileLossImmunityCount',  label: 'Immunité à la perte de Forme (N défaites de Défilé)' },
+    { id: 'instantLevelsAll',         label: 'Niveaux immédiats (toute l\'équipe)' },
+  ];
+  /** Détecte quel type de buff est actuellement configuré (un seul champ effectif par buff) */
+  function _fwDetectBuffType(buff) {
+    return FW_BUFF_TYPES.find(t => buff && buff[t.id] !== undefined)?.id || 'instantCurrency';
+  }
+  function _fwBuffFieldsHtml(prefix, buff) {
+    const type = _fwDetectBuffType(buff);
+    switch (type) {
+      case 'statBoostPct':
+        return `
+          <div class="admin-field"><label>Stat concernée</label>${_fwSelectHtml(`${prefix}-stat`, FW_STAT_OPTIONS, buff?.statBoostPct?.stat || 'atk')}</div>
+          <div class="admin-field"><label>Pourcentage</label><input type="number" id="${prefix}-pct" value="${buff?.statBoostPct?.pct ?? 15}" min="1"></div>`;
+      case 'instantFormRestorePct':
+        return `<div class="admin-field"><label>% de Forme restaurée</label><input type="number" id="${prefix}-value" value="${buff?.instantFormRestorePct ?? 100}" min="1" max="100"></div>`;
+      case 'formMaxIncrease':
+        return `<div class="admin-field"><label>Augmentation du maximum</label><input type="number" id="${prefix}-value" value="${buff?.formMaxIncrease ?? 20}" min="1"></div>`;
+      case 'scoreMultiplierPct':
+        return `<div class="admin-field"><label>Pourcentage de score en plus</label><input type="number" id="${prefix}-value" value="${buff?.scoreMultiplierPct ?? 15}" min="1"></div>`;
+      case 'instantCurrency':
+        return `<div class="admin-field"><label>Jetons donnés</label><input type="number" id="${prefix}-value" value="${buff?.instantCurrency ?? 40}" min="1"></div>`;
+      case 'defileLossImmunityCount':
+        return `<div class="admin-field"><label>Nombre de défaites protégées</label><input type="number" id="${prefix}-value" value="${buff?.defileLossImmunityCount ?? 1}" min="1"></div>`;
+      case 'instantLevelsAll':
+        return `<div class="admin-field"><label>Niveaux offerts (chacune)</label><input type="number" id="${prefix}-value" value="${buff?.instantLevelsAll ?? 3}" min="1"></div>`;
+      default: return '';
+    }
+  }
+  function _fwOnBuffTypeChange(prefix) {
+    const type = document.getElementById(`${prefix}-type`)?.value;
+    const fieldsEl = document.getElementById(`${prefix}-fields`);
+    if (!fieldsEl) return;
+    fieldsEl.innerHTML = _fwBuffFieldsHtml(prefix, { [type]: type === 'statBoostPct' ? { stat: 'atk', pct: 15 } : 15 });
+  }
+  function _fwReadBuffFromForm(prefix) {
+    const type = document.getElementById(`${prefix}-type`)?.value;
+    const numVal = (id, def) => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) ? def : v; };
+    if (type === 'statBoostPct') return { statBoostPct: { stat: document.getElementById(`${prefix}-stat`)?.value || 'atk', pct: numVal(`${prefix}-pct`, 15) } };
+    return { [type]: numVal(`${prefix}-value`, 1) };
+  }
+
   function _renderFashionWeekTab() {
     const state = CWGameState.get();
     const cfg   = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
@@ -4996,10 +5253,157 @@ const CWAdminPanel = (() => {
         </div>
       </div>
 
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">💬 Scénarios de Dialogue</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Chaque scénario propose plusieurs choix ; chacun a sa propre issue,
+          entièrement réglable ci-dessous.
+        </p>
+        <div id="fw-dialogue-scenarios-list">
+          ${(cfg.dialogueScenarios || []).map((s, si) => `
+            <div class="fw-scenario-card">
+              <div class="fw-scenario-card-header">
+                <span>Scénario ${si + 1}</span>
+                <button class="admin-btn admin-btn-danger admin-btn-sm" onclick="CWAdminPanel._fwRemoveDialogueScenario(${si})">🗑️ Retirer ce scénario</button>
+              </div>
+              <div class="admin-field"><label>Titre</label><input type="text" id="fw-dlg-${si}-title" value="${s.title || ''}"></div>
+              <div class="admin-field"><label>Texte d'ambiance</label><textarea id="fw-dlg-${si}-flavor" rows="2">${s.flavorText || ''}</textarea></div>
+              <div class="fw-scenario-options">
+                ${(s.options || []).map((opt, oi) => `
+                  <div class="fw-option-block">
+                    <div class="fw-option-block-header">
+                      <span>Choix ${oi + 1}</span>
+                      <button class="admin-btn admin-btn-danger admin-btn-sm" onclick="CWAdminPanel._fwRemoveDialogueOption(${si},${oi})">✕</button>
+                    </div>
+                    <div class="admin-field"><label>Libellé du bouton</label><input type="text" id="fw-dlg-${si}-opt${oi}-label" value="${opt.label || ''}"></div>
+                    ${_fwOutcomeEditorHtml(`fw-dlg-${si}-opt${oi}`, opt.outcome, null)}
+                  </div>
+                `).join('')}
+              </div>
+              <button class="admin-btn admin-btn-secondary admin-btn-sm" onclick="CWAdminPanel._fwAddDialogueOption(${si})">➕ Ajouter un choix</button>
+            </div>
+          `).join('')}
+        </div>
+        <button class="admin-btn admin-btn-primary" onclick="CWAdminPanel._fwAddDialogueScenario()">➕ Ajouter un scénario de Dialogue</button>
+      </div>
+
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">🏆 Buffs de Boss</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">3 sont proposés au hasard après chaque victoire de Boss.</p>
+        <div id="fw-buffs-list">
+          ${(cfg.bossBuffChoices || []).map((b, bi) => `
+            <div class="fw-scenario-card">
+              <div class="fw-scenario-card-header">
+                <span>Buff ${bi + 1}</span>
+                <button class="admin-btn admin-btn-danger admin-btn-sm" onclick="CWAdminPanel._fwRemoveBossBuff(${bi})">🗑️</button>
+              </div>
+              <div class="admin-field"><label>Libellé affiché au joueur</label><input type="text" id="fw-buff-${bi}-label" value="${b.label || ''}"></div>
+              <div class="admin-field">
+                <label>Type de buff</label>
+                ${_fwSelectHtml(`fw-buff-${bi}-type`, FW_BUFF_TYPES, _fwDetectBuffType(b), `CWAdminPanel._fwOnBuffTypeChange('fw-buff-${bi}')`)}
+              </div>
+              <div id="fw-buff-${bi}-fields" class="fw-outcome-fields">${_fwBuffFieldsHtml(`fw-buff-${bi}`, b)}</div>
+            </div>
+          `).join('')}
+        </div>
+        <button class="admin-btn admin-btn-primary" onclick="CWAdminPanel._fwAddBossBuff()">➕ Ajouter un buff de Boss</button>
+      </div>
+
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">🛍️ Objets de la Boutique (achetés en Jetons, pendant la run)</div>
+        <div id="fw-shopitems-list">
+          ${(cfg.shopItems || []).map((it, ii) => `
+            <div class="fw-scenario-card">
+              <div class="fw-scenario-card-header">
+                <span>Objet ${ii + 1}</span>
+                <button class="admin-btn admin-btn-danger admin-btn-sm" onclick="CWAdminPanel._fwRemoveShopItem(${ii})">🗑️</button>
+              </div>
+              <div class="admin-field"><label>Nom</label><input type="text" id="fw-item-${ii}-label" value="${it.label || ''}"></div>
+              <div class="admin-field"><label>Coût (Jetons)</label><input type="number" id="fw-item-${ii}-cost" value="${it.cost ?? 30}" min="1"></div>
+              <div class="admin-field">
+                <label>Effet</label>
+                <select id="fw-item-${ii}-effect">
+                  <option value="form_restore" ${it.effect==='form_restore'?'selected':''}>Restaure de la Forme</option>
+                  <option value="stat_boost_random_member" ${it.effect==='stat_boost_random_member'?'selected':''}>Bonus de stat (personnage au hasard)</option>
+                  <option value="level_up_random_member" ${it.effect==='level_up_random_member'?'selected':''}>Niveaux gagnés (personnage au hasard)</option>
+                </select>
+              </div>
+              <div class="admin-field"><label>Montant</label><input type="number" id="fw-item-${ii}-amount" value="${it.amount ?? 25}" min="1"></div>
+            </div>
+          `).join('')}
+        </div>
+        <button class="admin-btn admin-btn-primary" onclick="CWAdminPanel._fwAddShopItem()">➕ Ajouter un objet</button>
+      </div>
+
+      <hr class="admin-sep" />
+      <div class="admin-section">
+        <div class="admin-section-title">📖 Textes des autres catégories de nœuds</div>
+        <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
+          Ces catégories n'ont pas de choix multiples — juste un titre et un texte
+          d'ambiance tirés au sort quand le nœud apparaît.
+        </p>
+        ${['defile','shop','heal','treasure','encounter'].map(cat => {
+          const labels = { defile:'🎭 Défilé mineur', shop:'🛍️ Shop (texte d\'ambiance à l\'arrivée)', heal:'💗 Heal', treasure:'💰 Trésor', encounter:'🌟 Rencontre (recrutement rare)' };
+          const list = cfg[`${cat}Scenarios`] || [];
+          return `
+            <div class="fw-scenario-subsection">
+              <div class="fw-scenario-subsection-title">${labels[cat]}</div>
+              <div id="fw-simple-${cat}-list">
+                ${list.map((s, si) => `
+                  <div class="fw-simple-scenario-row">
+                    <input type="text" id="fw-simple-${cat}-${si}-title" value="${s.title || ''}" placeholder="Titre" style="width:160px;">
+                    <input type="text" id="fw-simple-${cat}-${si}-flavor" value="${s.flavorText || ''}" placeholder="Texte d'ambiance" style="flex:1;">
+                    <button class="admin-btn admin-btn-danger admin-btn-sm" onclick="CWAdminPanel._fwRemoveSimpleScenario('${cat}',${si})">✕</button>
+                  </div>
+                `).join('')}
+              </div>
+              <button class="admin-btn admin-btn-secondary admin-btn-sm" onclick="CWAdminPanel._fwAddSimpleScenario('${cat}')">➕ Ajouter</button>
+            </div>`;
+        }).join('')}
+      </div>
+
       <div class="admin-actions">
         <button class="admin-btn admin-btn-success" onclick="CWAdminPanel._saveCombatConfig()">💾 Sauver tous les paramètres</button>
       </div>
     `;
+  }
+
+  function _fwAddBossBuff() {
+    const state = CWGameState.get();
+    state.config.fashionWeek.bossBuffChoices = state.config.fashionWeek.bossBuffChoices || [];
+    state.config.fashionWeek.bossBuffChoices.push({ id: `buff_custom_${Date.now()}`, label: 'Nouveau buff', instantCurrency: 40 });
+    switchTab('fashion-week');
+  }
+  function _fwRemoveBossBuff(bi) {
+    const state = CWGameState.get();
+    state.config.fashionWeek.bossBuffChoices.splice(bi, 1);
+    switchTab('fashion-week');
+  }
+  function _fwAddShopItem() {
+    const state = CWGameState.get();
+    state.config.fashionWeek.shopItems = state.config.fashionWeek.shopItems || [];
+    state.config.fashionWeek.shopItems.push({ id: `fw_item_custom_${Date.now()}`, label: 'Nouvel objet', cost: 30, effect: 'form_restore', amount: 25 });
+    switchTab('fashion-week');
+  }
+  function _fwRemoveShopItem(ii) {
+    const state = CWGameState.get();
+    state.config.fashionWeek.shopItems.splice(ii, 1);
+    switchTab('fashion-week');
+  }
+  function _fwAddSimpleScenario(cat) {
+    const state = CWGameState.get();
+    const key = `${cat}Scenarios`;
+    state.config.fashionWeek[key] = state.config.fashionWeek[key] || [];
+    state.config.fashionWeek[key].push({ id: `${cat}_custom_${Date.now()}`, title: 'Nouveau', flavorText: '' });
+    switchTab('fashion-week');
+  }
+  function _fwRemoveSimpleScenario(cat, si) {
+    const state = CWGameState.get();
+    state.config.fashionWeek[`${cat}Scenarios`].splice(si, 1);
+    switchTab('fashion-week');
   }
 
   function _renderAffectionTab() {
@@ -7175,6 +7579,44 @@ const CWAdminPanel = (() => {
       },
     };
 
+    // Contenu (dialogues, buffs, objets, scénarios simples) — lu depuis les
+    // formulaires SEULEMENT si l'onglet Semaine de Mode est actuellement affiché,
+    // sinon on préserve ce qui existe déjà.
+    if (document.getElementById('fw-dialogue-scenarios-list')) {
+      fashionWeek.dialogueScenarios = (currentFw.dialogueScenarios || []).map((s, si) => ({
+        id: s.id,
+        title: document.getElementById(`fw-dlg-${si}-title`)?.value || s.title,
+        flavorText: document.getElementById(`fw-dlg-${si}-flavor`)?.value || s.flavorText,
+        options: (s.options || []).map((opt, oi) => ({
+          label: document.getElementById(`fw-dlg-${si}-opt${oi}-label`)?.value || opt.label,
+          outcome: _fwReadOutcomeFromForm(`fw-dlg-${si}-opt${oi}`) || opt.outcome,
+        })),
+      }));
+
+      fashionWeek.bossBuffChoices = (currentFw.bossBuffChoices || []).map((b, bi) => ({
+        id: b.id,
+        label: document.getElementById(`fw-buff-${bi}-label`)?.value || b.label,
+        ..._fwReadBuffFromForm(`fw-buff-${bi}`),
+      }));
+
+      fashionWeek.shopItems = (currentFw.shopItems || []).map((it, ii) => ({
+        id: it.id,
+        label: document.getElementById(`fw-item-${ii}-label`)?.value || it.label,
+        cost: parseFloat(document.getElementById(`fw-item-${ii}-cost`)?.value) || it.cost,
+        effect: document.getElementById(`fw-item-${ii}-effect`)?.value || it.effect,
+        amount: parseFloat(document.getElementById(`fw-item-${ii}-amount`)?.value) || it.amount,
+      }));
+
+      ['defile', 'shop', 'heal', 'treasure', 'encounter'].forEach(cat => {
+        const key = `${cat}Scenarios`;
+        fashionWeek[key] = (currentFw[key] || []).map((s, si) => ({
+          id: s.id,
+          title: document.getElementById(`fw-simple-${cat}-${si}-title`)?.value || s.title,
+          flavorText: document.getElementById(`fw-simple-${cat}-${si}-flavor`)?.value || s.flavorText,
+        }));
+      });
+    }
+
     CWGameState.updateConfig({ ...newCfg, playerBonus, characterBonus, affection, fashionWeek });
     _notify('✅ Tous les paramètres ont été sauvegardés.');
   }
@@ -7340,7 +7782,10 @@ const CWAdminPanel = (() => {
     _saveStoryMode, _addStoryChapter, _deleteStoryChapter,
     _saveResources, _addResources, _saveEnergyConfig, _fillEnergy, _resetStats,
     _saveCombatConfig, _saveAdaptiveScaling, _previewAdaptiveScaling, _saveEnemyRarityWeights, _resetEnemyRarityWeights, _updateEnemyWeightTotal, _saveEnemyXpBonus,
-    _addAffectionTierRow, _removeAffectionTierRow,
+    _addAffectionTierRow, _removeAffectionTierRow, _savePrestigeImages,
+    _fwOnOutcomeTypeChange, _fwAddDialogueScenario, _fwRemoveDialogueScenario, _fwAddDialogueOption, _fwRemoveDialogueOption,
+    _fwOnBuffTypeChange, _fwAddBossBuff, _fwRemoveBossBuff,
+    _fwAddShopItem, _fwRemoveShopItem, _fwAddSimpleScenario, _fwRemoveSimpleScenario,
     _saveEventTemplate, _resetEventTemplate, _addEventTplQuest, _deleteEventTplQuest,
     _saveCurrentTag, _saveNextTag, _onTplDayTypeChange,
     _previewEvolvedFormWeight, _saveEvolvedFormWeightFactor,

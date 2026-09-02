@@ -1607,6 +1607,37 @@
   }
   .btn-gift:active{ background:rgba(244,114,182,.2); }
 
+  .prestige-badge{
+    display:inline-block; font-size:.62rem; font-weight:900; color:#1b1330;
+    background:linear-gradient(90deg,#fbbf24,#fde68a); padding:2px 8px;
+    border-radius:999px; margin-left:6px; vertical-align:middle;
+    box-shadow:0 0 8px rgba(251,191,36,.5);
+  }
+
+  .detail-portraits-section{
+    margin-top:16px; padding-top:14px; border-top:1px solid rgba(167,139,250,.25);
+  }
+  .portrait-picker-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(72px,1fr)); gap:8px; margin-top:10px;
+  }
+  .portrait-picker-card{
+    position:relative; border-radius:8px; overflow:hidden; cursor:pointer;
+    border:2px solid rgba(255,255,255,.15); aspect-ratio:1/1.3;
+  }
+  .portrait-picker-card img{ width:100%; height:100%; object-fit:cover; object-position:center 20%; display:block; }
+  .portrait-picker-card.equipped{ border-color:#a78bfa; box-shadow:0 0 10px rgba(167,139,250,.5); }
+  .portrait-picker-card.is-prestige{ border-color:rgba(251,191,36,.5); }
+  .portrait-picker-card.is-prestige.equipped{ border-color:#fbbf24; box-shadow:0 0 10px rgba(251,191,36,.6); }
+  .portrait-picker-label{
+    position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,.65);
+    font-size:.58rem; text-align:center; padding:2px; color:#fff;
+  }
+  .portrait-picker-check{
+    position:absolute; top:3px; right:3px; width:16px; height:16px; border-radius:50%;
+    background:#a78bfa; color:#1b1330; font-size:.6rem; font-weight:900;
+    display:flex; align-items:center; justify-content:center;
+  }
+
   /* ============================================================
      TEAM SCREEN
      ============================================================ */
