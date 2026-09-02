@@ -1665,54 +1665,105 @@ const CWGameState = (() => {
     });
   }
 
-  /** Lance et résout un nœud Défilé mineur (combat court, 3 tournages) */
-  function resolveFashionWeekDefileNode(layerIdx, nodeIdx) {
+  /**
+   * Prépare une rencontre de Défilé JOUABLE (planification manuelle, comme un
+   * vrai Défilé) — nœud mineur, Boss, ou défi ad-hoc déclenché par un Dialogue.
+   * Ne résout RIEN tout de suite : stocke la rencontre en attente de plan.
+   */
+  function startFashionWeekDefileEncounter(kind, layerIdx = null, nodeIdx = null) {
     const run = _state.player.fashionWeekRun;
     if (!run || !run.active) return null;
     const cfg = _fwCfg();
-    const node = run.map.layers[layerIdx]?.[nodeIdx];
-    if (!node || node.resolved || node.category !== 'defile') return null;
+    const isBoss = kind === 'boss';
 
     const playerTeam = run.roster.map(m => {
       const def = getCharDef(m.currentCharId);
-      const stats = getRoguelikeCharStats(m);
+      const stats = getRoguelikeCharStats(m); // JAMAIS les bonus persistants (joueur/individuel/affection) — uniquement niveau + bonus de run
       const boosted = {
         hp: stats.hp, atk: Math.round(stats.atk * (1 + (run.runMods.statBoosts.atk||0)/100)),
         def: Math.round(stats.def * (1 + (run.runMods.statBoosts.def||0)/100)), spd: Math.round(stats.spd * (1 + (run.runMods.statBoosts.spd||0)/100)),
       };
       return CWDefileEngine.buildFighter({ instanceId: m.originalInstanceId, level: m.level }, def, boosted, _state.config.combat);
     });
-    const enemyTeam = _fwBuildEnemyTeam(run, cfg, false);
-    const rounds = Math.min(3, playerTeam.length);
+    const enemyTeam = _fwBuildEnemyTeam(run, cfg, isBoss);
+    const rounds = isBoss ? Math.min(9, Math.max(playerTeam.length, enemyTeam.length) * 3) : Math.min(3, playerTeam.length);
     const programme = CWDefileEngine.generateProgramme({ ..._state.config.combat, defilePassageCount: rounds }, _state.types);
-    const pAssign = CWDefileEngine.autoAssign(programme, playerTeam, _state.typeMatrix, Math.ceil(rounds / playerTeam.length));
-    const eAssign = CWDefileEngine.autoAssign(programme, enemyTeam, _state.typeMatrix, Math.ceil(rounds / enemyTeam.length));
-    const duelResult = CWDefileEngine.resolveDuel(programme, pAssign, eAssign, playerTeam, enemyTeam, _state.config.combat, _state.typeMatrix);
+    const enemyAssignment = CWDefileEngine.autoAssign(programme, enemyTeam, _state.typeMatrix, Math.ceil(rounds / enemyTeam.length));
 
+    run.pendingDefile = {
+      kind, layerIdx, nodeIdx, isBoss,
+      programme, playerTeam, enemyTeam, enemyAssignment,
+      assignment: new Array(programme.length).fill(null),
+    };
+    _autoSave();
+    return run.pendingDefile;
+  }
+
+  /** Assigne une personnage du roster de run à un tournage du défilé en cours de planification */
+  function assignFashionWeekDefileSlot(slotIndex, memberInstanceId) {
+    const run = _state.player.fashionWeekRun;
+    const pending = run?.pendingDefile;
+    if (!pending) return null;
+    const fighter = pending.playerTeam.find(f => f.instanceId === memberInstanceId);
+    if (!fighter) return null;
+    pending.assignment.forEach((a, i) => { if (a?.instanceId === memberInstanceId) pending.assignment[i] = null; });
+    pending.assignment[slotIndex] = fighter;
+    return pending;
+  }
+
+  function unassignFashionWeekDefileSlot(slotIndex) {
+    const run = _state.player.fashionWeekRun;
+    const pending = run?.pendingDefile;
+    if (!pending) return null;
+    pending.assignment[slotIndex] = null;
+    return pending;
+  }
+
+  /**
+   * Valide le plan et résout le défilé. Récompenses spécifiques à ce mode :
+   * XP = score x10 (convertie en niveaux de run), et uniquement des Jetons
+   * (aucune autre ressource — pas d'or, de réputation, ni d'affinité).
+   */
+  function submitFashionWeekDefile() {
+    const run = _state.player.fashionWeekRun;
+    const pending = run?.pendingDefile;
+    if (!pending || pending.assignment.some(a => !a)) return null;
+    const cfg = _fwCfg();
+
+    const duelResult = CWDefileEngine.resolveDuel(
+      pending.programme, pending.assignment, pending.enemyAssignment,
+      pending.playerTeam, pending.enemyTeam, _state.config.combat, _state.typeMatrix
+    );
     const won = duelResult.winner === 'player';
+    const finalScore = duelResult.log.reduce((s, e) => s + (e.playerScore || 0), 0);
+    const xpGained = finalScore * 10;
+    const levelsGained = Math.floor(xpGained / (cfg.runXpPerLevel || 100));
+    const ticketsGained = Math.round((pending.isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward') / 10);
+
     if (won) {
-      run.roster.forEach(m => m.level += cfg.levelsPerDefileWin);
-      _fwAddScore(run, Math.round(cfg.scoreRewards.defileWin * _fwDayMultiplier(cfg, run.day, 'reward')));
-    } else {
+      run.roster.forEach(m => m.level += Math.max(1, levelsGained));
+      run.currencyThisRun += ticketsGained; // SEULE ressource gagnée, comme demandé — pas de score direct ici
+      _fwAddScore(run, Math.round((pending.isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward')));
+    } else if (!pending.isBoss) {
       if (run.runMods.defileLossImmunityCount > 0) run.runMods.defileLossImmunityCount--;
       else _fwApplyFormDelta(run, cfg, -cfg.teamFormDefileLossPenalty);
     }
 
-    node.resolved = true;
-    if (run.active) { _fwAddScore(run, cfg.scoreRewards.nodeCompleted); _fwAdvanceLayerIfComplete(run); }
-    _autoSave();
-    return { won, duelResult, gameOver: run.failed };
-  }
-
-  /** Fait avancer au palier suivant si tous les nœuds du palier courant sont résolus */
-  /** Dès qu'UN nœud du palier est résolu, on avance immédiatement — c'est un embranchement, pas une liste à cocher entièrement */
-  function _fwAdvanceLayerIfComplete(run) {
-    if (!run.active) return;
-    const layer = run.map.layers[run.map.currentLayer];
-    if (layer && layer.some(n => n.resolved)) {
-      layer.forEach(n => { if (!n.resolved) n.skipped = true; }); // les autres nœuds du palier ne seront jamais visités
-      run.map.currentLayer++;
+    let endSummary = null;
+    if (pending.isBoss) {
+      run.map.bossResolved = true;
+      if (won) run.pendingBossBuffChoice = [...cfg.bossBuffChoices].sort(() => Math.random() - 0.5).slice(0, 3).map(b => b.id);
+      else { run.failed = true; run.active = false; endSummary = endFashionWeekRun(); }
+    } else if (pending.kind === 'node') {
+      const node = run.map.layers[pending.layerIdx]?.[pending.nodeIdx];
+      if (node) node.resolved = true;
+      if (run.active) { _fwAddScore(run, cfg.scoreRewards.nodeCompleted); _fwAdvanceLayerIfComplete(run); }
     }
+    // kind === 'adhoc' (défi surgi d'un Dialogue) : aucune progression de carte à faire, déjà gérée par le nœud Dialogue lui-même
+
+    run.pendingDefile = null;
+    _autoSave();
+    return { won, duelResult, xpGained, levelsGained, ticketsGained, gameOver: run.failed, endSummary };
   }
 
   /** Le palier courant est-il entièrement résolu (donc prêt pour le Boss si c'était le dernier) ? */
@@ -1722,42 +1773,14 @@ const CWGameState = (() => {
     return run.map.currentLayer >= run.map.layers.length;
   }
 
-  /** Lance et résout le Boss du jour (combat complet, 9 tournages) */
-  function resolveFashionWeekBoss() {
-    const run = _state.player.fashionWeekRun;
-    if (!run || !run.active) return null;
-    const cfg = _fwCfg();
-
-    const playerTeam = run.roster.map(m => {
-      const def = getCharDef(m.currentCharId);
-      const stats = getRoguelikeCharStats(m);
-      const boosted = {
-        hp: stats.hp, atk: Math.round(stats.atk * (1 + (run.runMods.statBoosts.atk||0)/100)),
-        def: Math.round(stats.def * (1 + (run.runMods.statBoosts.def||0)/100)), spd: Math.round(stats.spd * (1 + (run.runMods.statBoosts.spd||0)/100)),
-      };
-      return CWDefileEngine.buildFighter({ instanceId: m.originalInstanceId, level: m.level }, def, boosted, _state.config.combat);
-    });
-    const enemyTeam = _fwBuildEnemyTeam(run, cfg, true);
-    const rounds = Math.min(9, Math.max(playerTeam.length, enemyTeam.length) * 3);
-    const programme = CWDefileEngine.generateProgramme({ ..._state.config.combat, defilePassageCount: rounds }, _state.types);
-    const pAssign = CWDefileEngine.autoAssign(programme, playerTeam, _state.typeMatrix, Math.ceil(rounds / playerTeam.length));
-    const eAssign = CWDefileEngine.autoAssign(programme, enemyTeam, _state.typeMatrix, Math.ceil(rounds / enemyTeam.length));
-    const duelResult = CWDefileEngine.resolveDuel(programme, pAssign, eAssign, playerTeam, enemyTeam, _state.config.combat, _state.typeMatrix);
-
-    const won = duelResult.winner === 'player';
-    run.map.bossResolved = true;
-    let endSummary = null;
-    if (won) {
-      run.roster.forEach(m => m.level += cfg.levelsPerBossWin);
-      _fwAddScore(run, Math.round(cfg.scoreRewards.bossWin * _fwDayMultiplier(cfg, run.day, 'reward')));
-      run.pendingBossBuffChoice = [...cfg.bossBuffChoices].sort(() => Math.random() - 0.5).slice(0, 3).map(b => b.id);
-    } else {
-      run.failed = true;
-      run.active = false;
-      endSummary = endFashionWeekRun(); // game over : la run se termine et se convertit immédiatement
+  /** Dès qu'UN nœud du palier est résolu, on avance immédiatement — c'est un embranchement, pas une liste à cocher entièrement */
+  function _fwAdvanceLayerIfComplete(run) {
+    if (!run.active) return;
+    const layer = run.map.layers[run.map.currentLayer];
+    if (layer && layer.some(n => n.resolved)) {
+      layer.forEach(n => { if (!n.resolved) n.skipped = true; }); // les autres nœuds du palier ne seront jamais visités
+      run.map.currentLayer++;
     }
-    _autoSave();
-    return { won, duelResult, gameOver: run.failed, endSummary };
   }
 
   /** Applique un buff choisi après victoire de Boss */
@@ -2964,8 +2987,9 @@ const CWGameState = (() => {
     getCharacterAffectionTier, addCharacterAffection, giveGiftToCharacter,
     proposeFashionWeekRoundCandidates, startFashionWeekRun,
     getRoguelikeCharStats, resolveFashionWeekNode, resolveFashionWeekEncounter,
-    buyFashionWeekRunItem, resolveFashionWeekShopVisit, resolveFashionWeekDefileNode,
-    isFashionWeekMapComplete, resolveFashionWeekBoss, chooseFashionWeekBossBuff,
+    buyFashionWeekRunItem, resolveFashionWeekShopVisit,
+    startFashionWeekDefileEncounter, assignFashionWeekDefileSlot, unassignFashionWeekDefileSlot, submitFashionWeekDefile,
+    isFashionWeekMapComplete, chooseFashionWeekBossBuff,
     advanceFashionWeekDay, endFashionWeekRun,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,

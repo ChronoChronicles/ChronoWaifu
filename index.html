@@ -4299,12 +4299,34 @@
   .fw-dialogue-flavor{ font-size:.82rem; color:var(--text-dim); font-style:italic; margin-bottom:16px; line-height:1.5; }
   .fw-dialogue-options{ display:flex; flex-direction:column; gap:8px; }
   .fw-dialogue-option-btn{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
     background:rgba(255,255,255,.06); border:1px solid rgba(167,139,250,.35);
     border-radius:10px; padding:12px 14px; font-size:.82rem; font-weight:700;
     color:var(--text); text-align:left;
   }
   .fw-dialogue-option-btn:active{ background:rgba(167,139,250,.18); }
   .fw-dialogue-option-btn:disabled{ opacity:.4; }
+  .fw-dialogue-option-label{ flex:1; }
+  .fw-dialogue-option-preview{ font-size:.7rem; font-weight:800; color:#fbbf24; white-space:nowrap; flex-shrink:0; }
+
+  /* ── Planification manuelle d'un défilé jouable ── */
+  .fw-defile-modal{ max-width:460px; }
+  .fw-defile-programme{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
+  .fw-defile-slot{
+    background:rgba(255,255,255,.05); border:1.5px dashed rgba(255,255,255,.2);
+    border-radius:10px; padding:10px 6px; text-align:center; cursor:pointer; min-height:56px;
+  }
+  .fw-defile-slot.filled{ border-style:solid; border-color:#a78bfa; background:rgba(167,139,250,.12); }
+  .fw-defile-slot-type{ font-size:.62rem; color:var(--text-dim); text-transform:uppercase; }
+  .fw-defile-slot-name{ font-size:.76rem; font-weight:700; margin-top:4px; }
+  .fw-defile-slot-empty{ font-size:.68rem; color:var(--text-faint); margin-top:4px; }
+  .fw-defile-roster{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:8px; }
+  .fw-defile-roster-card{
+    background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.2);
+    border-radius:8px; padding:8px 12px; font-size:.76rem; font-weight:700; cursor:pointer;
+  }
+  .fw-defile-roster-card.selected{ border-color:#fbbf24; background:rgba(251,191,36,.15); }
+  .fw-defile-roster-card.used{ opacity:.35; cursor:default; }
 
   /* ── Modale Shop ── */
   .fw-shop-balance{ font-size:.85rem; font-weight:800; color:#fbbf24; text-align:center; margin-bottom:12px; }

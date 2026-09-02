@@ -386,6 +386,7 @@ const CWGameDatabase = (() => {
       levelsPerBossWin: 6,
       levelsPerDialogueLevelUpMin: 2,
       levelsPerDialogueLevelUpMax: 4,
+      runXpPerLevel: 100, // XP nécessaire pour 1 niveau de run (XP d'un défilé = score x10)
       // Cible indicative : ~10 niveaux gagnés par jour pour une run qui enchaîne les succès
 
       // ── Génération des paliers ───────────────────────────────────────────
