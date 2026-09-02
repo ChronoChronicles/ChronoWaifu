@@ -7652,38 +7652,113 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       </div>`;
     modal.querySelectorAll('.fw-dialogue-option-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        modal.querySelectorAll('.fw-dialogue-option-btn').forEach(b => b.disabled = true);
         const optionIdx = parseInt(btn.dataset.opt);
-        const result = CWGameState.resolveFashionWeekNode(layerIdx, nodeIdx, optionIdx);
-        _closeModal();
-        await _fwRevealDialogueOutcome(result);
-        if (result?.type === 'triggerDefile' || result?.sub?.type === 'triggerDefile') {
-          await _fwPlayMinorDefileSequence(layerIdx, nodeIdx, node, cfg, true);
+        const option = scenario.options[optionIdx];
+
+        // Si l'issue nécessite de choisir sur QUI elle s'applique, on demande AVANT de résoudre
+        if (option.outcome?.target === 'choice_one') {
+          const state = CWGameState.get();
+          const run = state.player.fashionWeekRun;
+          _closeModal();
+          const chosenId = await _fwOpenTargetPicker(run);
+          if (!chosenId) { _fwOpenDialogueModal(layerIdx, nodeIdx, node, cfg); return; } // annulé : on rouvre le dialogue
+          await _fwResolveDialogueAndReveal(layerIdx, nodeIdx, optionIdx, chosenId, node, cfg);
+          return;
         }
-        _fwCheckGameOverThenRender();
+
+        modal.querySelectorAll('.fw-dialogue-option-btn').forEach(b => b.disabled = true);
+        _closeModal();
+        await _fwResolveDialogueAndReveal(layerIdx, nodeIdx, optionIdx, null, node, cfg);
       });
     });
   }
 
-  /** Petite bannière de révélation pour un résultat de Dialogue */
+  /** Petite modale de sélection : sur qui appliquer un bonus ciblé */
+  function _fwOpenTargetPicker(run) {
+    return new Promise(resolve => {
+      const modal = document.getElementById('modal');
+      modal.style.display = 'block';
+      modal.innerHTML = `
+        <div class="modal-backdrop" id="modal-backdrop">
+          <div class="modal-box">
+            <div class="fw-dialogue-title">Sur qui ?</div>
+            <div class="equip-char-picker">
+              ${run.roster.map(m => {
+                const def = CWGameState.getCharDef(m.currentCharId);
+                return `<div class="equip-char-mini" data-iid="${m.originalInstanceId}">
+                  <div class="equip-char-mini-portrait">${_combatPortraitImgHtml(def)}</div>
+                  <div class="equip-char-mini-name">${def.name}</div>
+                  <div class="equip-char-mini-level">Niv.${m.level}</div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>`;
+      modal.querySelectorAll('.equip-char-mini').forEach(card => {
+        card.addEventListener('click', () => { _closeModal(); resolve(card.dataset.iid); });
+      });
+      document.getElementById('modal-backdrop')?.addEventListener('click', (e) => {
+        if (e.target.id === 'modal-backdrop') { _closeModal(); resolve(null); }
+      });
+    });
+  }
+
+  /** Résout le dialogue puis enchaîne sur la révélation visuelle et les suites (défi, game over) */
+  async function _fwResolveDialogueAndReveal(layerIdx, nodeIdx, optionIdx, chosenMemberId, node, cfg) {
+    const result = CWGameState.resolveFashionWeekNode(layerIdx, nodeIdx, optionIdx, chosenMemberId);
+    await _fwRevealDialogueOutcome(result);
+    if (result?.type === 'triggerDefile' || result?.sub?.type === 'triggerDefile') {
+      await _fwPlayMinorDefileSequence(layerIdx, nodeIdx, node, cfg, true);
+    }
+    _fwCheckGameOverThenRender();
+  }
+
+  /** Grande bannière de révélation pour un résultat de Dialogue */
   async function _fwRevealDialogueOutcome(result) {
     if (!result) return;
     const r = result.sub || result; // "gamble" enveloppe le vrai résultat dans .sub
-    let text = '';
+    const state = CWGameState.get();
+    const run = state.player.fashionWeekRun;
+    const cfg = state.config.fashionWeek;
+
+    let text = '', detail = '';
     switch (r?.type) {
-      case 'levelUp': text = `📈 +${r.amount} Niveaux !`; break;
-      case 'statBoost': text = r.fallbackFromEvolve ? `✨ +20 à toutes ses stats !` : `✨ +${r.amount} ${FW_STAT_LABEL[r.stat]} !`; break;
-      case 'evolve': text = `🦋 Évolution !`; break;
-      case 'currencyGain': text = `${(CWGameState.get().config.fashionWeek.currencyIcon)} +${r.amount} !`; break;
-      case 'runBuff': text = `🌟 Bonus de run activé !`; break;
-      case 'formLoss': text = `💔 -${r.amount} Forme d'équipe...`; break;
-      case 'formGain': text = `💗 +${r.amount} Forme d'équipe !`; break;
+      case 'levelUp':    text = `📈 +${r.amount} Niveaux !`; break;
+      case 'statBoost':  text = r.fallbackFromEvolve ? `✨ +20 à toutes les stats !` : `✨ +${r.amount} ${FW_STAT_LABEL[r.stat]} !`; break;
+      case 'evolve':     text = `🦋 Évolution !`; break;
+      case 'currencyGain': text = `${cfg.currencyIcon} +${r.amount} !`; break;
+      case 'runBuff':    text = `🌟 Bonus de run activé !`; break;
+      case 'formLoss':   text = `💔 -${r.amount} Forme d'équipe...`; break;
+      case 'formGain':   text = `💗 +${r.amount} Forme d'équipe !`; break;
       case 'triggerDefile': text = `⚔️ Un défi est lancé !`; break;
       default: return;
     }
+    // Mention de la cible : qui a été affecté, pour que ce soit lisible d'un coup d'œil
+    if (r.memberIds?.length && run) {
+      const names = r.memberIds.map(iid => {
+        const m = run.roster.find(rm => rm.originalInstanceId === iid);
+        return m ? CWGameState.getCharDef(m.currentCharId)?.name : null;
+      }).filter(Boolean);
+      if (names.length > 1) detail = `Toute l'équipe : ${names.join(', ')}`;
+      else if (names.length === 1) detail = names[0];
+    }
     if (result.type === 'gamble') text = (result.success ? '🎲 Pari réussi ! ' : '🎲 Pari perdu... ') + text;
-    _showToast(text, result.type === 'gamble' && !result.success ? 'error' : 'success');
-    await _sleep(1200);
+
+    const overlay = document.createElement('div');
+    overlay.className = `fw-resolve-overlay ${result.type === 'gamble' && !result.success ? 'fw-tone-fail' : 'fw-tone-success'}`;
+    overlay.style.pointerEvents = 'auto';
+    overlay.innerHTML = `
+      <div class="fw-resolve-caption">
+        <div class="fw-resolve-outcome">${text}</div>
+        ${detail ? `<div class="fw-resolve-detail">${detail}</div>` : ''}
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('active', 'revealed'));
+    CWAudioSystem.playSfx(result.type === 'gamble' && !result.success ? CWAudioSystem.SFX_KEYS.defileTypeBad : CWAudioSystem.SFX_KEYS.defileTypeGood);
+    await _sleep(1700);
+    overlay.classList.remove('active');
+    await _sleep(300);
+    overlay.remove();
   }
 
   /** Modale Shop : achète des objets avec la monnaie de run */
@@ -7779,9 +7854,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     overlay.innerHTML = `<div class="fw-resolve-caption"><div class="fw-resolve-outcome">${node.title || 'Défilé !'}</div></div>`;
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add('active'));
-    await _sleep(1000);
+    await _sleep(800);
 
     const result = CWGameState.resolveFashionWeekDefileNode(layerIdx, nodeIdx);
+
+    // Déroulé tour par tour — le combat est déjà résolu en coulisses, mais on
+    // l'affiche round par round pour que ça se joue vraiment sous les yeux.
+    await _fwPlayRoundByRoundLog(overlay, result.duelResult.log);
+
     const toneClass = result?.won ? 'fw-tone-success' : 'fw-tone-fail';
     overlay.classList.add(toneClass, 'revealed');
     overlay.querySelector('.fw-resolve-caption').innerHTML = `
@@ -7795,6 +7875,31 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     overlay.remove();
 
     _fwCheckGameOverThenRender();
+  }
+
+  /** Affiche chaque tournage du journal de combat l'un après l'autre, avec le score qui défile */
+  async function _fwPlayRoundByRoundLog(overlay, log) {
+    let pTotal = 0, eTotal = 0;
+    const caption = overlay.querySelector('.fw-resolve-caption');
+    for (let i = 0; i < log.length; i++) {
+      const entry = log[i];
+      pTotal += entry.playerScore || 0;
+      eTotal += entry.enemyScore || 0;
+      const pWon = (entry.playerScore || 0) > (entry.enemyScore || 0);
+      caption.innerHTML = `
+        <div class="fw-round-counter">Tournage ${i + 1} / ${log.length}</div>
+        <div class="fw-round-matchup">
+          <span class="${pWon ? 'fw-round-winner' : ''}">${entry.playerFighter || '—'} (${entry.playerScore ?? 0})</span>
+          <span class="fw-round-vs">vs</span>
+          <span class="${!pWon ? 'fw-round-winner' : ''}">${entry.enemyFighter || '—'} (${entry.enemyScore ?? 0})</span>
+        </div>
+        <div class="fw-round-total">Total : ${pTotal} — ${eTotal}</div>
+      `;
+      overlay.classList.add('active', 'revealed');
+      CWAudioSystem.playSfx(pWon ? CWAudioSystem.SFX_KEYS.defileTypeGood : CWAudioSystem.SFX_KEYS.defileTypeBad);
+      await _sleep(550);
+    }
+    await _sleep(400);
   }
 
   /** Mise en scène simple (Heal / Trésor) : révélation directe du gain */
@@ -7824,6 +7929,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     await _sleep(1500);
 
     const result = CWGameState.resolveFashionWeekBoss();
+    await _fwPlayRoundByRoundLog(overlay, result.duelResult.log);
+
     const toneClass = result.won ? 'fw-tone-exceptional' : 'fw-tone-fail';
     overlay.classList.add(toneClass, 'revealed');
     overlay.querySelector('.fw-resolve-caption').innerHTML = `

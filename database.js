@@ -417,16 +417,16 @@ const CWGameDatabase = (() => {
           id: 'dlg_interview_surprise', title: 'Interview surprise',
           flavorText: "Un journaliste l'aborde sans prévenir, micro tendu, caméra déjà allumée.",
           options: [
-            { label: "Répondre avec assurance",      outcome: { type: 'statBoost', stat: 'atk', amount: 12 } },
+            { label: "Répondre avec assurance",      outcome: { type: 'statBoost', stat: 'atk', amount: 12, target: 'choice_one' } },
             { label: "Rester prudente et mesurée",    outcome: { type: 'currencyGain', amount: 20 } },
-            { label: "Improviser un show complet",    outcome: { type: 'gamble', chance: 0.5, success: { type: 'levelUp', amount: 3 }, fail: { type: 'formLoss', amount: 15 } } },
+            { label: "Improviser un show complet",    outcome: { type: 'gamble', chance: 0.5, success: { type: 'levelUp', amount: 3, target: 'random_one' }, fail: { type: 'formLoss', amount: 15 } } },
           ],
         },
         {
           id: 'dlg_mentor', title: 'Une mentor de passage',
           flavorText: "Une figure respectée de l'industrie s'arrête, observe, puis s'approche.",
           options: [
-            { label: "Accepter ses conseils",         outcome: { type: 'levelUp', amount: 3 } },
+            { label: "Accepter ses conseils",         outcome: { type: 'levelUp', amount: 2, target: 'team' } },
             { label: "Décliner poliment",              outcome: { type: 'currencyGain', amount: 15 } },
             { label: "Lui proposer un défi amical",     outcome: { type: 'triggerDefile' } },
           ],
@@ -435,7 +435,7 @@ const CWGameDatabase = (() => {
           id: 'dlg_transformation', title: 'Une opportunité de transformation',
           flavorText: "On lui propose une refonte complète de son image — risqué, mais potentiellement spectaculaire.",
           options: [
-            { label: "Foncer, tant pis pour le risque", outcome: { type: 'evolve' } },
+            { label: "Foncer, tant pis pour le risque", outcome: { type: 'evolve', target: 'choice_one' } },
             { label: "Trop risqué, mieux vaut refuser",  outcome: { type: 'formGain', amount: 20 } },
             { label: "Demander plus de détails d'abord", outcome: { type: 'currencyGain', amount: 25 } },
           ],
@@ -446,7 +446,7 @@ const CWGameDatabase = (() => {
           options: [
             { label: "Poster quelque chose d'audacieux", outcome: { type: 'gamble', chance: 0.5, success: { type: 'currencyGain', amount: 50 }, fail: { type: 'formLoss', amount: 20 } } },
             { label: "Rester discrète",                    outcome: { type: 'runBuff', buffId: 'boss_score_20' } },
-            { label: "Collaborer avec une autre agence",   outcome: { type: 'statBoost', stat: 'def', amount: 12 } },
+            { label: "Collaborer avec une autre agence",   outcome: { type: 'statBoost', stat: 'def', amount: 10, target: 'team' } },
           ],
         },
         {
@@ -455,7 +455,7 @@ const CWGameDatabase = (() => {
           options: [
             { label: "Prendre parti fermement",   outcome: { type: 'triggerDefile' } },
             { label: "Calmer le jeu",              outcome: { type: 'formGain', amount: 25 } },
-            { label: "Ignorer et continuer",       outcome: { type: 'levelUp', amount: 2 } },
+            { label: "Ignorer et continuer",       outcome: { type: 'levelUp', amount: 2, target: 'random_one' } },
           ],
         },
       ],

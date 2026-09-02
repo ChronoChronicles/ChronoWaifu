@@ -1471,7 +1471,7 @@ const CWGameState = (() => {
   }
 
   /** Résout un nœud non-combat/non-rencontre (Shop est géré à part, via achats directs) */
-  function resolveFashionWeekNode(layerIdx, nodeIdx, optionIdx = null) {
+  function resolveFashionWeekNode(layerIdx, nodeIdx, optionIdx = null, chosenMemberId = null) {
     const run = _state.player.fashionWeekRun;
     if (!run || !run.active) return null;
     const cfg = _fwCfg();
@@ -1484,7 +1484,7 @@ const CWGameState = (() => {
       const scenario = cfg.dialogueScenarios.find(s => s.id === node.scenarioId);
       const option = scenario?.options?.[optionIdx];
       if (!option) return null;
-      outcomeResult = _fwApplyDialogueOutcome(run, cfg, option.outcome);
+      outcomeResult = _fwApplyDialogueOutcome(run, cfg, option.outcome, null, chosenMemberId);
     } else if (node.category === 'heal') {
       const before = run.teamForm;
       _fwApplyFormDelta(run, cfg, cfg.teamFormMax); // soin complet
@@ -1508,28 +1508,37 @@ const CWGameState = (() => {
   }
 
   /** Applique le résultat d'un choix de Dialogue (tous les types d'issue possibles) */
-  function _fwApplyDialogueOutcome(run, cfg, outcome, forcedGambleResult = null) {
+  function _fwApplyDialogueOutcome(run, cfg, outcome, forcedGambleResult = null, chosenMemberId = null) {
     if (!outcome) return null;
 
     if (outcome.type === 'gamble') {
       const success = forcedGambleResult != null ? forcedGambleResult : Math.random() < outcome.chance;
       const sub = success ? outcome.success : outcome.fail;
-      const subResult = _fwApplyDialogueOutcome(run, cfg, sub);
+      const subResult = _fwApplyDialogueOutcome(run, cfg, sub, null, chosenMemberId);
       return { type: 'gamble', success, sub: subResult };
     }
 
     const randomMember = () => run.roster[Math.floor(Math.random() * run.roster.length)];
+    /** Résout la cible réelle selon outcome.target : 'random_one' (défaut), 'choice_one', ou 'team' (renvoie un tableau) */
+    const resolveTargets = () => {
+      if (outcome.target === 'team') return run.roster.slice();
+      if (outcome.target === 'choice_one' && chosenMemberId) {
+        const chosen = run.roster.find(m => m.originalInstanceId === chosenMemberId);
+        return [chosen || randomMember()];
+      }
+      return [randomMember()];
+    };
 
     switch (outcome.type) {
       case 'levelUp': {
-        const member = randomMember();
-        member.level += outcome.amount;
-        return { type: 'levelUp', amount: outcome.amount, memberId: member.originalInstanceId };
+        const targets = resolveTargets();
+        targets.forEach(m => m.level += outcome.amount);
+        return { type: 'levelUp', amount: outcome.amount, target: outcome.target || 'random_one', memberIds: targets.map(m => m.originalInstanceId) };
       }
       case 'statBoost': {
-        const member = randomMember();
-        member.runStatBonus[outcome.stat] += outcome.amount;
-        return { type: 'statBoost', stat: outcome.stat, amount: outcome.amount, memberId: member.originalInstanceId };
+        const targets = resolveTargets();
+        targets.forEach(m => m.runStatBonus[outcome.stat] += outcome.amount);
+        return { type: 'statBoost', stat: outcome.stat, amount: outcome.amount, target: outcome.target || 'random_one', memberIds: targets.map(m => m.originalInstanceId) };
       }
       case 'evolve': {
         const eligible = run.roster.filter(m => _state.characters.some(c => c.evolutionLine === m.evolutionLine && c.evolutionStage === m.evolutionStage + 1));
@@ -1537,11 +1546,13 @@ const CWGameState = (() => {
           // Repli : personne n'est éligible, un boost de stat généreux à la place
           const member = randomMember();
           member.runStatBonus.atk += 20; member.runStatBonus.def += 20; member.runStatBonus.spd += 20;
-          return { type: 'statBoost', fallbackFromEvolve: true, memberId: member.originalInstanceId };
+          return { type: 'statBoost', fallbackFromEvolve: true, memberIds: [member.originalInstanceId] };
         }
-        const member = eligible[Math.floor(Math.random() * eligible.length)];
+        const member = (outcome.target === 'choice_one' && chosenMemberId)
+          ? (eligible.find(m => m.originalInstanceId === chosenMemberId) || eligible[0])
+          : eligible[Math.floor(Math.random() * eligible.length)];
         _fwTryEvolve(member);
-        return { type: 'evolve', memberId: member.originalInstanceId, newCharId: member.currentCharId };
+        return { type: 'evolve', memberIds: [member.originalInstanceId], newCharId: member.currentCharId };
       }
       case 'currencyGain': {
         const gain = Math.round(outcome.amount * _fwDayMultiplier(cfg, run.day, 'reward'));
@@ -1694,10 +1705,12 @@ const CWGameState = (() => {
   }
 
   /** Fait avancer au palier suivant si tous les nœuds du palier courant sont résolus */
+  /** Dès qu'UN nœud du palier est résolu, on avance immédiatement — c'est un embranchement, pas une liste à cocher entièrement */
   function _fwAdvanceLayerIfComplete(run) {
     if (!run.active) return;
     const layer = run.map.layers[run.map.currentLayer];
-    if (layer && layer.every(n => n.resolved)) {
+    if (layer && layer.some(n => n.resolved)) {
+      layer.forEach(n => { if (!n.resolved) n.skipped = true; }); // les autres nœuds du palier ne seront jamais visités
       run.map.currentLayer++;
     }
   }
