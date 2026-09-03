@@ -1724,16 +1724,22 @@ const CWGameState = (() => {
     if (!run || !run.active || !fwContext) return null;
     const cfg = _fwCfg();
     const isBoss = fwContext.kind === 'boss';
+    const xpMultiplier = won ? 1 : 0.4; // défaite : seulement 40% de l'XP normalement gagnée
 
     // XP INDIVIDUELLE : chaque personnage gagne 10x SON PROPRE score cumulé sur
     // les tournages où elle a réellement défilé — pas une moyenne d'équipe.
     // La montée de niveau utilise EXACTEMENT la même courbe que les personnages
     // normaux (xpForLevel, config.level) — pas un taux fixe séparé.
+    // XP donnée QUE le combat soit gagné OU perdu (réduite de 60% en cas de défaite).
     const memberResults = run.roster.map(m => {
+      const def = getCharDef(m.currentCharId);
       const ownScore = duelLog.reduce((s, e) => s + (e.playerCharId === m.currentCharId ? (e.playerScore || 0) : 0), 0);
-      const xpGained = ownScore * 10;
+      const xpGained = Math.round(ownScore * 10 * xpMultiplier);
+      const startLevel = m.level;
+      const startXp = m.xp || 0;
+      const statsBefore = getRoguelikeCharStats(m);
       let levelsGained = 0;
-      if (won && xpGained > 0) {
+      if (xpGained > 0) {
         m.xp = (m.xp || 0) + xpGained;
         while (true) {
           const xpNeeded = CWGameDatabase.xpForLevel(m.level + 1, _state.config.level);
@@ -1744,24 +1750,35 @@ const CWGameState = (() => {
           } else break;
         }
       }
-      return { instanceId: m.originalInstanceId, ownScore, xpGained, levelsGained };
+      const statsAfter = getRoguelikeCharStats(m);
+      return {
+        instanceId: m.originalInstanceId, name: def?.name || '?',
+        ownScore, xpGained, levelsGained,
+        startLevel, startXp, endLevel: m.level, endXp: m.xp,
+        statsBefore, statsAfter,
+      };
     });
     const finalScore = duelLog.reduce((s, e) => s + (e.playerScore || 0), 0);
-    const ticketsGained = Math.round((isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward') / 10);
+    const ticketsGained = won ? Math.round((isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward') / 10) : 0;
+
+    // Consomme de la Forme d'équipe dans TOUS les cas (gagné ou perdu), pour
+    // empêcher d'enchaîner les Défilés sans limite — la défaite coûte plus cher.
+    if (run.runMods.defileLossImmunityCount > 0 && !won) {
+      run.runMods.defileLossImmunityCount--;
+    } else {
+      _fwApplyFormDelta(run, cfg, -(won ? (cfg.teamFormWinCost ?? 12) : cfg.teamFormDefileLossPenalty));
+    }
 
     if (won) {
       run.currencyThisRun += ticketsGained;
       _fwAddScore(run, Math.round((isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward')));
-    } else if (!isBoss) {
-      if (run.runMods.defileLossImmunityCount > 0) run.runMods.defileLossImmunityCount--;
-      else _fwApplyFormDelta(run, cfg, -cfg.teamFormDefileLossPenalty);
     }
 
     let endSummary = null;
     if (isBoss) {
       run.map.bossResolved = true;
       if (won) run.pendingBossBuffChoice = [...cfg.bossBuffChoices].sort(() => Math.random() - 0.5).slice(0, 3).map(b => b.id);
-      else { run.failed = true; run.active = false; endSummary = endFashionWeekRun(); }
+      else if (!run.failed) { run.failed = true; run.active = false; endSummary = endFashionWeekRun(); }
     } else if (fwContext.kind === 'node') {
       const node = run.map.layers[fwContext.layerIdx]?.[fwContext.nodeIdx];
       if (node) node.resolved = true;

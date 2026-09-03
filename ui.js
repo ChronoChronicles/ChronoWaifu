@@ -8013,7 +8013,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
    * Même mécanisme que l'écran de résultat de combat (showScreen classique),
    * pour éviter tout souci de superposition/animation.
    */
-  function renderFashionWeekDefileRewards() {
+  async function renderFashionWeekDefileRewards() {
     const el = document.getElementById('screen-fashion-week-defile-rewards');
     if (!el) return;
     if (!_fwPendingRewardData) { showScreen('fashion-week-day'); return; }
@@ -8022,42 +8022,100 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const state = CWGameState.get();
     const run = state.player.fashionWeekRun;
     const cfg = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
-
-    const rows = won ? outcome.memberResults.map(r => {
-      const m = run?.roster.find(rm => rm.originalInstanceId === r.instanceId);
-      const def = m ? CWGameState.getCharDef(m.currentCharId) : null;
-      return { name: def?.name || '?', ...r };
-    }) : [];
+    const formCost = won ? (cfg.teamFormWinCost ?? 12) : cfg.teamFormDefileLossPenalty;
 
     el.innerHTML = `
       <div class="screen-header">
         <h2>${won ? (isBoss ? '👑 Boss remporté !' : '✅ Défilé remporté !') : (isBoss ? '💀 Défaite face au Boss...' : '❌ Défilé perdu...')}</h2>
       </div>
-      ${won ? `
-        <div class="fw-rewards-list">
-          ${rows.map(r => `
-            <div class="fw-rewards-row">
-              <span class="fw-rewards-name">${r.name}</span>
-              <span class="fw-rewards-detail">${r.ownScore} pts → +${r.xpGained} XP${r.levelsGained > 0 ? ` (+${r.levelsGained} Niv.)` : ''}</span>
-            </div>
-          `).join('')}
-        </div>
-        <div class="fw-rewards-tickets">${cfg.currencyIcon} +${outcome.ticketsGained} ${cfg.currencyName}</div>
-      ` : `
-        <p class="empty-msg">-${cfg.teamFormDefileLossPenalty} Forme d'équipe</p>
-      `}
-      <button class="btn-primary" id="btn-fw-rewards-continue" style="width:100%;margin-top:20px;">Continuer</button>
+      <div class="reward-section-title">✨ Expérience</div>
+      <div id="fw-rewards-xp-list">
+        ${outcome.memberResults.map(r => {
+          const def = CWGameState.getCharDef(run?.roster.find(m => m.originalInstanceId === r.instanceId)?.currentCharId);
+          const startNeeded = CWGameDatabase.xpForLevel(r.startLevel + 1, state.config.level);
+          const startPct = Math.min(100, (r.startXp / startNeeded) * 100);
+          return `
+            <div class="reward-row">
+              <div class="reward-row-portrait">${def ? _combatPortraitImgHtml(def) : ''}</div>
+              <div class="reward-row-info">
+                <div class="reward-row-name">${r.name} <span class="reward-row-level" id="fw-reward-level-${r.instanceId}">Niv. ${r.startLevel}</span></div>
+                <div class="reward-bar-track"><div class="reward-bar-fill" id="fw-reward-bar-${r.instanceId}" style="width:${startPct}%"></div></div>
+                <div class="reward-row-gain">+${r.xpGained} XP</div>
+                <div class="reward-stat-changes" id="fw-reward-stats-${r.instanceId}"></div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+      <p class="empty-msg" style="margin-top:12px;">💔 -${formCost} Forme d'équipe</p>
+      <div class="fw-rewards-tickets" id="fw-rewards-tickets" style="display:none;"></div>
+      <button class="btn-primary" id="btn-fw-rewards-continue" style="display:none;width:100%;margin-top:16px;">Continuer</button>
     `;
+
+    await _rewardSleep(400);
+
+    // XP, une personnage après l'autre, jauge façon Pokémon — identique au Défilé classique
+    for (const r of outcome.memberResults) {
+      await _fwAnimateMemberXp(r, state.config.level);
+      await _rewardSleep(350);
+    }
+
+    if (won && outcome.ticketsGained > 0) {
+      const tEl = document.getElementById('fw-rewards-tickets');
+      tEl.style.display = '';
+      tEl.textContent = `${cfg.currencyIcon} +${outcome.ticketsGained} ${cfg.currencyName}`;
+      tEl.classList.add('reward-pop');
+    }
 
     CWAudioSystem.playSfx(won ? CWAudioSystem.SFX_KEYS.defileVictory : CWAudioSystem.SFX_KEYS.defileRoundLose);
 
-    document.getElementById('btn-fw-rewards-continue')?.addEventListener('click', () => {
+    const doneBtn = document.getElementById('btn-fw-rewards-continue');
+    doneBtn.style.display = '';
+    doneBtn.addEventListener('click', () => {
       _fwPendingRewardData = null;
       if (outcome.gameOver) { showScreen('fashion-week-gala'); return; }
       const freshRun = CWGameState.get().player.fashionWeekRun;
       if (won && freshRun?.pendingBossBuffChoice) { _fwShowBossBuffChoice(); return; }
       showScreen('fashion-week-day');
     });
+  }
+
+  /** Anime la jauge d'XP d'un personnage de run façon Pokémon — identique à _animateDefileCharXp */
+  async function _fwAnimateMemberXp(r, levelCfg) {
+    const barEl = document.getElementById(`fw-reward-bar-${r.instanceId}`);
+    const levelEl = document.getElementById(`fw-reward-level-${r.instanceId}`);
+    const statsEl = document.getElementById(`fw-reward-stats-${r.instanceId}`);
+    if (!barEl) return;
+
+    await _rewardSleep(150);
+    let level = r.startLevel;
+    for (let i = 0; i < r.levelsGained; i++) {
+      barEl.style.width = '100%';
+      CWAudioSystem.playSfx(CWAudioSystem.SFX_KEYS.levelUp);
+      await _rewardSleep(600);
+      level++;
+      levelEl.textContent = `Niv. ${level}`;
+      levelEl.classList.add('reward-pop');
+      barEl.style.transition = 'none';
+      barEl.style.width = '0%';
+      void barEl.offsetWidth;
+      barEl.style.transition = 'width 650ms ease';
+      await _rewardSleep(150);
+    }
+    const finalNeeded = CWGameDatabase.xpForLevel(level + 1, levelCfg);
+    barEl.style.width = `${Math.min(100, (r.endXp / finalNeeded) * 100)}%`;
+    await _rewardSleep(600);
+
+    if (statsEl && r.levelsGained > 0) {
+      const STAT_ICONS = { atk: '✨', def: '🌹', spd: '🕊️', hp: '💗' };
+      const STAT_NAMES = { atk: 'Charisme', def: 'Prestance', spd: 'Grâce', hp: 'Endurance' };
+      const rows = Object.keys(STAT_ICONS).map(key => {
+        const before = Math.round(r.statsBefore[key] || 0);
+        const after  = Math.round(r.statsAfter[key] || 0);
+        if (after === before) return '';
+        return `<div class="reward-stat-row">${STAT_ICONS[key]} ${STAT_NAMES[key]} : ${before} → <strong>${after}</strong> (+${after - before})</div>`;
+      }).join('');
+      statsEl.innerHTML = rows;
+    }
   }
 
   function _fwShowBossBuffChoice() {

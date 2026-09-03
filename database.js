@@ -393,6 +393,7 @@ const CWGameDatabase = (() => {
       // ── Forme d'équipe (jauge partagée, game over si elle tombe à 0) ────
       teamFormMax: 100,
       teamFormDefileLossPenalty: 30,
+      teamFormWinCost: 12, // coût en Forme même en cas de VICTOIRE — empêche d'enchaîner les Défilés sans limite
       teamFormDialogueLossPenaltyDefault: 20, // repli si un scénario ne précise pas son propre montant
 
       // ── Progression (courbe dédiée à la run, sans rapport avec le jeu normal) ──

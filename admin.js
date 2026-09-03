@@ -5220,6 +5220,7 @@ const CWAdminPanel = (() => {
         <div class="admin-grid">
           ${field('fw-teamFormMax', 'Forme maximum', cfg.teamFormMax)}
           ${field('fw-teamFormDefileLossPenalty', 'Perte si Défilé perdu', cfg.teamFormDefileLossPenalty)}
+          ${field('fw-teamFormWinCost', 'Coût si Défilé gagné', cfg.teamFormWinCost)}
           ${field('fw-teamFormDialogueLossPenaltyDefault', 'Perte par défaut (Dialogue)', cfg.teamFormDialogueLossPenaltyDefault)}
         </div>
       </div>
@@ -7563,6 +7564,7 @@ const CWAdminPanel = (() => {
       encounterChance: fwVal('fw-encounterChance', currentFw.encounterChance, defaultFw.encounterChance),
       teamFormMax: fwVal('fw-teamFormMax', currentFw.teamFormMax, defaultFw.teamFormMax),
       teamFormDefileLossPenalty: fwVal('fw-teamFormDefileLossPenalty', currentFw.teamFormDefileLossPenalty, defaultFw.teamFormDefileLossPenalty),
+      teamFormWinCost: fwVal('fw-teamFormWinCost', currentFw.teamFormWinCost, defaultFw.teamFormWinCost),
       teamFormDialogueLossPenaltyDefault: fwVal('fw-teamFormDialogueLossPenaltyDefault', currentFw.teamFormDialogueLossPenaltyDefault, defaultFw.teamFormDialogueLossPenaltyDefault),
       levelsPerDialogueLevelUpMin: fwVal('fw-levelsPerDialogueLevelUpMin', currentFw.levelsPerDialogueLevelUpMin, defaultFw.levelsPerDialogueLevelUpMin),
       levelsPerDialogueLevelUpMax: fwVal('fw-levelsPerDialogueLevelUpMax', currentFw.levelsPerDialogueLevelUpMax, defaultFw.levelsPerDialogueLevelUpMax),
