@@ -1718,18 +1718,28 @@ const CWGameState = (() => {
    * Récompenses spécifiques : XP = score x10 (convertie en niveaux de run), et
    * uniquement des Jetons — jamais d'or, de réputation, ni d'affinité.
    */
-  function applyFashionWeekDefileResult(fwContext, won, finalScore) {
+  function applyFashionWeekDefileResult(fwContext, won, duelLog) {
     const run = _state.player.fashionWeekRun;
     if (!run || !run.active || !fwContext) return null;
     const cfg = _fwCfg();
     const isBoss = fwContext.kind === 'boss';
 
-    const xpGained = finalScore * 10;
-    const levelsGained = Math.max(1, Math.floor(xpGained / (cfg.runXpPerLevel || 3000)));
+    // XP INDIVIDUELLE : chaque personnage gagne 10x SON PROPRE score cumulé sur
+    // les tournages où elle a réellement défilé — pas une moyenne d'équipe.
+    const memberResults = run.roster.map(m => {
+      const ownScore = duelLog.reduce((s, e) => s + (e.playerCharId === m.currentCharId ? (e.playerScore || 0) : 0), 0);
+      const xpGained = ownScore * 10;
+      const levelsGained = ownScore > 0 ? Math.max(1, Math.floor(xpGained / (cfg.runXpPerLevel || 3000))) : 0;
+      return { instanceId: m.originalInstanceId, ownScore, xpGained, levelsGained };
+    });
+    const finalScore = duelLog.reduce((s, e) => s + (e.playerScore || 0), 0);
     const ticketsGained = Math.round((isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward') / 10);
 
     if (won) {
-      run.roster.forEach(m => m.level += levelsGained);
+      memberResults.forEach(r => {
+        const m = run.roster.find(rm => rm.originalInstanceId === r.instanceId);
+        if (m) m.level += r.levelsGained;
+      });
       run.currencyThisRun += ticketsGained;
       _fwAddScore(run, Math.round((isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward')));
     } else if (!isBoss) {
@@ -1750,7 +1760,7 @@ const CWGameState = (() => {
     // kind === 'adhoc' (défi surgi d'un Dialogue) : aucune progression de carte à faire, déjà gérée par le nœud Dialogue lui-même
 
     _autoSave();
-    return { won, xpGained, levelsGained, ticketsGained, gameOver: run.failed, endSummary };
+    return { won, memberResults, finalScore, ticketsGained, gameOver: run.failed, endSummary };
   }
 
   /** Le palier courant est-il entièrement résolu (donc prêt pour le Boss si c'était le dernier) ? */
