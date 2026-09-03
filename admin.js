@@ -5228,12 +5228,12 @@ const CWAdminPanel = (() => {
       <div class="admin-section">
         <div class="admin-section-title">📈 Progression &amp; récompenses</div>
         <p style="font-size:.78rem;color:#888;margin-bottom:12px;">
-          L'XP d'un Défilé = score total du combat × 10. "XP par niveau" détermine
-          combien de niveaux ça convertit — augmente cette valeur si les personnages
-          montent trop vite (ou inversement).
+          L'XP d'un Défilé = score total du combat × 10 (par personnage, selon
+          son propre score). La conversion en niveaux utilise la MÊME courbe
+          que les personnages normaux (réglable dans l'onglet Personnages),
+          pas un taux séparé.
         </p>
         <div class="admin-grid">
-          ${field('fw-runXpPerLevel', 'XP nécessaire par niveau', cfg.runXpPerLevel)}
           ${field('fw-levelsPerDialogueLevelUpMin', 'Niveaux gagnés (Dialogue) — min', cfg.levelsPerDialogueLevelUpMin)}
           ${field('fw-levelsPerDialogueLevelUpMax', 'Niveaux gagnés (Dialogue) — max', cfg.levelsPerDialogueLevelUpMax)}
           ${field('fw-scoreToCurrencyRate', 'Score requis pour 1 Étoile de Scène', cfg.scoreToCurrencyRate)}
@@ -7564,7 +7564,6 @@ const CWAdminPanel = (() => {
       teamFormMax: fwVal('fw-teamFormMax', currentFw.teamFormMax, defaultFw.teamFormMax),
       teamFormDefileLossPenalty: fwVal('fw-teamFormDefileLossPenalty', currentFw.teamFormDefileLossPenalty, defaultFw.teamFormDefileLossPenalty),
       teamFormDialogueLossPenaltyDefault: fwVal('fw-teamFormDialogueLossPenaltyDefault', currentFw.teamFormDialogueLossPenaltyDefault, defaultFw.teamFormDialogueLossPenaltyDefault),
-      runXpPerLevel: fwVal('fw-runXpPerLevel', currentFw.runXpPerLevel, defaultFw.runXpPerLevel),
       levelsPerDialogueLevelUpMin: fwVal('fw-levelsPerDialogueLevelUpMin', currentFw.levelsPerDialogueLevelUpMin, defaultFw.levelsPerDialogueLevelUpMin),
       levelsPerDialogueLevelUpMax: fwVal('fw-levelsPerDialogueLevelUpMax', currentFw.levelsPerDialogueLevelUpMax, defaultFw.levelsPerDialogueLevelUpMax),
       scoreToCurrencyRate: fwVal('fw-scoreToCurrencyRate', currentFw.scoreToCurrencyRate, defaultFw.scoreToCurrencyRate),

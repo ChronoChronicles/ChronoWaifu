@@ -1421,6 +1421,7 @@ const CWGameState = (() => {
       evolutionLine: baseDef.evolutionLine,
       evolutionStage: 0,
       level: 1,
+      xp: 0, // jauge courante vers le niveau suivant — même mécanique que les personnages normaux
       runStatBonus: { hp: 0, atk: 0, def: 0, spd: 0 },
     };
   }
@@ -1726,20 +1727,29 @@ const CWGameState = (() => {
 
     // XP INDIVIDUELLE : chaque personnage gagne 10x SON PROPRE score cumulé sur
     // les tournages où elle a réellement défilé — pas une moyenne d'équipe.
+    // La montée de niveau utilise EXACTEMENT la même courbe que les personnages
+    // normaux (xpForLevel, config.level) — pas un taux fixe séparé.
     const memberResults = run.roster.map(m => {
       const ownScore = duelLog.reduce((s, e) => s + (e.playerCharId === m.currentCharId ? (e.playerScore || 0) : 0), 0);
       const xpGained = ownScore * 10;
-      const levelsGained = ownScore > 0 ? Math.max(1, Math.floor(xpGained / (cfg.runXpPerLevel || 3000))) : 0;
+      let levelsGained = 0;
+      if (won && xpGained > 0) {
+        m.xp = (m.xp || 0) + xpGained;
+        while (true) {
+          const xpNeeded = CWGameDatabase.xpForLevel(m.level + 1, _state.config.level);
+          if (m.xp >= xpNeeded) {
+            m.xp -= xpNeeded;
+            m.level++;
+            levelsGained++;
+          } else break;
+        }
+      }
       return { instanceId: m.originalInstanceId, ownScore, xpGained, levelsGained };
     });
     const finalScore = duelLog.reduce((s, e) => s + (e.playerScore || 0), 0);
     const ticketsGained = Math.round((isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward') / 10);
 
     if (won) {
-      memberResults.forEach(r => {
-        const m = run.roster.find(rm => rm.originalInstanceId === r.instanceId);
-        if (m) m.level += r.levelsGained;
-      });
       run.currencyThisRun += ticketsGained;
       _fwAddScore(run, Math.round((isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward')));
     } else if (!isBoss) {

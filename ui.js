@@ -8010,6 +8010,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
   /** Écran de révélation des récompenses : XP/niveaux gagnés par CHAQUE personnage, et Jetons gagnés */
   async function _fwRevealDefileRewards(outcome, won, isBoss) {
+    _closeModal(); // sécurité : ferme toute modale qui traînerait encore (elle recouvrirait sinon cet écran)
     const state = CWGameState.get();
     const run = state.player.fashionWeekRun;
     const cfg = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
