@@ -6284,40 +6284,44 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   function renderDefilePlanning(randomModeSelection = null, fwContext = null) {
     const el = document.getElementById('screen-defile-planning');
     if (!el) return;
-    const state = CWGameState.get();
-    const cfg   = state.config.combat;
-    const fashionWeekMode = !!fwContext;
-    const isRandomMode = Array.isArray(randomModeSelection) && !fashionWeekMode;
-    const REQUIRED_RANDOM = 9;
 
-    let teamInstances;
-    let fwRun = null;
-    if (fashionWeekMode) {
-      fwRun = state.player.fashionWeekRun;
-      if (!fwRun || !fwRun.active) { showScreen('fashion-week-day'); return; }
-      teamInstances = fwRun.roster; // personnages DE RUN, pas des instances persistantes
-    } else {
-      teamInstances = isRandomMode
-        ? randomModeSelection.map(iid => CWGameState.getPlayerChar(iid)).filter(Boolean)
-        : CWGameState.getTeam();
-    }
-
-    if (!fashionWeekMode && !isRandomMode && teamInstances.length < 3) {
-      el.innerHTML = `
-        <div class="screen-header"><h2>💃 Défilé</h2></div>
-        <p class="empty-msg">Compose une équipe complète (3 personnages) avant de te lancer dans un défilé.</p>
-      `;
-      return;
-    }
-    if (!fashionWeekMode && isRandomMode && teamInstances.length !== REQUIRED_RANDOM) {
-      el.innerHTML = `
-        <div class="screen-header"><h2>🎲 Défilé Aléatoire</h2></div>
-        <p class="empty-msg">Sélection invalide — reviens à l'écran précédent et choisis exactement ${REQUIRED_RANDOM} personnages.</p>
-      `;
-      return;
-    }
-
+    // Si l'état existe déjà, tout ce qui suit (arguments compris) ne compte
+    // plus — showScreen() rappelle ce renderer SANS ARGUMENT à chaque
+    // affichage, il ne faut donc jamais reconstruire ni re-valider ici.
     if (!_defileState) {
+      const state = CWGameState.get();
+      const cfg   = state.config.combat;
+      const fashionWeekMode = !!fwContext;
+      const isRandomMode = Array.isArray(randomModeSelection) && !fashionWeekMode;
+      const REQUIRED_RANDOM = 9;
+
+      let teamInstances;
+      let fwRun = null;
+      if (fashionWeekMode) {
+        fwRun = state.player.fashionWeekRun;
+        if (!fwRun || !fwRun.active) { showScreen('fashion-week-day'); return; }
+        teamInstances = fwRun.roster; // personnages DE RUN, pas des instances persistantes
+      } else {
+        teamInstances = isRandomMode
+          ? randomModeSelection.map(iid => CWGameState.getPlayerChar(iid)).filter(Boolean)
+          : CWGameState.getTeam();
+      }
+
+      if (!fashionWeekMode && !isRandomMode && teamInstances.length < 3) {
+        el.innerHTML = `
+          <div class="screen-header"><h2>💃 Défilé</h2></div>
+          <p class="empty-msg">Compose une équipe complète (3 personnages) avant de te lancer dans un défilé.</p>
+        `;
+        return;
+      }
+      if (!fashionWeekMode && isRandomMode && teamInstances.length !== REQUIRED_RANDOM) {
+        el.innerHTML = `
+          <div class="screen-header"><h2>🎲 Défilé Aléatoire</h2></div>
+          <p class="empty-msg">Sélection invalide — reviens à l'écran précédent et choisis exactement ${REQUIRED_RANDOM} personnages.</p>
+        `;
+        return;
+      }
+
       _defileInProgress = true;
       const programme = CWDefileEngine.generateProgramme(cfg, state.types);
 
