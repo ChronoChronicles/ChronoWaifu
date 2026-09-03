@@ -1268,7 +1268,7 @@ const CWGameState = (() => {
     const def = getCharDef(inst.charId);
     if (!def) return [];
     const lineChars = _state.characters
-      .filter(c => c.evolutionLine === def.evolutionLine)
+      .filter(c => c.evolutionLine === def.evolutionLine && c.evolutionStage <= def.evolutionStage)
       .sort((a, b) => a.evolutionStage - b.evolutionStage);
 
     const portraits = lineChars.map(c => ({
