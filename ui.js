@@ -7295,7 +7295,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     );
 
     if (_defileState.isFashionWeekMode) {
-      _fwPendingDefileContext = _defileState.fwContext;
+      result.fwContext = _defileState.fwContext; // voyage AVEC le résultat, plus rien à synchroniser à part
       _defileLastResult = result;
       _defileState = null;
       showScreen('defile-playback');
@@ -7311,7 +7311,6 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   }
 
   let _defileRewardsPlan = null;
-  let _fwPendingDefileContext = null; // { kind, layerIdx, nodeIdx } — survit à la remise à zéro de _defileState
 
   /**
    * Met à jour les stats joueur ET personnage après un défilé : Défilés
@@ -7984,9 +7983,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   /** Affiche le choix de 3 buffs après une victoire de Boss */
   /** Applique les récompenses Semaine de Mode après un VRAI combat de Défilé, puis enchaîne correctement */
   async function _fwApplyDefileResultAndContinue() {
-    const ctx = _fwPendingDefileContext;
-    _fwPendingDefileContext = null;
     const result = _defileLastResult;
+    const ctx = result?.fwContext;
     _defileInProgress = false; // la séquence Défilé est réellement terminée, navigation débloquée
     if (!ctx || !result) { _showCombatSelect(); return; }
 
@@ -8567,7 +8565,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       <button class="btn-primary" id="btn-defile-continue" style="width:100%;margin-top:14px;">Voir les récompenses ›</button>
     `;
     document.getElementById('btn-defile-continue')?.addEventListener('click', () => {
-      if (_fwPendingDefileContext) { _fwApplyDefileResultAndContinue(); return; }
+      if (_defileLastResult?.fwContext) { _fwApplyDefileResultAndContinue(); return; }
       showScreen('defile-rewards');
     });
   }
