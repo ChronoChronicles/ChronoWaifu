@@ -962,7 +962,7 @@ const CWGameUI = (() => {
 
     // Les écrans du Défilé gèrent eux-mêmes la musique de combat — ne jamais
     // la couper ici en relançant la musique globale par défaut.
-    const DEFILE_SCREENS = ['defile-planning', 'defile-playback', 'defile-result', 'defile-rewards', 'casting'];
+    const DEFILE_SCREENS = ['defile-planning', 'defile-playback', 'defile-result', 'defile-rewards', 'fashion-week-defile-rewards', 'casting'];
     if (!DEFILE_SCREENS.includes(screenId)) {
       CWAudioSystem.playGlobal();
     }
@@ -990,6 +990,7 @@ const CWGameUI = (() => {
       'defile-rewards': renderDefileRewards,
       'fashion-week-roster': renderFashionWeekRoster,
       'fashion-week-day': renderFashionWeekMap,
+      'fashion-week-defile-rewards': renderFashionWeekDefileRewards,
       'fashion-week-gala': renderFashionWeekGala,
       'defile-result':   renderDefileResult,
     };
@@ -7982,7 +7983,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   /** Mise en scène du Boss : combat décisif, puis choix de buff ou game over */
   /** Affiche le choix de 3 buffs après une victoire de Boss */
   /** Applique les récompenses Semaine de Mode après un VRAI combat de Défilé, puis enchaîne correctement */
-  async function _fwApplyDefileResultAndContinue() {
+  let _fwPendingRewardData = null; // { outcome, won, isBoss } — lu par renderFashionWeekDefileRewards
+
+  function _fwApplyDefileResultAndContinue() {
     const result = _defileLastResult;
     const ctx = result?.fwContext;
     _defileInProgress = false; // la séquence Défilé est réellement terminée, navigation débloquée
@@ -7993,60 +7996,68 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       const outcome = CWGameState.applyFashionWeekDefileResult(ctx, won, result.log);
       if (!outcome) { showScreen('fashion-week-day'); return; }
 
-      await _fwRevealDefileRewards(outcome, won, ctx.kind === 'boss');
-
-      if (outcome.gameOver) { showScreen('fashion-week-gala'); return; }
-      const run = CWGameState.get().player.fashionWeekRun;
-      if (won && run?.pendingBossBuffChoice) { _fwShowBossBuffChoice(); return; }
-      showScreen('fashion-week-day');
+      _fwPendingRewardData = { outcome, won, isBoss: ctx.kind === 'boss' };
+      showScreen('fashion-week-defile-rewards');
     } catch (err) {
       // Filet de sécurité : si quoi que ce soit plante ici, on ne reste JAMAIS
-      // bloqué — au pire, on revient sur la carte sans animation de récompense.
+      // bloqué — au pire, on revient sur la carte sans écran de récompense.
       console.error('[Semaine de Mode] Erreur après un Défilé :', err);
       _showToast('⚠️ Un problème est survenu à la fin du Défilé (voir la console).', 'error');
       showScreen('fashion-week-day');
     }
   }
 
-  /** Écran de révélation des récompenses : XP/niveaux gagnés par CHAQUE personnage, et Jetons gagnés */
-  async function _fwRevealDefileRewards(outcome, won, isBoss) {
-    _closeModal(); // sécurité : ferme toute modale qui traînerait encore (elle recouvrirait sinon cet écran)
+  /**
+   * Écran DÉDIÉ de récompenses (pas une fenêtre flottante) : XP/niveaux gagnés
+   * par CHAQUE personnage, et Jetons gagnés — ou la pénalité en cas de défaite.
+   * Même mécanisme que l'écran de résultat de combat (showScreen classique),
+   * pour éviter tout souci de superposition/animation.
+   */
+  function renderFashionWeekDefileRewards() {
+    const el = document.getElementById('screen-fashion-week-defile-rewards');
+    if (!el) return;
+    if (!_fwPendingRewardData) { showScreen('fashion-week-day'); return; }
+    const { outcome, won, isBoss } = _fwPendingRewardData;
+
     const state = CWGameState.get();
     const run = state.player.fashionWeekRun;
     const cfg = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
-    if (!run) { console.warn('[Semaine de Mode] Aucune run active au moment de révéler les récompenses.'); return; }
 
-    const rows = outcome.memberResults.map(r => {
-      const m = run.roster.find(rm => rm.originalInstanceId === r.instanceId);
+    const rows = won ? outcome.memberResults.map(r => {
+      const m = run?.roster.find(rm => rm.originalInstanceId === r.instanceId);
       const def = m ? CWGameState.getCharDef(m.currentCharId) : null;
       return { name: def?.name || '?', ...r };
-    });
+    }) : [];
 
-    const overlay = document.createElement('div');
-    overlay.className = `fw-resolve-overlay ${won ? 'fw-tone-success' : 'fw-tone-fail'}`;
-    overlay.style.pointerEvents = 'auto';
-    overlay.innerHTML = `
-      <div class="fw-resolve-caption fw-rewards-caption">
-        <div class="fw-resolve-outcome">${won ? (isBoss ? '👑 Boss remporté !' : '✅ Défilé remporté !') : (isBoss ? '💀 Défaite face au Boss...' : '❌ Défilé perdu...')}</div>
-        ${won ? `
-          <div class="fw-rewards-list">
-            ${rows.map(r => `
-              <div class="fw-rewards-row">
-                <span class="fw-rewards-name">${r.name}</span>
-                <span class="fw-rewards-detail">${r.ownScore} pts → +${r.xpGained} XP ${r.levelsGained > 0 ? `(+${r.levelsGained} Niv.)` : ''}</span>
-              </div>
-            `).join('')}
-          </div>
-          <div class="fw-resolve-detail" style="margin-top:8px;">${cfg.currencyIcon} +${outcome.ticketsGained} ${cfg.currencyName}</div>
-        ` : `<div class="fw-resolve-detail">-${cfg.teamFormDefileLossPenalty} Forme d'équipe</div>`}
-      </div>`;
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('active', 'revealed'));
+    el.innerHTML = `
+      <div class="screen-header">
+        <h2>${won ? (isBoss ? '👑 Boss remporté !' : '✅ Défilé remporté !') : (isBoss ? '💀 Défaite face au Boss...' : '❌ Défilé perdu...')}</h2>
+      </div>
+      ${won ? `
+        <div class="fw-rewards-list">
+          ${rows.map(r => `
+            <div class="fw-rewards-row">
+              <span class="fw-rewards-name">${r.name}</span>
+              <span class="fw-rewards-detail">${r.ownScore} pts → +${r.xpGained} XP${r.levelsGained > 0 ? ` (+${r.levelsGained} Niv.)` : ''}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="fw-rewards-tickets">${cfg.currencyIcon} +${outcome.ticketsGained} ${cfg.currencyName}</div>
+      ` : `
+        <p class="empty-msg">-${cfg.teamFormDefileLossPenalty} Forme d'équipe</p>
+      `}
+      <button class="btn-primary" id="btn-fw-rewards-continue" style="width:100%;margin-top:20px;">Continuer</button>
+    `;
+
     CWAudioSystem.playSfx(won ? CWAudioSystem.SFX_KEYS.defileVictory : CWAudioSystem.SFX_KEYS.defileRoundLose);
-    await _sleep(2600);
-    overlay.classList.remove('active');
-    await _sleep(300);
-    overlay.remove();
+
+    document.getElementById('btn-fw-rewards-continue')?.addEventListener('click', () => {
+      _fwPendingRewardData = null;
+      if (outcome.gameOver) { showScreen('fashion-week-gala'); return; }
+      const freshRun = CWGameState.get().player.fashionWeekRun;
+      if (won && freshRun?.pendingBossBuffChoice) { _fwShowBossBuffChoice(); return; }
+      showScreen('fashion-week-day');
+    });
   }
 
   function _fwShowBossBuffChoice() {
