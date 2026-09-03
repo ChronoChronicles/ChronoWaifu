@@ -7953,9 +7953,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
   /** Lance un VRAI Défilé (moteur classique) pour la Semaine de Mode — nœud mineur, Boss, ou défi ad-hoc de Dialogue */
   function _fwStartDefileEncounter(kind, layerIdx = null, nodeIdx = null) {
+    renderDefilePlanning(null, { kind, layerIdx, nodeIdx }); // crée _defileState AVEC le bon contexte AVANT que showScreen ne rappelle le renderer sans argument
     showScreen('defile-planning');
     CWAudioSystem.playCombat();
-    renderDefilePlanning(null, { kind, layerIdx, nodeIdx });
   }
 
 
