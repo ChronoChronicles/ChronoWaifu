@@ -7957,6 +7957,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
   /** Lance un VRAI Défilé (moteur classique) pour la Semaine de Mode — nœud mineur, Boss, ou défi ad-hoc de Dialogue */
   function _fwStartDefileEncounter(kind, layerIdx = null, nodeIdx = null) {
+    _defileState = null; // garantie absolue : jamais de reste d'un combat précédent, peu importe la cause
     renderDefilePlanning(null, { kind, layerIdx, nodeIdx }); // crée _defileState AVEC le bon contexte AVANT que showScreen ne rappelle le renderer sans argument
     showScreen('defile-planning');
     CWAudioSystem.playCombat();
@@ -7989,24 +7990,32 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     _defileInProgress = false; // la séquence Défilé est réellement terminée, navigation débloquée
     if (!ctx || !result) { _showCombatSelect(); return; }
 
-    const won = result.winner === 'player';
-    const outcome = CWGameState.applyFashionWeekDefileResult(ctx, won, result.log);
-    if (!outcome) { showScreen('fashion-week-day'); return; }
+    try {
+      const won = result.winner === 'player';
+      const outcome = CWGameState.applyFashionWeekDefileResult(ctx, won, result.log);
+      if (!outcome) { showScreen('fashion-week-day'); return; }
 
-    await _fwRevealDefileRewards(outcome, won, ctx.kind === 'boss');
+      await _fwRevealDefileRewards(outcome, won, ctx.kind === 'boss');
 
-    if (outcome.gameOver) { showScreen('fashion-week-gala'); return; }
-    const run = CWGameState.get().player.fashionWeekRun;
-    if (won && run?.pendingBossBuffChoice) { _fwShowBossBuffChoice(); return; }
-    showScreen('fashion-week-day');
+      if (outcome.gameOver) { showScreen('fashion-week-gala'); return; }
+      const run = CWGameState.get().player.fashionWeekRun;
+      if (won && run?.pendingBossBuffChoice) { _fwShowBossBuffChoice(); return; }
+      showScreen('fashion-week-day');
+    } catch (err) {
+      // Filet de sécurité : si quoi que ce soit plante ici, on ne reste JAMAIS
+      // bloqué — au pire, on revient sur la carte sans animation de récompense.
+      console.error('[Semaine de Mode] Erreur après un Défilé :', err);
+      _showToast('⚠️ Un problème est survenu à la fin du Défilé (voir la console).', 'error');
+      showScreen('fashion-week-day');
+    }
   }
 
   /** Écran de révélation des récompenses : XP/niveaux gagnés par CHAQUE personnage, et Jetons gagnés */
   async function _fwRevealDefileRewards(outcome, won, isBoss) {
     const state = CWGameState.get();
     const run = state.player.fashionWeekRun;
-    const cfg = state.config.fashionWeek;
-    if (!run) return;
+    const cfg = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
+    if (!run) { console.warn('[Semaine de Mode] Aucune run active au moment de révéler les récompenses.'); return; }
 
     const rows = outcome.memberResults.map(r => {
       const m = run.roster.find(rm => rm.originalInstanceId === r.instanceId);
