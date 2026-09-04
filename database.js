@@ -413,6 +413,7 @@ const CWGameDatabase = (() => {
       // ── Score & mise à l'échelle par jour ────────────────────────────────
       scoreRewards: { nodeCompleted: 10, defileWin: 40, bossWin: 150, treasureBonus: 15 },
       difficultyScalingPerDay: 0.22, // +22% de stats ennemies par jour (Jour1=x1 → Jour5≈x1.88)
+      bossDifficultyMultiplier: 0.85, // multiplicateur SPÉCIFIQUE au Boss (0.85 = 15% plus doux que la mise à l'échelle du jour) — remonter si trop facile plus tard dans la semaine
       rewardScalingPerDay: 0.18,     // +18% de score/Jetons gagnés par jour
 
       // ── Buffs de run proposés après une victoire de Boss (3 au choix) ───

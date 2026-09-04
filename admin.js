@@ -5239,6 +5239,7 @@ const CWAdminPanel = (() => {
           ${field('fw-levelsPerDialogueLevelUpMax', 'Niveaux gagnés (Dialogue) — max', cfg.levelsPerDialogueLevelUpMax)}
           ${field('fw-scoreToCurrencyRate', 'Score requis pour 1 Étoile de Scène', cfg.scoreToCurrencyRate)}
           ${field('fw-difficultyScalingPerDay', 'Difficulté ennemie / jour', cfg.difficultyScalingPerDay, 'ex: 0.22 = +22%/jour')}
+          ${field('fw-bossDifficultyMultiplier', 'Multiplicateur spécifique au Boss', cfg.bossDifficultyMultiplier, 'ex: 0.85 = 15% plus doux, 1 = pareil qu\'un Défilé mineur')}
           ${field('fw-rewardScalingPerDay', 'Récompenses / jour', cfg.rewardScalingPerDay, 'ex: 0.18 = +18%/jour')}
         </div>
       </div>
@@ -7570,6 +7571,7 @@ const CWAdminPanel = (() => {
       levelsPerDialogueLevelUpMax: fwVal('fw-levelsPerDialogueLevelUpMax', currentFw.levelsPerDialogueLevelUpMax, defaultFw.levelsPerDialogueLevelUpMax),
       scoreToCurrencyRate: fwVal('fw-scoreToCurrencyRate', currentFw.scoreToCurrencyRate, defaultFw.scoreToCurrencyRate),
       difficultyScalingPerDay: fwVal('fw-difficultyScalingPerDay', currentFw.difficultyScalingPerDay, defaultFw.difficultyScalingPerDay),
+      bossDifficultyMultiplier: fwVal('fw-bossDifficultyMultiplier', currentFw.bossDifficultyMultiplier, defaultFw.bossDifficultyMultiplier),
       rewardScalingPerDay: fwVal('fw-rewardScalingPerDay', currentFw.rewardScalingPerDay, defaultFw.rewardScalingPerDay),
       scoreRewards: {
         ...currentFw.scoreRewards,

@@ -6355,7 +6355,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       }
       const usesPerChar = fashionWeekMode ? 3 : (isRandomMode ? 1 : (cfg.defileUsesPerChar ?? 3));
       const fwScaleMult = fashionWeekMode
-        ? (1 + (state.config.fashionWeek.difficultyScalingPerDay || 0) * fwRun.day)
+        ? (1 + (state.config.fashionWeek.difficultyScalingPerDay || 0) * fwRun.day) * (fwContext.kind === 'boss' ? (state.config.fashionWeek.bossDifficultyMultiplier ?? 0.85) : 1)
         : 1;
       const enemyTeam = _buildDefileEnemyTeam(playerTeam, cfg, state, playerTeam.length, fwScaleMult);
       const enemyAssignment = CWDefileEngine.autoAssign(programme, enemyTeam, state.typeMatrix, usesPerChar);
