@@ -1752,7 +1752,7 @@ const CWGameState = (() => {
       }
       const statsAfter = getRoguelikeCharStats(m);
       return {
-        instanceId: m.originalInstanceId, name: def?.name || '?',
+        instanceId: m.originalInstanceId, name: def?.name || '?', charId: m.currentCharId,
         ownScore, xpGained, levelsGained,
         startLevel, startXp, endLevel: m.level, endXp: m.xp,
         statsBefore, statsAfter,

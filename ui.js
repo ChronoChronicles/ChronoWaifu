@@ -7599,6 +7599,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   }
 
   const FW_DAY_NAMES = ['Jour 1', 'Jour 2', 'Jour 3', 'Jour 4', 'Jour 5', 'Jour 6', 'Jour 7'];
+  const FW_STAT_LABEL = { atk: 'Charisme', def: 'Prestance', spd: 'Grâce' };
   const FW_CATEGORY_META = {
     defile:    { icon: '🎭', label: 'Défilé',    color: '#f87171' },
     shop:      { icon: '🛍️', label: 'Shop',      color: '#fbbf24' },
@@ -8020,7 +8021,6 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const { outcome, won, isBoss } = _fwPendingRewardData;
 
     const state = CWGameState.get();
-    const run = state.player.fashionWeekRun;
     const cfg = state.config.fashionWeek || CWGameDatabase.DEFAULT_CONFIG.fashionWeek;
     const formCost = won ? (cfg.teamFormWinCost ?? 12) : cfg.teamFormDefileLossPenalty;
 
@@ -8031,7 +8031,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       <div class="reward-section-title">✨ Expérience</div>
       <div id="fw-rewards-xp-list">
         ${outcome.memberResults.map(r => {
-          const def = CWGameState.getCharDef(run?.roster.find(m => m.originalInstanceId === r.instanceId)?.currentCharId);
+          const def = CWGameState.getCharDef(r.charId);
           const startNeeded = CWGameDatabase.xpForLevel(r.startLevel + 1, state.config.level);
           const startPct = Math.min(100, (r.startXp / startNeeded) * 100);
           return `
