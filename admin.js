@@ -5145,12 +5145,18 @@ const CWAdminPanel = (() => {
   // ═══ Éditeur de BUFF DE BOSS (structure différente d'une issue de Dialogue) ═══
   const FW_BUFF_TYPES = [
     { id: 'statBoostPct',             label: 'Bonus de stat en % (équipe, reste de la run)' },
+    { id: 'allStatsBoostPct',         label: 'Bonus uniforme aux 3 stats en % (équipe)' },
     { id: 'instantFormRestorePct',    label: 'Restaure la Forme d\'équipe (%)' },
     { id: 'formMaxIncrease',          label: 'Augmente le maximum de Forme' },
+    { id: 'formCostReductionPct',     label: 'Réduit le coût en Forme des Défilés (%)' },
+    { id: 'formRegenPerDay',          label: 'Régénère de la Forme chaque jour' },
     { id: 'scoreMultiplierPct',       label: 'Multiplicateur de score (%)' },
+    { id: 'ticketMultiplierPct',      label: 'Multiplicateur de Jetons gagnés (%)' },
     { id: 'instantCurrency',          label: 'Jetons immédiats' },
     { id: 'defileLossImmunityCount',  label: 'Immunité à la perte de Forme (N défaites de Défilé)' },
     { id: 'instantLevelsAll',         label: 'Niveaux immédiats (toute l\'équipe)' },
+    { id: 'instantLevelsOne',         label: 'Niveaux immédiats (une personnage au hasard)' },
+    { id: 'evolveRandomEligible',     label: 'Fait évoluer une personnage éligible au hasard' },
   ];
   /** Détecte quel type de buff est actuellement configuré (un seul champ effectif par buff) */
   function _fwDetectBuffType(buff) {
@@ -5175,6 +5181,18 @@ const CWAdminPanel = (() => {
         return `<div class="admin-field"><label>Nombre de défaites protégées</label><input type="number" id="${prefix}-value" value="${buff?.defileLossImmunityCount ?? 1}" min="1"></div>`;
       case 'instantLevelsAll':
         return `<div class="admin-field"><label>Niveaux offerts (chacune)</label><input type="number" id="${prefix}-value" value="${buff?.instantLevelsAll ?? 3}" min="1"></div>`;
+      case 'allStatsBoostPct':
+        return `<div class="admin-field"><label>Pourcentage sur les 3 stats</label><input type="number" id="${prefix}-value" value="${buff?.allStatsBoostPct ?? 10}" min="1"></div>`;
+      case 'formCostReductionPct':
+        return `<div class="admin-field"><label>Réduction du coût (%)</label><input type="number" id="${prefix}-value" value="${buff?.formCostReductionPct ?? 20}" min="1" max="100"></div>`;
+      case 'formRegenPerDay':
+        return `<div class="admin-field"><label>Forme régénérée / jour</label><input type="number" id="${prefix}-value" value="${buff?.formRegenPerDay ?? 5}" min="1"></div>`;
+      case 'ticketMultiplierPct':
+        return `<div class="admin-field"><label>Pourcentage de Jetons en plus</label><input type="number" id="${prefix}-value" value="${buff?.ticketMultiplierPct ?? 15}" min="1"></div>`;
+      case 'instantLevelsOne':
+        return `<div class="admin-field"><label>Niveaux offerts (une seule)</label><input type="number" id="${prefix}-value" value="${buff?.instantLevelsOne ?? 8}" min="1"></div>`;
+      case 'evolveRandomEligible':
+        return `<p style="font-size:.7rem;color:#888;margin:4px 0 0;">Aucun réglage — fait évoluer une personnage éligible au hasard (sans effet si aucune ne l'est).</p>`;
       default: return '';
     }
   }

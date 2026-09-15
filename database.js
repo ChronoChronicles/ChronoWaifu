@@ -418,15 +418,46 @@ const CWGameDatabase = (() => {
 
       // ── Buffs de run proposés après une victoire de Boss (3 au choix) ───
       bossBuffChoices: [
+        // ── Bonus de stat, par stat, 3 paliers chacun ──
+        { id: 'boss_atk_10',       label: '+10% Charisme (équipe, reste de la run)',   statBoostPct: { stat: 'atk', pct: 10 } },
         { id: 'boss_atk_20',       label: '+20% Charisme (équipe, reste de la run)',   statBoostPct: { stat: 'atk', pct: 20 } },
+        { id: 'boss_atk_35',       label: '+35% Charisme (équipe, reste de la run)',   statBoostPct: { stat: 'atk', pct: 35 } },
+        { id: 'boss_def_10',       label: '+10% Prestance (équipe, reste de la run)',  statBoostPct: { stat: 'def', pct: 10 } },
         { id: 'boss_def_20',       label: '+20% Prestance (équipe, reste de la run)',  statBoostPct: { stat: 'def', pct: 20 } },
+        { id: 'boss_def_35',       label: '+35% Prestance (équipe, reste de la run)',  statBoostPct: { stat: 'def', pct: 35 } },
+        { id: 'boss_spd_10',       label: '+10% Grâce (équipe, reste de la run)',      statBoostPct: { stat: 'spd', pct: 10 } },
         { id: 'boss_spd_20',       label: '+20% Grâce (équipe, reste de la run)',      statBoostPct: { stat: 'spd', pct: 20 } },
+        { id: 'boss_spd_35',       label: '+35% Grâce (équipe, reste de la run)',      statBoostPct: { stat: 'spd', pct: 35 } },
+        // ── Bonus uniforme sur les 3 stats ──
+        { id: 'boss_all_8',        label: '+8% aux 3 stats jugées (équipe, reste de la run)', allStatsBoostPct: 8 },
+        { id: 'boss_all_15',       label: '+15% aux 3 stats jugées (équipe, reste de la run)', allStatsBoostPct: 15 },
+        // ── Forme d'équipe ──
         { id: 'boss_form_heal',    label: 'Restaure entièrement la Forme d\'équipe',   instantFormRestorePct: 100 },
-        { id: 'boss_form_max',     label: '+30 Forme d\'équipe maximum (reste de la run)', formMaxIncrease: 30 },
-        { id: 'boss_score_20',     label: '+20% de score sur tous les gains futurs',   scoreMultiplierPct: 20 },
+        { id: 'boss_form_heal_half', label: 'Restaure la moitié de la Forme d\'équipe', instantFormRestorePct: 50 },
+        { id: 'boss_form_max_20',  label: '+20 Forme d\'équipe maximum (reste de la run)', formMaxIncrease: 20 },
+        { id: 'boss_form_max_30',  label: '+30 Forme d\'équipe maximum (reste de la run)', formMaxIncrease: 30 },
+        { id: 'boss_form_cost_20', label: 'Coût en Forme des Défilés -20% (reste de la run)', formCostReductionPct: 20 },
+        { id: 'boss_form_cost_35', label: 'Coût en Forme des Défilés -35% (reste de la run)', formCostReductionPct: 35 },
+        { id: 'boss_form_regen_5', label: 'Régénère 5 Forme d\'équipe chaque jour',     formRegenPerDay: 5 },
+        { id: 'boss_form_regen_10', label: 'Régénère 10 Forme d\'équipe chaque jour',   formRegenPerDay: 10 },
+        // ── Score et Jetons ──
+        { id: 'boss_score_15',     label: '+15% de score sur tous les gains futurs',   scoreMultiplierPct: 15 },
+        { id: 'boss_score_25',     label: '+25% de score sur tous les gains futurs',   scoreMultiplierPct: 25 },
+        { id: 'boss_score_40',     label: '+40% de score sur tous les gains futurs',   scoreMultiplierPct: 40 },
+        { id: 'boss_ticket_15',    label: '+15% de Jetons sur tous les gains futurs',  ticketMultiplierPct: 15 },
+        { id: 'boss_ticket_30',    label: '+30% de Jetons sur tous les gains futurs',  ticketMultiplierPct: 30 },
+        // ── Jetons immédiats ──
+        { id: 'boss_currency_30',  label: '+30 🎫 immédiatement',                       instantCurrency: 30 },
         { id: 'boss_currency_50',  label: '+50 🎫 immédiatement',                       instantCurrency: 50 },
-        { id: 'boss_defile_safe',  label: 'Le prochain Défilé perdu ne coûte pas de Forme', defileLossImmunityCount: 1 },
+        { id: 'boss_currency_100', label: '+100 🎫 immédiatement',                      instantCurrency: 100 },
+        // ── Niveaux ──
+        { id: 'boss_level_3',      label: '+3 Niveaux à toute l\'équipe immédiatement', instantLevelsAll: 3 },
         { id: 'boss_level_5',      label: '+5 Niveaux à toute l\'équipe immédiatement', instantLevelsAll: 5 },
+        { id: 'boss_level_one_8',  label: '+8 Niveaux à une personnage au hasard',      instantLevelsOne: 8 },
+        // ── Sécurité et évolution ──
+        { id: 'boss_defile_safe_1', label: 'Le prochain Défilé perdu ne coûte pas de Forme', defileLossImmunityCount: 1 },
+        { id: 'boss_defile_safe_2', label: 'Les 2 prochains Défilés perdus ne coûtent pas de Forme', defileLossImmunityCount: 2 },
+        { id: 'boss_evolve',       label: 'Fait évoluer une personnage éligible au hasard', evolveRandomEligible: true },
       ],
 
       // ── SCÉNARIOS — pool par catégorie, pour éviter toute redondance ────
@@ -464,7 +495,7 @@ const CWGameDatabase = (() => {
           flavorText: "Un post pourrait faire des étincelles — ou se retourner contre elle.",
           options: [
             { label: "Poster quelque chose d'audacieux", outcome: { type: 'gamble', chance: 0.5, success: { type: 'currencyGain', amount: 50 }, fail: { type: 'formLoss', amount: 20 } } },
-            { label: "Rester discrète",                    outcome: { type: 'runBuff', buffId: 'boss_score_20' } },
+            { label: "Rester discrète",                    outcome: { type: 'runBuff', buffId: 'boss_score_25' } },
             { label: "Collaborer avec une autre agence",   outcome: { type: 'statBoost', stat: 'def', amount: 10, target: 'team' } },
           ],
         },

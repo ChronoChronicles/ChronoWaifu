@@ -7652,6 +7652,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       return;
     }
 
+    if (run.pendingDailyBuffChoice) {
+      _fwShowDailyBuffChoice();
+      return;
+    }
+
     const mapDone = CWGameState.isFashionWeekMapComplete();
     const formMax = cfg.teamFormMax + (run.runMods.formMaxBonus || 0);
     const formPct = Math.round((run.teamForm / formMax) * 100);
@@ -7837,26 +7842,57 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const run = state.player.fashionWeekRun;
     const cfg = state.config.fashionWeek;
 
+    const memberLine = (iid, formatter) => {
+      const m = run?.roster.find(rm => rm.originalInstanceId === iid);
+      const def = m ? CWGameState.getCharDef(m.currentCharId) : null;
+      return m && def ? formatter(m, def) : null;
+    };
+
     let text = '', detail = '';
     switch (r?.type) {
-      case 'levelUp':    text = `📈 +${r.amount} Niveaux !`; break;
-      case 'statBoost':  text = r.fallbackFromEvolve ? `✨ +20 à toutes les stats !` : `✨ +${r.amount} ${FW_STAT_LABEL[r.stat]} !`; break;
-      case 'evolve':     text = `🦋 Évolution !`; break;
-      case 'currencyGain': text = `${cfg.currencyIcon} +${r.amount} !`; break;
-      case 'runBuff':    text = `🌟 Bonus de run activé !`; break;
-      case 'formLoss':   text = `💔 -${r.amount} Forme d'équipe...`; break;
-      case 'formGain':   text = `💗 +${r.amount} Forme d'équipe !`; break;
-      case 'triggerDefile': text = `⚔️ Un défi est lancé !`; break;
+      case 'levelUp': {
+        text = `📈 +${r.amount} Niveaux !`;
+        const lines = (r.memberIds || []).map(iid => memberLine(iid, (m, def) => `${def.name} → Niveau ${m.level}`)).filter(Boolean);
+        detail = lines.join(' · ');
+        break;
+      }
+      case 'statBoost': {
+        const statLabel = FW_STAT_LABEL[r.stat] || r.stat;
+        text = r.fallbackFromEvolve ? `✨ +20 à toutes les stats !` : `✨ +${r.amount} ${statLabel} !`;
+        const boosts = run?.runMods?.statBoosts || {};
+        const lines = (r.memberIds || []).map(iid => memberLine(iid, (m, def) => {
+          if (r.fallbackFromEvolve) return def.name;
+          const stats = CWGameState.getRoguelikeCharStats(m);
+          const finalVal = Math.round((stats[r.stat] || 0) * (1 + (boosts[r.stat] || 0) / 100));
+          return `${def.name} → ${statLabel} : ${finalVal}`;
+        })).filter(Boolean);
+        detail = lines.join(' · ');
+        break;
+      }
+      case 'evolve': {
+        text = `🦋 Évolution !`;
+        const lines = (r.memberIds || []).map(iid => memberLine(iid, (m, def) => `A évolué en ${def.name} !`)).filter(Boolean);
+        detail = lines.join(' · ');
+        break;
+      }
+      case 'currencyGain':
+        text = `${cfg.currencyIcon} +${r.amount} ${cfg.currencyName} !`;
+        break;
+      case 'runBuff': {
+        const buff = cfg.bossBuffChoices.find(b => b.id === r.buffId);
+        text = `🌟 ${buff?.label || 'Bonus de run activé'} !`;
+        break;
+      }
+      case 'formLoss':
+        text = `💔 -${r.amount} Forme d'équipe...`;
+        break;
+      case 'formGain':
+        text = `💗 +${r.amount} Forme d'équipe !`;
+        break;
+      case 'triggerDefile':
+        text = `⚔️ Un défi est lancé !`;
+        break;
       default: return;
-    }
-    // Mention de la cible : qui a été affecté, pour que ce soit lisible d'un coup d'œil
-    if (r.memberIds?.length && run) {
-      const names = r.memberIds.map(iid => {
-        const m = run.roster.find(rm => rm.originalInstanceId === iid);
-        return m ? CWGameState.getCharDef(m.currentCharId)?.name : null;
-      }).filter(Boolean);
-      if (names.length > 1) detail = `Toute l'équipe : ${names.join(', ')}`;
-      else if (names.length === 1) detail = names[0];
     }
     if (result.type === 'gamble') text = (result.success ? '🎲 Pari réussi ! ' : '🎲 Pari perdu... ') + text;
 
@@ -7871,7 +7907,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add('active', 'revealed'));
     CWAudioSystem.playSfx(result.type === 'gamble' && !result.success ? CWAudioSystem.SFX_KEYS.defileTypeBad : CWAudioSystem.SFX_KEYS.defileTypeGood);
-    await _sleep(1700);
+    await _sleep(2200);
     overlay.classList.remove('active');
     await _sleep(300);
     overlay.remove();
@@ -8116,6 +8152,32 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       }).join('');
       statsEl.innerHTML = rows;
     }
+  }
+
+  /** Choix d'un buff de run en tout début de journée (même pool que les buffs de Boss) */
+  function _fwShowDailyBuffChoice() {
+    const state = CWGameState.get();
+    const run = state.player.fashionWeekRun;
+    const cfg = state.config.fashionWeek;
+    const modal = document.getElementById('modal');
+    modal.style.display = 'block';
+    const choices = run.pendingDailyBuffChoice.map(id => cfg.bossBuffChoices.find(b => b.id === id));
+    modal.innerHTML = `
+      <div class="modal-backdrop" id="modal-backdrop">
+        <div class="modal-box fw-dialogue-modal">
+          <div class="fw-dialogue-title">🌅 ${FW_DAY_NAMES[run.day] || `Jour ${run.day + 1}`} — Choisis un bonus pour la journée</div>
+          <div class="fw-dialogue-options">
+            ${choices.map(b => `<button class="fw-dialogue-option-btn" data-buff="${b.id}">${b.label}</button>`).join('')}
+          </div>
+        </div>
+      </div>`;
+    modal.querySelectorAll('.fw-dialogue-option-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        CWGameState.chooseFashionWeekDailyBuff(btn.dataset.buff);
+        _closeModal();
+        renderFashionWeekMap();
+      });
+    });
   }
 
   function _fwShowBossBuffChoice() {

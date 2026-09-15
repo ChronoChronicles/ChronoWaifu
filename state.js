@@ -1499,7 +1499,10 @@ const CWGameState = (() => {
     const runMods = {
       statBoosts: { atk: 0, def: 0, spd: 0 },
       scoreMultiplierPct: 0,
+      ticketMultiplierPct: 0,
       formMaxBonus: 0,
+      formCostReductionPct: 0,
+      formRegenPerDay: 0,
       defileLossImmunityCount: 0,
     };
 
@@ -1513,6 +1516,7 @@ const CWGameState = (() => {
       currencyThisRun: 0,
       runMods,
       pendingBossBuffChoice: null,
+      pendingDailyBuffChoice: [...cfg.bossBuffChoices].sort(() => Math.random() - 0.5).slice(0, 3).map(b => b.id), // choix dès le Jour 1
       pendingGamble: null, // { nodeLayerIdx, nodeIdx, outcome } — résultat d'un pari en attente d'affichage
       finished: false,
       failed: false,
@@ -1759,14 +1763,16 @@ const CWGameState = (() => {
       };
     });
     const finalScore = duelLog.reduce((s, e) => s + (e.playerScore || 0), 0);
-    const ticketsGained = won ? Math.round((isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward') / 10) : 0;
+    const ticketsGained = won ? Math.round((isBoss ? cfg.scoreRewards.bossWin : cfg.scoreRewards.defileWin) * _fwDayMultiplier(cfg, run.day, 'reward') / 10 * (1 + (run.runMods.ticketMultiplierPct || 0) / 100)) : 0;
 
     // Consomme de la Forme d'équipe dans TOUS les cas (gagné ou perdu), pour
     // empêcher d'enchaîner les Défilés sans limite — la défaite coûte plus cher.
     if (run.runMods.defileLossImmunityCount > 0 && !won) {
       run.runMods.defileLossImmunityCount--;
     } else {
-      _fwApplyFormDelta(run, cfg, -(won ? (cfg.teamFormWinCost ?? 12) : cfg.teamFormDefileLossPenalty));
+      const baseFormCost = won ? (cfg.teamFormWinCost ?? 12) : cfg.teamFormDefileLossPenalty;
+      const reducedFormCost = Math.round(baseFormCost * (1 - (run.runMods.formCostReductionPct || 0) / 100));
+      _fwApplyFormDelta(run, cfg, -reducedFormCost);
     }
 
     if (won) {
@@ -1811,12 +1817,24 @@ const CWGameState = (() => {
   function _fwApplyBossBuff(run, buff) {
     const m = run.runMods;
     if (buff.statBoostPct)          m.statBoosts[buff.statBoostPct.stat] += buff.statBoostPct.pct;
-    if (buff.instantFormRestorePct) { const cfg = _fwCfg(); _fwApplyFormDelta(run, cfg, cfg.teamFormMax); }
+    if (buff.allStatsBoostPct)      ['atk','def','spd'].forEach(s => m.statBoosts[s] += buff.allStatsBoostPct);
+    if (buff.instantFormRestorePct) { const cfg = _fwCfg(); _fwApplyFormDelta(run, cfg, cfg.teamFormMax * (buff.instantFormRestorePct/100)); }
     if (buff.formMaxIncrease)       m.formMaxBonus = (m.formMaxBonus || 0) + buff.formMaxIncrease;
     if (buff.scoreMultiplierPct)    m.scoreMultiplierPct += buff.scoreMultiplierPct;
+    if (buff.ticketMultiplierPct)   m.ticketMultiplierPct = (m.ticketMultiplierPct || 0) + buff.ticketMultiplierPct;
+    if (buff.formCostReductionPct)  m.formCostReductionPct = (m.formCostReductionPct || 0) + buff.formCostReductionPct;
+    if (buff.formRegenPerDay)       m.formRegenPerDay = (m.formRegenPerDay || 0) + buff.formRegenPerDay;
     if (buff.instantCurrency)       run.currencyThisRun += buff.instantCurrency;
     if (buff.defileLossImmunityCount) m.defileLossImmunityCount = (m.defileLossImmunityCount || 0) + buff.defileLossImmunityCount;
     if (buff.instantLevelsAll)      run.roster.forEach(mem => mem.level += buff.instantLevelsAll);
+    if (buff.instantLevelsOne) {
+      const mem = run.roster[Math.floor(Math.random() * run.roster.length)];
+      if (mem) mem.level += buff.instantLevelsOne;
+    }
+    if (buff.evolveRandomEligible) {
+      const eligible = run.roster.filter(mem => _state.characters.some(c => c.evolutionLine === mem.evolutionLine && c.evolutionStage === mem.evolutionStage + 1));
+      if (eligible.length) _fwTryEvolve(eligible[Math.floor(Math.random() * eligible.length)]);
+    }
   }
 
   function chooseFashionWeekBossBuff(buffId) {
@@ -1831,16 +1849,31 @@ const CWGameState = (() => {
     return run.runMods;
   }
 
+  /** Choix du buff proposé en début de journée (même pool que les buffs de Boss) */
+  function chooseFashionWeekDailyBuff(buffId) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.pendingDailyBuffChoice?.includes(buffId)) return null;
+    const cfg = _fwCfg();
+    const buff = cfg.bossBuffChoices.find(b => b.id === buffId);
+    if (!buff) return null;
+    _fwApplyBossBuff(run, buff);
+    run.pendingDailyBuffChoice = null;
+    _autoSave();
+    return run.runMods;
+  }
+
   /** Passe au jour suivant (nouvelle carte), ou termine la run si le 5e Boss est passé */
   function advanceFashionWeekDay() {
     const run = _state.player.fashionWeekRun;
     if (!run || !run.active) return null;
     const cfg = _fwCfg();
+    if (run.runMods.formRegenPerDay) _fwApplyFormDelta(run, cfg, run.runMods.formRegenPerDay);
     run.day++;
     if (run.day >= cfg.daysPerWeek) {
       return endFashionWeekRun();
     }
     run.map = _fwGenerateDayMap(cfg, run.day);
+    run.pendingDailyBuffChoice = [...cfg.bossBuffChoices].sort(() => Math.random() - 0.5).slice(0, 3).map(b => b.id);
     _autoSave();
     return run;
   }
@@ -3014,7 +3047,7 @@ const CWGameState = (() => {
     getRoguelikeCharStats, resolveFashionWeekNode, resolveFashionWeekEncounter,
     buyFashionWeekRunItem, resolveFashionWeekShopVisit,
     applyFashionWeekDefileResult,
-    isFashionWeekMapComplete, chooseFashionWeekBossBuff,
+    isFashionWeekMapComplete, chooseFashionWeekBossBuff, chooseFashionWeekDailyBuff,
     advanceFashionWeekDay, endFashionWeekRun,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,
