@@ -351,6 +351,24 @@
   }
   .defile-slot-content{ flex:1; display:flex; flex-direction:column; justify-content:flex-end; gap:4px; }
   .defile-slot-empty{ font-size:.62rem; color:var(--text-faint); text-align:center; margin:auto 0; }
+  .defile-slot-pick-btn{
+    font-size:.66rem; font-weight:700; color:#a78bfa; background:rgba(167,139,250,.1);
+    border:1.5px dashed rgba(167,139,250,.4); border-radius:8px; padding:8px 6px;
+    text-align:center; margin:auto 0; width:100%;
+  }
+  .defile-slot-pick-btn:active{ background:rgba(167,139,250,.22); }
+  .defile-slot-pick-btn-talent{ font-size:.6rem; color:#fbbf24; border-color:rgba(251,191,36,.4); background:rgba(251,191,36,.08); padding:5px; }
+
+  /* ── Fenêtre de sélection (personnage ou Talent) — remplace le glisser-déposer ── */
+  .defile-picker-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px;
+    max-height:60vh; overflow-y:auto; margin-top:10px;
+  }
+  .defile-picker-grid-talents{ grid-template-columns:1fr; max-height:55vh; }
+  .defile-picker-card{ cursor:pointer; transition:transform .12s ease; }
+  .defile-picker-card:active{ transform:scale(.97); }
+  .defile-picker-grid .defile-fighter-card{ margin:0; }
+
   .defile-slot-fighter{ display:flex; align-items:center; justify-content:space-between; gap:4px; }
   .defile-slot-fighter-name{ font-size:.7rem; font-weight:700; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .defile-slot-remove, .defile-talent-remove{
@@ -4341,7 +4359,7 @@
   .fw-dialogue-option-preview{ font-size:.7rem; font-weight:800; color:#fbbf24; white-space:nowrap; flex-shrink:0; }
 
   /* ── Planification manuelle d'un défilé jouable ── */
-  .fw-defile-modal{ max-width:460px; }
+  .fw-defile-modal{ max-width:560px; width:100%; }
   .fw-defile-programme{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
   .fw-defile-slot{
     background:rgba(255,255,255,.05); border:1.5px dashed rgba(255,255,255,.2);

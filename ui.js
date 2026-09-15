@@ -6538,8 +6538,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     el.innerHTML = `
       <div class="screen-header"><h2>💃 Défilé — Planification</h2></div>
       <p class="defile-help">
-        Glisse chacune de tes personnages sur ${_defileState.usesPerChar} tournages, puis glisse
-        librement un Talent par personnage sur le tournage de ton choix (une fois par duel).
+        Touche un tournage vide pour choisir qui y défile, puis touche sa zone Talent
+        pour lui attribuer librement un Talent (une fois par personnage).
       </p>
       <div class="defile-programme" id="defile-programme">
         ${programme.map((p, idx) => {
@@ -6571,11 +6571,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                     <span>${STAT_LABELS_SHORT.atk.slice(0,2)}${fighter.atk}</span><span>${STAT_LABELS_SHORT.def.slice(0,2)}${fighter.def}</span><span>${STAT_LABELS_SHORT.spd.slice(0,2)}${fighter.spd}</span>
                   </div>
                   ${liveMult != null ? `<div class="defile-slot-mult ${_affinityMeta(liveMult).cls}">${_formatAffinityMult(liveMult)} sur ce thème</div>` : ''}
-                ` : `<span class="defile-slot-empty">Glisse une personnage ici</span>`}
+                ` : `<button class="defile-slot-pick-btn" data-round="${idx}" data-pick="char">➕ Choisir une personnage</button>`}
                 <div class="defile-slot-talent-zone ${talent ? 'has-talent' : ''}">
                   ${talent
                     ? `<span>⭐ ${talent.name} <small>(${talentOwner?.name || ''})</small></span><button class="defile-talent-remove" data-round="${idx}" title="Retirer">✕</button>`
-                    : `<span class="defile-slot-empty">Dépose un Talent ici</span>`}
+                    : `<button class="defile-slot-pick-btn defile-slot-pick-btn-talent" data-round="${idx}" data-pick="talent">⭐ Choisir un Talent</button>`}
                 </div>
                 ${talentSlot?.typeId === 'Mystique' ? `
                   <div class="defile-mystique-indicator">
@@ -6595,7 +6595,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           const left = _defileUsesLeft(f.instanceId);
           const def = CWGameState.getCharDef(f.charId);
           return `
-            <div class="defile-fighter-card ${left === 0 ? 'exhausted' : ''}" data-instance="${f.instanceId}" data-drag-kind="char">
+            <div class="defile-fighter-card ${left === 0 ? 'exhausted' : ''}" data-instance="${f.instanceId}">
               <div class="defile-fighter-card-portrait">
                 ${_detailPortraitImgHtml(def)}
               </div>
@@ -6615,7 +6615,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       </div>
 
       <div class="defile-help" style="margin-top:14px;">
-        Talents disponibles — ${talentsPlaced}/${maxTalents} placés (glisse-en un sur le tournage de ton choix, peu importe la personnage) :
+        Talents disponibles — ${talentsPlaced}/${maxTalents} placés (touche la zone Talent d'un tournage pour en choisir un, peu importe la personnage) :
       </div>
       <div class="defile-roster" id="defile-talents">
         ${talentChips.map(chip => {
@@ -6626,7 +6626,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
           const disabled = placed || limitReached;
           return `
             <div class="defile-chip defile-talent-chip ${disabled ? 'exhausted' : ''}"
-                 data-instance="${chip.instanceId}" data-type="${chip.typeId}" data-drag-kind="talent">
+                 data-instance="${chip.instanceId}" data-type="${chip.typeId}">
               <div class="defile-chip-name">${typeBadge(chip.typeId)} ${talent?.name || chip.typeId}
                 <small style="color:var(--text-faint);font-weight:400;">— ${chip.owner.name}</small>
               </div>
@@ -6651,12 +6651,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     const el = document.getElementById('screen-defile-planning');
     if (!el) return;
 
-    // Glisser-déposer tactile/souris via Pointer Events (fonctionne au doigt ET à la souris)
-    el.querySelectorAll('.defile-chip:not(.exhausted), .defile-fighter-card:not(.exhausted)').forEach(chip => {
-      const kind = chip.dataset.dragKind;
-      chip.addEventListener('pointerdown', (e) => {
-        if (kind === 'char') _startDefileDrag(e, 'char', { instanceId: chip.dataset.instance });
-        else _startDefileDrag(e, 'talent', { instanceId: chip.dataset.instance, typeId: chip.dataset.type });
+    el.querySelectorAll('.defile-slot-pick-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const round = parseInt(btn.dataset.round);
+        if (btn.dataset.pick === 'char') _openDefileCharPicker(round);
+        else _openDefileTalentPicker(round);
       });
     });
 
@@ -6689,82 +6688,118 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   }
 
   /**
-   * Démarre le glisser-déposer via Pointer Events (fonctionne au doigt ET à la
-   * souris), pour deux sortes d'éléments :
-   * - 'char'   : place une personnage sur un passage (limité à ses N usages)
-   * - 'talent' : place librement l'un des Talents d'une personnage (un par
-   *              type possédé) sur n'importe quel passage déjà occupé — une
-   *              même personnage ne peut en placer qu'un seul au total.
+   * Fenêtre de sélection d'une personnage pour un tournage précis — cartes
+   * complètes (portrait, stats, affinités), comme dans la liste de référence.
+   * Remplace l'ancien glisser-déposer : on touche d'abord le tournage vide,
+   * puis on choisit dans une liste forcément courte (seules les personnages
+   * encore disponibles apparaissent).
    */
-  function _startDefileDrag(e, kind, payload) {
-    e.preventDefault();
-    const label = kind === 'char'
-      ? _defileState.playerTeam.find(f => f.instanceId === payload.instanceId)?.name
-      : _getPlanningTalentDisplay(payload.typeId, CWGameState.get().config.combat)?.name;
-    if (!label) return;
-
-    const ghost = document.createElement('div');
-    ghost.className = 'defile-drag-ghost';
-    ghost.textContent = (kind === 'talent' ? '⭐ ' : '') + label;
-    document.body.appendChild(ghost);
-    _moveDefileGhost(ghost, e.clientX, e.clientY);
-
-    const onMove = (ev) => _moveDefileGhost(ghost, ev.clientX, ev.clientY);
-    const onUp = (ev) => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      ghost.remove();
-
-      const dropEl = document.elementFromPoint(ev.clientX, ev.clientY);
-      const slotEl = dropEl?.closest('.defile-slot');
-      if (!slotEl) return;
-      const round = parseInt(slotEl.dataset.round);
-
-      if (kind === 'char') {
-        if (_defileUsesLeft(payload.instanceId) > 0) {
-          _defileState.assignment[round] = { instanceId: payload.instanceId };
-          _renderDefilePlanningDOM();
-        } else {
-          _showToast('⚠️ Cette personnage a déjà défilé le nombre de fois autorisé.', 'error');
-        }
-      } else { // talent
-        if (!_defileState.assignment[round]) {
-          _showToast('⚠️ Place d\'abord une personnage sur ce tournage.', 'error');
-          return;
-        }
-        const cfg = CWGameState.get().config.combat;
-        const maxTalents = cfg.defileTalentsCount ?? 3;
-        const alreadyPlacedThisChip = _defileTalentChipRound(payload.instanceId, payload.typeId) >= 0;
-        const totalPlaced = Object.keys(_defileState.talentPlacement).length;
-        if (!alreadyPlacedThisChip && totalPlaced >= maxTalents) {
-          _showToast(`⚠️ Limite de ${maxTalents} Talents déjà atteinte.`, 'error');
-          return;
-        }
-        // Cette puce précise ne peut être placée qu'à un seul endroit à la fois
-        if (alreadyPlacedThisChip) {
-          const prevRound = _defileTalentChipRound(payload.instanceId, payload.typeId);
-          delete _defileState.talentPlacement[prevRound];
-          delete _defileState.mystiqueSwapRounds[prevRound + 1]; // le round Mystique change, son choix précédent n'a plus de sens
-        }
-        _defileState.talentPlacement[round] = { instanceId: payload.instanceId, typeId: payload.typeId };
-        _renderDefilePlanningDOM();
-
-        // Mystique (Substitution) : demande immédiatement quel passage adverse
-        // ultérieur échanger avec celui-ci — léger délai pour laisser
-        // l'événement tactile actuel se terminer avant de créer la modale
-        // (sinon le premier tap dessus peut ne pas être pris en compte).
-        if (payload.typeId === 'Mystique') {
-          setTimeout(() => _openDefileMystiquePicker(round), 60);
-        }
-      }
+  function _openDefileCharPicker(round) {
+    const state = CWGameState.get();
+    const types = state.types;
+    const typeBadge = (typeId) => {
+      const t = types.find(tt => tt.id === typeId);
+      return t ? `<span class="defile-type-badge" style="background:${t.color}">${t.icon}</span>` : '';
     };
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
+    const available = _defileState.playerTeam.filter(f => _defileUsesLeft(f.instanceId) > 0);
+    const modal = document.getElementById('modal');
+    modal.style.display = 'block';
+    modal.innerHTML = `
+      <div class="modal-backdrop" id="modal-backdrop">
+        <div class="modal-box fw-defile-modal">
+          <div class="fw-dialogue-title">Qui défile au Tournage ${round + 1} ?</div>
+          <div class="defile-picker-grid">
+            ${available.map(f => {
+              const left = _defileUsesLeft(f.instanceId);
+              const def = CWGameState.getCharDef(f.charId);
+              return `
+                <div class="defile-fighter-card defile-picker-card" data-instance="${f.instanceId}">
+                  <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
+                  <div class="defile-fighter-card-info">
+                    <div class="defile-chip-name">${f.name}</div>
+                    <div class="defile-chip-types">${typeBadge(f.type1)}${typeBadge(f.type2)}</div>
+                    <div class="defile-chip-stats-grid">
+                      <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">✨</span><span class="defile-chip-stat-value">${f.atk}</span></div>
+                      <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🌹</span><span class="defile-chip-stat-value">${f.def}</span></div>
+                      <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🕊️</span><span class="defile-chip-stat-value">${f.spd}</span></div>
+                    </div>
+                    <div class="defile-chip-uses">${left}/${_defileState.usesPerChar} restants</div>
+                    ${_buildCompactAffinitiesHtml(f.type1, f.type2)}
+                  </div>
+                </div>`;
+            }).join('') || '<p class="empty-msg">Plus personne de disponible.</p>'}
+          </div>
+        </div>
+      </div>`;
+    modal.querySelectorAll('.defile-picker-card').forEach(card => {
+      card.addEventListener('click', () => {
+        _defileState.assignment[round] = { instanceId: card.dataset.instance };
+        _closeModal();
+        _renderDefilePlanningDOM();
+      });
+    });
   }
 
-  function _moveDefileGhost(ghost, x, y) {
-    ghost.style.left = `${x}px`;
-    ghost.style.top  = `${y}px`;
+  /**
+   * Fenêtre de sélection d'un Talent pour un tournage précis — même principe
+   * que le sélecteur de personnage, avec la description complète de l'effet.
+   */
+  function _openDefileTalentPicker(round) {
+    if (!_defileState.assignment[round]) {
+      _showToast('⚠️ Choisis d\'abord une personnage sur ce tournage.', 'error');
+      return;
+    }
+    const cfg = CWGameState.get().config.combat;
+    const maxTalents = cfg.defileTalentsCount ?? 3;
+    const totalPlaced = Object.keys(_defileState.talentPlacement).length;
+    if (totalPlaced >= maxTalents) {
+      _showToast(`⚠️ Limite de ${maxTalents} Talents déjà atteinte.`, 'error');
+      return;
+    }
+    const state = CWGameState.get();
+    const types = state.types;
+    const typeBadge = (typeId) => {
+      const t = types.find(tt => tt.id === typeId);
+      return t ? `<span class="defile-type-badge" style="background:${t.color}">${t.icon}</span>` : '';
+    };
+    const talentChips = [];
+    _defileState.playerTeam.forEach(f => {
+      [f.type1, f.type2].filter(Boolean).forEach(typeId => {
+        talentChips.push({ instanceId: f.instanceId, typeId, owner: f });
+      });
+    });
+    const available = talentChips.filter(chip => _defileTalentChipRound(chip.instanceId, chip.typeId) < 0);
+
+    const modal = document.getElementById('modal');
+    modal.style.display = 'block';
+    modal.innerHTML = `
+      <div class="modal-backdrop" id="modal-backdrop">
+        <div class="modal-box fw-defile-modal">
+          <div class="fw-dialogue-title">Quel Talent au Tournage ${round + 1} ?</div>
+          <div class="defile-picker-grid defile-picker-grid-talents">
+            ${available.map(chip => {
+              const talent = _getPlanningTalentDisplay(chip.typeId, cfg);
+              return `
+                <div class="defile-chip defile-talent-chip defile-picker-card" data-instance="${chip.instanceId}" data-type="${chip.typeId}">
+                  <div class="defile-chip-name">${typeBadge(chip.typeId)} ${talent?.name || chip.typeId}
+                    <small style="color:var(--text-faint);font-weight:400;">— ${chip.owner.name}</small>
+                  </div>
+                  <div class="defile-chip-talent-desc">${talent?.description || ''}</div>
+                </div>`;
+            }).join('') || '<p class="empty-msg">Plus aucun Talent disponible.</p>'}
+          </div>
+        </div>
+      </div>`;
+    modal.querySelectorAll('.defile-picker-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const instanceId = card.dataset.instance, typeId = card.dataset.type;
+        _defileState.talentPlacement[round] = { instanceId, typeId };
+        _closeModal();
+        _renderDefilePlanningDOM();
+        // Mystique (Substitution) : demande immédiatement quel passage adverse échanger
+        if (typeId === 'Mystique') setTimeout(() => _openDefileMystiquePicker(round), 60);
+      });
+    });
   }
 
   let _defileLastResult = null;
