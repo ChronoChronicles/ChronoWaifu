@@ -6594,8 +6594,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         ${playerTeam.map(f => {
           const left = _defileUsesLeft(f.instanceId);
           const def = CWGameState.getCharDef(f.charId);
+          const rarityDef = CWGameDatabase.RARITIES[def?.rarity] || {};
           return `
-            <div class="defile-fighter-card ${left === 0 ? 'exhausted' : ''}" data-instance="${f.instanceId}">
+            <div class="defile-fighter-card ${left === 0 ? 'exhausted' : ''}" data-instance="${f.instanceId}" style="border-color:${rarityDef.color || 'rgba(255,255,255,.15)'}">
               <div class="defile-fighter-card-portrait">
                 ${_detailPortraitImgHtml(def)}
               </div>
@@ -6719,8 +6720,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
             ${available.map(f => {
               const left = _defileUsesLeft(f.instanceId);
               const def = CWGameState.getCharDef(f.charId);
+              const rarityDef = CWGameDatabase.RARITIES[def?.rarity] || {};
               return `
-                <div class="defile-fighter-card defile-picker-card" data-instance="${f.instanceId}">
+                <div class="defile-fighter-card defile-picker-card" data-instance="${f.instanceId}" style="border-color:${rarityDef.color || 'rgba(255,255,255,.15)'}">
                   <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
                   <div class="defile-fighter-card-info">
                     <div class="defile-chip-name">${f.name}</div>
@@ -7558,7 +7560,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       return `${boosted} <span class="fw-stat-boost-delta">(+${boosted - baseVal})</span>`;
     };
     return `
-      <div class="defile-fighter-card">
+      <div class="defile-fighter-card" style="border-color:${(CWGameDatabase.RARITIES[def?.rarity] || {}).color || 'rgba(255,255,255,.15)'}">
         <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
         <div class="defile-fighter-card-info">
           <div class="defile-chip-name">${def.name}</div>
@@ -7651,6 +7653,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     heal:      { icon: '💗', label: 'Heal',      color: '#4ade80' },
     treasure:  { icon: '💰', label: 'Trésor',    color: '#fbbf24' },
     encounter: { icon: '🌟', label: 'Rencontre', color: '#f472b6' },
+    evolve:    { icon: '🦋', label: 'Évolution', color: '#22d3ee' },
   };
 
   /** Fiche d'un personnage DE RUN — stats recalculées à partir de son niveau/forme de run, jamais les stats persistantes */
@@ -7667,8 +7670,9 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       if (!t) return '';
       return `<span class="defile-type-badge" style="background:${t.color}">${t.icon}</span>`;
     };
+    const rarityDef = CWGameDatabase.RARITIES[def.rarity] || {};
     return `
-      <div class="defile-fighter-card">
+      <div class="defile-fighter-card" style="border-color:${rarityDef.color || 'rgba(255,255,255,.15)'}">
         <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
         <div class="defile-fighter-card-info">
           <div class="defile-chip-name">${def.name} <span class="fw-run-level">Niv.${runChar.level}</span></div>
@@ -7766,6 +7770,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     // Index du nœud choisi (resolved:true) pour chaque couche déjà franchie
     const traveled = layers.map(layer => layer.findIndex(n => n.resolved));
 
+    // Nœuds RÉELLEMENT atteignables dans la couche courante, depuis le nœud
+    // précédent choisi (ou depuis l'origine si on est encore au tout début).
+    let reachableInCurrent = null; // null = tout le monde (départ depuis l'origine)
+    if (currentLayer > 0) {
+      const prevChosen = traveled[currentLayer - 1];
+      reachableInCurrent = new Set(connections[currentLayer - 1]?.[prevChosen] || []);
+    }
+
     const line = (p1, p2, cls) => `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="${cls}" />`;
     let lines = '';
 
@@ -7806,7 +7818,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         const meta = FW_CATEGORY_META[node.category] || { icon: '❓', color: '#888' };
         let stateCls = 'fw-map-node-future';
         if (i < currentLayer) stateCls = node.resolved ? 'fw-map-node-traveled' : 'fw-map-node-skipped';
-        else if (i === currentLayer) stateCls = 'fw-map-node-active';
+        else if (i === currentLayer) {
+          const isReachable = reachableInCurrent === null || reachableInCurrent.has(j);
+          stateCls = isReachable ? 'fw-map-node-active' : 'fw-map-node-locked';
+        }
         nodes += `
           <div class="fw-map-node ${stateCls}" style="left:${p.x}%;top:${p.y}%;--node-color:${meta.color}" data-layer="${i}" data-node="${j}" title="${node.title}">
             <div class="fw-map-node-diamond"><span>${meta.icon}</span></div>
@@ -7839,6 +7854,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     if (node.category === 'defile') return _fwStartDefileEncounter('node', layerIdx, nodeIdx);
     if (node.category === 'heal') return _fwPlaySimpleNodeSequence(layerIdx, nodeIdx, node, cfg, 'heal');
     if (node.category === 'treasure') return _fwPlaySimpleNodeSequence(layerIdx, nodeIdx, node, cfg, 'treasure');
+    if (node.category === 'evolve') return _fwOpenEvolveModal(layerIdx, nodeIdx, node, cfg);
   }
 
   /** Modale de Dialogue : texte d'ambiance + 3 choix aux issues variées */
@@ -8032,37 +8048,133 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
 
   /** Modale Shop : achète des objets avec la monnaie de run */
   function _fwOpenShopModal(layerIdx, nodeIdx, node, cfg) {
-    const state = CWGameState.get();
-    const run = state.player.fashionWeekRun;
     const modal = document.getElementById('modal');
     modal.style.display = 'block';
+    let activeTab = 'items';
 
     const render = () => {
-      const freshRun = CWGameState.get().player.fashionWeekRun;
+      const state = CWGameState.get();
+      const run = state.player.fashionWeekRun;
+      const TABS = [
+        { id: 'items', label: '🧪 Objets' },
+        { id: 'recruit', label: '✨ Recruter' },
+        { id: 'evolve', label: '🦋 Évoluer' },
+        { id: 'buffs', label: '🌟 Bonus' },
+        { id: 'sell', label: '💰 Vendre' },
+      ];
+
+      let contentHtml = '';
+      if (activeTab === 'items') {
+        contentHtml = cfg.shopItems.map(item => `
+          <div class="fw-shop-item-row">
+            <div class="fw-shop-item-label">${item.label}</div>
+            <button class="btn-secondary fw-shop-buy-btn" data-item="${item.id}" ${run.currencyThisRun < item.cost ? 'disabled' : ''}>${item.cost} ${cfg.currencyIcon}</button>
+          </div>`).join('');
+      } else if (activeTab === 'recruit') {
+        const cost = cfg.shopRecruitCost ?? 60;
+        contentHtml = `
+          <p class="defile-help">Recrute une personnage inconnue au hasard (lignée pas encore dans ton équipe).</p>
+          <button class="btn-primary" id="fw-shop-recruit-btn" style="width:100%;" ${run.currencyThisRun < cost ? 'disabled' : ''}>Recruter — ${cost} ${cfg.currencyIcon}</button>`;
+      } else if (activeTab === 'evolve') {
+        const cost = cfg.shopEvolveCost ?? 50;
+        const eligible = run.roster.filter(m => state.characters.some(c => c.evolutionLine === m.evolutionLine && c.evolutionStage === m.evolutionStage + 1));
+        contentHtml = eligible.length ? `
+          <div class="defile-picker-grid">
+            ${eligible.map(m => {
+              const def = CWGameState.getCharDef(m.currentCharId);
+              return `
+                <div class="defile-fighter-card defile-picker-card fw-shop-evolve-card" data-instance="${m.originalInstanceId}" ${run.currencyThisRun < cost ? 'style="opacity:.4;pointer-events:none;"' : ''}>
+                  <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
+                  <div class="defile-fighter-card-info">
+                    <div class="defile-chip-name">${def.name} <span class="fw-run-level">Niv.${m.level}</span></div>
+                    <div class="defile-chip-uses">${cost} ${cfg.currencyIcon}</div>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>` : `<p class="empty-msg">Personne n'est éligible pour l'instant.</p>`;
+      } else if (activeTab === 'buffs') {
+        contentHtml = (cfg.shopRunBuffChoices || []).map(buff => `
+          <div class="fw-shop-item-row">
+            <div class="fw-shop-item-label">${buff.label}</div>
+            <button class="btn-secondary fw-shop-buff-btn" data-buff="${buff.id}" ${run.currencyThisRun < buff.cost ? 'disabled' : ''}>${buff.cost} ${cfg.currencyIcon}</button>
+          </div>`).join('');
+      } else if (activeTab === 'sell') {
+        contentHtml = run.roster.length <= 1 ? `<p class="empty-msg">Impossible de vendre ta dernière personnage.</p>` : `
+          <div class="defile-picker-grid">
+            ${run.roster.map(m => {
+              const def = CWGameState.getCharDef(m.currentCharId);
+              const gain = Math.round((cfg.shopSellBaseValue ?? 15) * m.level);
+              return `
+                <div class="defile-fighter-card defile-picker-card fw-shop-sell-card" data-instance="${m.originalInstanceId}">
+                  <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
+                  <div class="defile-fighter-card-info">
+                    <div class="defile-chip-name">${def.name} <span class="fw-run-level">Niv.${m.level}</span></div>
+                    <div class="defile-chip-uses">+${gain} ${cfg.currencyIcon}</div>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>`;
+      }
+
       modal.innerHTML = `
         <div class="modal-backdrop" id="modal-backdrop">
-          <div class="modal-box">
+          <div class="modal-box fw-defile-modal">
             <div class="fw-dialogue-title">🛍️ ${node.title}</div>
             <div class="fw-dialogue-flavor">${node.flavorText}</div>
-            <div class="fw-shop-balance">${cfg.currencyIcon} ${freshRun.currencyThisRun} disponibles</div>
-            <div class="fw-shop-items">
-              ${cfg.shopItems.map(item => `
-                <div class="fw-shop-item-row">
-                  <div class="fw-shop-item-label">${item.label}</div>
-                  <button class="btn-secondary fw-shop-buy-btn" data-item="${item.id}" ${freshRun.currencyThisRun < item.cost ? 'disabled' : ''}>
-                    ${item.cost} ${cfg.currencyIcon}
-                  </button>
-                </div>
-              `).join('')}
+            <div class="fw-shop-balance">${cfg.currencyIcon} ${run.currencyThisRun} disponibles</div>
+            <div class="fw-shop-tabs">
+              ${TABS.map(t => `<button class="fw-shop-tab-btn ${activeTab === t.id ? 'active' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}
             </div>
+            <div class="fw-shop-items">${contentHtml}</div>
             <button class="btn-primary" id="fw-shop-done" style="width:100%;margin-top:12px;">Quitter le Shop</button>
           </div>
         </div>`;
+
+      modal.querySelectorAll('.fw-shop-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
+      });
       modal.querySelectorAll('.fw-shop-buy-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           const result = CWGameState.buyFashionWeekRunItem(btn.dataset.item);
           if (result?.error === 'insufficient') { _showToast('Pas assez de Jetons.', 'error'); return; }
           if (result?.success) { _showToast(`Acheté : ${result.item.label}`, 'success'); render(); }
+        });
+      });
+      document.getElementById('fw-shop-recruit-btn')?.addEventListener('click', () => {
+        const result = CWGameState.buyFashionWeekShopRecruit();
+        if (result?.error === 'insufficient') { _showToast('Pas assez de Jetons.', 'error'); return; }
+        if (result?.error === 'no_candidates') { _showToast('Plus aucune lignée disponible à recruter.', 'error'); return; }
+        if (result?.success) {
+          const def = CWGameState.getCharDef(result.recruitedCharId);
+          _showToast(`✨ ${def?.name || 'Une recrue'} rejoint l'équipe !`, 'success');
+          render();
+        }
+      });
+      modal.querySelectorAll('.fw-shop-evolve-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const result = CWGameState.buyFashionWeekShopEvolve(card.dataset.instance);
+          if (result?.error === 'insufficient') { _showToast('Pas assez de Jetons.', 'error'); return; }
+          if (result?.success) {
+            const def = CWGameState.getCharDef(result.newCharId);
+            _showToast(`🦋 Évolution ! ${def?.name || ''}`, 'success');
+            render();
+          }
+        });
+      });
+      modal.querySelectorAll('.fw-shop-buff-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const result = CWGameState.buyFashionWeekShopRunBuff(btn.dataset.buff);
+          if (result?.error === 'insufficient') { _showToast('Pas assez de Jetons.', 'error'); return; }
+          if (result?.success) { _showToast(`🌟 ${result.buff.label}`, 'success'); render(); }
+        });
+      });
+      modal.querySelectorAll('.fw-shop-sell-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const ok = confirm('Vendre définitivement cette personnage pour cette run ? Irréversible.');
+          if (!ok) return;
+          const result = CWGameState.sellFashionWeekRosterMember(card.dataset.instance);
+          if (result?.error === 'last_member') { _showToast('Impossible de vendre ta dernière personnage.', 'error'); return; }
+          if (result?.success) { _showToast(`+${result.gain} ${cfg.currencyIcon}`, 'success'); render(); }
         });
       });
       document.getElementById('fw-shop-done')?.addEventListener('click', () => {
@@ -8082,22 +8194,97 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   }
 
   /** Modale Rencontre : recrue aléatoire à accepter ou refuser */
-  function _fwOpenEncounterModal(layerIdx, nodeIdx, node, cfg) {
+  /** Modale du nœud Évolution : choisit une personnage éligible à faire évoluer, contre des Jetons */
+  function _fwOpenEvolveModal(layerIdx, nodeIdx, node, cfg) {
+    const state = CWGameState.get();
+    const run = state.player.fashionWeekRun;
+    const cost = cfg.evolveNodeCost ?? 40;
+    const eligible = run.roster.filter(m => state.characters.some(c => c.evolutionLine === m.evolutionLine && c.evolutionStage === m.evolutionStage + 1));
+
     const modal = document.getElementById('modal');
     modal.style.display = 'block';
     modal.innerHTML = `
       <div class="modal-backdrop" id="modal-backdrop">
-        <div class="modal-box">
-          <div class="fw-dialogue-title">🌟 ${node.title}</div>
-          <div class="fw-dialogue-flavor">${node.flavorText}</div>
-          <div class="fw-dialogue-options">
-            <button class="fw-dialogue-option-btn" id="fw-enc-accept">Accepter — l'ajouter à l'équipe</button>
-            <button class="fw-dialogue-option-btn" id="fw-enc-decline">Refuser, continuer sans elle</button>
-          </div>
+        <div class="modal-box fw-defile-modal">
+          <div class="fw-dialogue-title">🦋 ${node.title}</div>
+          <p class="defile-help" style="margin:4px 0 12px;">${node.flavorText}</p>
+          ${eligible.length ? `
+            <div class="defile-picker-grid">
+              ${eligible.map(m => {
+                const def = CWGameState.getCharDef(m.currentCharId);
+                const affordable = run.currencyThisRun >= cost;
+                return `
+                  <div class="defile-fighter-card defile-picker-card ${affordable ? '' : 'exhausted'}" data-instance="${m.originalInstanceId}">
+                    <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
+                    <div class="defile-fighter-card-info">
+                      <div class="defile-chip-name">${def.name} <span class="fw-run-level">Niv.${m.level}</span></div>
+                      <div class="defile-chip-uses">${cfg.currencyIcon} ${cost} pour évoluer</div>
+                    </div>
+                  </div>`;
+              }).join('')}
+            </div>
+          ` : `<p class="empty-msg">Personne n'est éligible pour l'instant (déjà au stade final).</p>`}
+          <button class="admin-btn admin-btn-secondary" id="fw-evolve-skip" style="width:100%;margin-top:12px;">Passer</button>
         </div>
       </div>`;
-    const resolve = (accept) => {
-      const result = CWGameState.resolveFashionWeekEncounter(layerIdx, nodeIdx, accept);
+
+    modal.querySelectorAll('.defile-picker-card:not(.exhausted)').forEach(card => {
+      card.addEventListener('click', () => {
+        const result = CWGameState.resolveFashionWeekEvolveNode(layerIdx, nodeIdx, card.dataset.instance);
+        if (result?.error === 'insufficient') { _showToast(`⚠️ Pas assez de ${cfg.currencyName}.`, 'error'); return; }
+        _closeModal();
+        if (result?.type === 'evolve') {
+          const def = CWGameState.getCharDef(result.newCharId);
+          _showToast(`🦋 Évolution ! ${def?.name || ''}`, 'success');
+        }
+        renderFashionWeekMap();
+      });
+    });
+    document.getElementById('fw-evolve-skip')?.addEventListener('click', () => {
+      CWGameState.skipFashionWeekEvolveNode(layerIdx, nodeIdx);
+      _closeModal();
+      renderFashionWeekMap();
+    });
+    document.getElementById('modal-backdrop')?.addEventListener('click', (e) => { if (e.target.id === 'modal-backdrop') _closeModal(); });
+  }
+
+  function _fwOpenEncounterModal(layerIdx, nodeIdx, node, cfg) {
+    const run = CWGameState.get().player.fashionWeekRun;
+    // Les 3 candidates sont tirées une seule fois puis mémorisées sur le nœud,
+    // pour ne pas re-tirer à chaque ouverture de la modale.
+    if (!node.encounterCandidates) node.encounterCandidates = CWGameState.proposeFashionWeekEncounterCandidates(run);
+    const candidates = node.encounterCandidates;
+
+    const modal = document.getElementById('modal');
+    modal.style.display = 'block';
+    modal.innerHTML = `
+      <div class="modal-backdrop" id="modal-backdrop">
+        <div class="modal-box fw-defile-modal">
+          <div class="fw-dialogue-title">🌟 ${node.title}</div>
+          <p class="defile-help" style="margin:4px 0 12px;">${node.flavorText}</p>
+          <div class="defile-picker-grid">
+            ${candidates.map(charId => {
+              const def = CWGameState.getCharDef(charId);
+              if (!def) return '';
+              const rarityDef = CWGameDatabase.RARITIES[def.rarity] || {};
+              const types = CWGameState.get().types;
+              const typeBadge = (typeId) => { const t = types.find(tt => tt.id === typeId); return t ? `<span class="defile-type-badge" style="background:${t.color}">${t.icon}</span>` : ''; };
+              return `
+                <div class="defile-fighter-card defile-picker-card" data-char="${charId}" style="border-color:${rarityDef.color || 'rgba(255,255,255,.15)'}">
+                  <div class="defile-fighter-card-portrait">${_detailPortraitImgHtml(def)}</div>
+                  <div class="defile-fighter-card-info">
+                    <div class="defile-chip-name">${def.name}</div>
+                    <div class="defile-chip-types">${typeBadge(def.type1)}${typeBadge(def.type2)}</div>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
+          <button class="admin-btn admin-btn-secondary" id="fw-enc-decline" style="width:100%;margin-top:12px;">Ne recruter personne</button>
+        </div>
+      </div>`;
+
+    const resolve = (charId) => {
+      const result = CWGameState.resolveFashionWeekEncounter(layerIdx, nodeIdx, charId);
       _closeModal();
       if (result?.recruitedCharId) {
         const def = CWGameState.getCharDef(result.recruitedCharId);
@@ -8105,8 +8292,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       }
       renderFashionWeekMap();
     };
-    document.getElementById('fw-enc-accept')?.addEventListener('click', () => resolve(true));
-    document.getElementById('fw-enc-decline')?.addEventListener('click', () => resolve(false));
+    modal.querySelectorAll('.defile-picker-card').forEach(card => {
+      card.addEventListener('click', () => resolve(card.dataset.char));
+    });
+    document.getElementById('fw-enc-decline')?.addEventListener('click', () => resolve(null));
+    document.getElementById('modal-backdrop')?.addEventListener('click', (e) => { if (e.target.id === 'modal-backdrop') resolve(null); });
   }
 
   /** Lance un VRAI Défilé (moteur classique) pour la Semaine de Mode — nœud mineur, Boss, ou défi ad-hoc de Dialogue */

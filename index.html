@@ -4346,6 +4346,7 @@
   }
   .fw-map-node-diamond > *{ transform:rotate(-45deg); }
   .fw-map-node-future .fw-map-node-diamond{ opacity:.3; filter:grayscale(.6); }
+  .fw-map-node-locked .fw-map-node-diamond{ opacity:.35; filter:grayscale(.8); cursor:not-allowed; }
   .fw-map-node-skipped .fw-map-node-diamond{ opacity:.25; filter:grayscale(1); }
   .fw-map-node-traveled .fw-map-node-diamond{ opacity:.9; box-shadow:0 0 10px var(--node-color); }
   .fw-map-node-active{ cursor:pointer; }
@@ -4403,6 +4404,12 @@
 
   /* ── Modale Shop ── */
   .fw-shop-balance{ font-size:.85rem; font-weight:800; color:#fbbf24; text-align:center; margin-bottom:12px; }
+  .fw-shop-tabs{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center; margin-bottom:12px; }
+  .fw-shop-tab-btn{
+    font-size:.68rem; font-weight:700; padding:6px 10px; border-radius:8px;
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15); color:var(--text-dim);
+  }
+  .fw-shop-tab-btn.active{ background:rgba(167,139,250,.2); border-color:#a78bfa; color:#fff; }
   .fw-shop-items{ display:flex; flex-direction:column; gap:8px; }
   .fw-shop-item-row{
     display:flex; justify-content:space-between; align-items:center;

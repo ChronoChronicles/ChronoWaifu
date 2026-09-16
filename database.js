@@ -407,8 +407,8 @@ const CWGameDatabase = (() => {
       // Cible indicative : ~10 niveaux gagnés par jour pour une run qui enchaîne les succès
 
       // ── Génération des paliers ───────────────────────────────────────────
-      encounterChance: 0.06,     // probabilité qu'un nœud Rencontre apparaisse dans un palier (rare, additif)
-      categoryWeights: { defile: 30, shop: 15, dialogue: 30, heal: 15, treasure: 10 },
+      encounterChance: 0.03,     // probabilité qu'un nœud Rencontre apparaisse dans un palier (rare, additif)
+      categoryWeights: { defile: 50, dialogue: 25, heal: 10, shop: 5, treasure: 3, evolve: 4 },
 
       // ── Score & mise à l'échelle par jour ────────────────────────────────
       scoreRewards: { nodeCompleted: 10, defileWin: 40, bossWin: 150, treasureBonus: 15 },
@@ -467,45 +467,45 @@ const CWGameDatabase = (() => {
           id: 'dlg_interview_surprise', title: 'Interview surprise',
           flavorText: "Un journaliste l'aborde sans prévenir, micro tendu, caméra déjà allumée.",
           options: [
-            { label: "Répondre avec assurance",      outcome: { type: 'statBoost', stat: 'atk', amount: 12, target: 'choice_one' } },
-            { label: "Rester prudente et mesurée",    outcome: { type: 'currencyGain', amount: 20 } },
-            { label: "Improviser un show complet",    outcome: { type: 'gamble', chance: 0.5, success: { type: 'levelUp', amount: 3, target: 'random_one' }, fail: { type: 'formLoss', amount: 15 } } },
+            { label: "Répondre avec assurance",      outcome: { type: 'gamble', chance: 0.7,  success: { type: 'statBoost', stat: 'atk', amount: 15, target: 'choice_one' }, fail: { type: 'formLoss', amount: 8 } } },
+            { label: "Rester prudente et mesurée",    outcome: { type: 'gamble', chance: 0.85, success: { type: 'currencyGain', amount: 25 }, fail: { type: 'formLoss', amount: 5 } } },
+            { label: "Improviser un show complet",    outcome: { type: 'gamble', chance: 0.45, success: { type: 'levelUp', amount: 4, target: 'random_one' }, fail: { type: 'formLoss', amount: 15 } } },
           ],
         },
         {
           id: 'dlg_mentor', title: 'Une mentor de passage',
           flavorText: "Une figure respectée de l'industrie s'arrête, observe, puis s'approche.",
           options: [
-            { label: "Accepter ses conseils",         outcome: { type: 'levelUp', amount: 2, target: 'team' } },
-            { label: "Décliner poliment",              outcome: { type: 'currencyGain', amount: 15 } },
-            { label: "Lui proposer un défi amical",     outcome: { type: 'triggerDefile' } },
+            { label: "Accepter ses conseils",         outcome: { type: 'gamble', chance: 0.75, success: { type: 'levelUp', amount: 3, target: 'team' }, fail: { type: 'formLoss', amount: 10 } } },
+            { label: "Décliner poliment",              outcome: { type: 'gamble', chance: 0.9,  success: { type: 'currencyGain', amount: 20 }, fail: { type: 'formLoss', amount: 4 } } },
+            { label: "Lui proposer un défi amical",     outcome: { type: 'gamble', chance: 0.6,  success: { type: 'triggerDefile' }, fail: { type: 'formLoss', amount: 10 } } },
           ],
         },
         {
           id: 'dlg_transformation', title: 'Une opportunité de transformation',
           flavorText: "On lui propose une refonte complète de son image — risqué, mais potentiellement spectaculaire.",
           options: [
-            { label: "Foncer, tant pis pour le risque", outcome: { type: 'evolve', target: 'choice_one' } },
-            { label: "Trop risqué, mieux vaut refuser",  outcome: { type: 'formGain', amount: 20 } },
-            { label: "Demander plus de détails d'abord", outcome: { type: 'currencyGain', amount: 25 } },
+            { label: "Foncer, tant pis pour le risque", outcome: { type: 'gamble', chance: 0.5,  success: { type: 'evolve', target: 'choice_one' }, fail: { type: 'formLoss', amount: 15 } } },
+            { label: "Trop risqué, mieux vaut refuser",  outcome: { type: 'gamble', chance: 0.85, success: { type: 'formGain', amount: 15 }, fail: { type: 'formLoss', amount: 5 } } },
+            { label: "Demander plus de détails d'abord", outcome: { type: 'gamble', chance: 0.8,  success: { type: 'currencyGain', amount: 20 }, fail: { type: 'formLoss', amount: 6 } } },
           ],
         },
         {
           id: 'dlg_buzz_reseaux', title: 'Le buzz des réseaux',
           flavorText: "Un post pourrait faire des étincelles — ou se retourner contre elle.",
           options: [
-            { label: "Poster quelque chose d'audacieux", outcome: { type: 'gamble', chance: 0.5, success: { type: 'currencyGain', amount: 50 }, fail: { type: 'formLoss', amount: 20 } } },
-            { label: "Rester discrète",                    outcome: { type: 'runBuff', buffId: 'boss_score_25' } },
-            { label: "Collaborer avec une autre agence",   outcome: { type: 'statBoost', stat: 'def', amount: 10, target: 'team' } },
+            { label: "Poster quelque chose d'audacieux", outcome: { type: 'gamble', chance: 0.5,  success: { type: 'currencyGain', amount: 60 }, fail: { type: 'formLoss', amount: 15 } } },
+            { label: "Rester discrète",                    outcome: { type: 'gamble', chance: 0.85, success: { type: 'runBuff', buffId: 'boss_score_25' }, fail: { type: 'formLoss', amount: 5 } } },
+            { label: "Collaborer avec une autre agence",   outcome: { type: 'gamble', chance: 0.7,  success: { type: 'statBoost', stat: 'def', amount: 12, target: 'team' }, fail: { type: 'formLoss', amount: 8 } } },
           ],
         },
         {
           id: 'dlg_dispute_coulisses', title: 'Dispute en coulisses',
           flavorText: "Le ton monte entre deux équipes rivales, juste avant l'entrée en scène.",
           options: [
-            { label: "Prendre parti fermement",   outcome: { type: 'triggerDefile' } },
-            { label: "Calmer le jeu",              outcome: { type: 'formGain', amount: 25 } },
-            { label: "Ignorer et continuer",       outcome: { type: 'levelUp', amount: 2, target: 'random_one' } },
+            { label: "Prendre parti fermement",   outcome: { type: 'gamble', chance: 0.55, success: { type: 'triggerDefile' }, fail: { type: 'formLoss', amount: 12 } } },
+            { label: "Calmer le jeu",              outcome: { type: 'gamble', chance: 0.8,  success: { type: 'formGain', amount: 20 }, fail: { type: 'formLoss', amount: 6 } } },
+            { label: "Ignorer et continuer",       outcome: { type: 'gamble', chance: 0.75, success: { type: 'levelUp', amount: 2, target: 'random_one' }, fail: { type: 'formLoss', amount: 8 } } },
           ],
         },
       ],
@@ -536,12 +536,30 @@ const CWGameDatabase = (() => {
         { id: 'enc_talent_perdu',  title: 'Un talent en perdition', flavorText: "Livrée à elle-même depuis trop longtemps, elle cherche une chance." },
       ],
 
+      evolveNodeCost: 40, // coût en Jetons pour faire évoluer une personnage sur ce type de nœud
+      evolveScenarios: [
+        { id: 'evo_studio_transfo', title: 'Un studio de transformation', flavorText: "Un styliste propose de la faire passer à l'étape suivante, contre rémunération." },
+        { id: 'evo_opportunite_rare', title: 'Une opportunité rare', flavorText: "L'occasion ne se représentera peut-être pas de sitôt." },
+      ],
+
       // ── Objets du Shop (achetés avec 🎫, pendant la run) ────────────────
       shopItems: [
         { id: 'fw_item_form_small',  label: 'Petit soin',     cost: 20, effect: 'form_restore', amount: 25 },
         { id: 'fw_item_form_full',   label: 'Grand soin',     cost: 45, effect: 'form_restore', amount: 100 },
         { id: 'fw_item_stat_boost',  label: 'Boost de stat',  cost: 35, effect: 'stat_boost_random_member', amount: 15 },
         { id: 'fw_item_level',       label: 'Cours accéléré', cost: 40, effect: 'level_up_random_member', amount: 3 },
+      ],
+
+      // ── Extensions de la Boutique : recrutement, évolution, bonus, vente ──
+      shopRecruitCost: 60,
+      shopEvolveCost: 50,
+      shopSellBaseValue: 15, // Jetons gagnés par niveau de la personnage vendue
+      shopRunBuffChoices: [
+        { id: 'shop_buff_atk_10', label: '+10% Charisme (équipe)', cost: 50, statBoostPct: { stat: 'atk', pct: 10 } },
+        { id: 'shop_buff_def_10', label: '+10% Prestance (équipe)', cost: 50, statBoostPct: { stat: 'def', pct: 10 } },
+        { id: 'shop_buff_spd_10', label: '+10% Grâce (équipe)', cost: 50, statBoostPct: { stat: 'spd', pct: 10 } },
+        { id: 'shop_buff_score',  label: '+15% de score futur', cost: 55, scoreMultiplierPct: 15 },
+        { id: 'shop_buff_safe',   label: 'Assurance : 1 défaite sans coût', cost: 45, defileLossImmunityCount: 1 },
       ],
     },
   };

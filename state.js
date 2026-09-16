@@ -1470,12 +1470,33 @@ const CWGameState = (() => {
 
     const layers = [];
     for (let i = 0; i < cfg.nodesPerDay; i++) {
+      const isLastLayer = i === cfg.nodesPerDay - 1;
+
+      if (isLastLayer) {
+        // Dernière couche avant le Boss : TOUJOURS un choix entre Repos et Shop, rien d'autre
+        const heal = scenarioFor('heal');
+        const shop = scenarioFor('shop');
+        layers.push([
+          { category: 'heal', scenarioId: heal.id, title: heal.title, flavorText: heal.flavorText, resolved: false },
+          { category: 'shop', scenarioId: shop.id, title: shop.title, flavorText: shop.flavorText, resolved: false },
+        ]);
+        continue;
+      }
+
       const count = cfg.nodeChoicesMin + Math.floor(Math.random() * (cfg.nodeChoicesMax - cfg.nodeChoicesMin + 1));
       const nodes = [];
       for (let j = 0; j < count; j++) {
         const category = pickCategory();
         const scenario = scenarioFor(category);
         nodes.push({ category, scenarioId: scenario.id, title: scenario.title, flavorText: scenario.flavorText, resolved: false });
+      }
+      // Les 3 premières couches garantissent toujours une route de Défilé
+      // possible (au moins un nœud Défilé par couche), pour que le joueur
+      // puisse toujours choisir d'enchaîner 3 combats dès le départ s'il le souhaite.
+      if (i < 3 && !nodes.some(n => n.category === 'defile')) {
+        const forcedIdx = Math.floor(Math.random() * nodes.length);
+        const scenario = scenarioFor('defile');
+        nodes[forcedIdx] = { category: 'defile', scenarioId: scenario.id, title: scenario.title, flavorText: scenario.flavorText, resolved: false };
       }
       layers.push(nodes);
     }
@@ -1600,7 +1621,8 @@ const CWGameState = (() => {
       outcomeResult = _fwApplyDialogueOutcome(run, cfg, option.outcome, null, chosenMemberId);
     } else if (node.category === 'heal') {
       const before = run.teamForm;
-      _fwApplyFormDelta(run, cfg, cfg.teamFormMax); // soin complet
+      const formMax = cfg.teamFormMax + (run.runMods.formMaxBonus || 0);
+      _fwApplyFormDelta(run, cfg, formMax * 0.5); // Repos = 50% de la Forme MAXIMUM, pas un soin complet
       outcomeResult = { type: 'heal', formGained: run.teamForm - before };
     } else if (node.category === 'treasure') {
       const gain = Math.round(cfg.scoreRewards.treasureBonus * _fwDayMultiplier(cfg, run.day, 'reward'));
@@ -1610,7 +1632,7 @@ const CWGameState = (() => {
       // Résolu séparément via resolveFashionWeekEncounter (accepter/refuser) — ne rien faire ici
       return null;
     } else {
-      return null; // 'defile' et 'shop' se résolvent via leurs propres fonctions dédiées
+      return null; // 'defile', 'shop' et 'evolve' se résolvent via leurs propres fonctions dédiées
     }
 
     node.resolved = true;
@@ -1694,7 +1716,16 @@ const CWGameState = (() => {
   }
 
   /** Résout un nœud de Rencontre : accepter ou refuser une recrue aléatoire */
-  function resolveFashionWeekEncounter(layerIdx, nodeIdx, accept) {
+  /** Propose 3 personnages au recrutement (lignées non déjà dans le roster de run) */
+  function proposeFashionWeekEncounterCandidates(run) {
+    const rosterLines = new Set(run.roster.map(m => m.evolutionLine));
+    const pool = _state.characters.filter(c => c.evolutionStage === 0 && !rosterLines.has(c.evolutionLine));
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 3).map(c => c.id);
+  }
+
+  /** Résout un nœud Rencontre : chosenCharId = celle recrutée, ou null pour ne recruter personne */
+  function resolveFashionWeekEncounter(layerIdx, nodeIdx, chosenCharId) {
     const run = _state.player.fashionWeekRun;
     if (!run || !run.active) return null;
     const cfg = _fwCfg();
@@ -1702,12 +1733,10 @@ const CWGameState = (() => {
     if (!node || node.resolved || node.category !== 'encounter') return null;
 
     let recruited = null;
-    if (accept) {
-      const rosterLines = new Set(run.roster.map(m => m.evolutionLine));
-      const pool = _state.characters.filter(c => c.evolutionStage === 0 && !rosterLines.has(c.evolutionLine));
-      if (pool.length) {
-        const picked = pool[Math.floor(Math.random() * pool.length)];
-        const newMember = { originalInstanceId: `fw_recruit_${picked.id}_${Date.now()}`, currentCharId: picked.id, evolutionLine: picked.evolutionLine, evolutionStage: 0, level: 1, runStatBonus: { hp:0, atk:0, def:0, spd:0 } };
+    if (chosenCharId) {
+      const picked = _state.characters.find(c => c.id === chosenCharId);
+      if (picked) {
+        const newMember = { originalInstanceId: `fw_recruit_${picked.id}_${Date.now()}`, currentCharId: picked.id, evolutionLine: picked.evolutionLine, evolutionStage: 0, level: 1, xp: 0, runStatBonus: { hp:0, atk:0, def:0, spd:0 } };
         run.roster.push(newMember);
         recruited = picked.id;
       }
@@ -1716,7 +1745,7 @@ const CWGameState = (() => {
     _fwAddScore(run, cfg.scoreRewards.nodeCompleted);
     _fwAdvanceLayerIfComplete(run);
     _autoSave();
-    return { accepted: accept, recruitedCharId: recruited };
+    return { recruitedCharId: recruited };
   }
 
   /** Achète un objet du Shop (pendant la run, avec les Jetons de la run) */
@@ -1742,7 +1771,70 @@ const CWGameState = (() => {
     return { success: true, item };
   }
 
-  /** Marque le nœud Shop comme visité (résolution de palier, sans effet direct — les achats se font via buyFashionWeekRunItem) */
+  /** Boutique — recrute une personnage au hasard (lignée non déjà possédée), contre des Jetons */
+  function buyFashionWeekShopRecruit() {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return { error: 'no_run' };
+    const cfg = _fwCfg();
+    const cost = cfg.shopRecruitCost ?? 60;
+    if (run.currencyThisRun < cost) return { error: 'insufficient' };
+    const rosterLines = new Set(run.roster.map(m => m.evolutionLine));
+    const pool = _state.characters.filter(c => c.evolutionStage === 0 && !rosterLines.has(c.evolutionLine));
+    if (!pool.length) return { error: 'no_candidates' };
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    run.currencyThisRun -= cost;
+    run.roster.push({ originalInstanceId: `fw_shop_recruit_${picked.id}_${Date.now()}`, currentCharId: picked.id, evolutionLine: picked.evolutionLine, evolutionStage: 0, level: 1, xp: 0, runStatBonus: { hp:0, atk:0, def:0, spd:0 } });
+    _autoSave();
+    return { success: true, recruitedCharId: picked.id, cost };
+  }
+
+  /** Boutique — fait évoluer une personnage éligible du roster, contre des Jetons */
+  function buyFashionWeekShopEvolve(memberInstanceId) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return { error: 'no_run' };
+    const cfg = _fwCfg();
+    const cost = cfg.shopEvolveCost ?? 50;
+    const member = run.roster.find(m => m.originalInstanceId === memberInstanceId);
+    if (!member) return { error: 'not_found' };
+    const eligible = _state.characters.some(c => c.evolutionLine === member.evolutionLine && c.evolutionStage === member.evolutionStage + 1);
+    if (!eligible) return { error: 'not_eligible' };
+    if (run.currencyThisRun < cost) return { error: 'insufficient' };
+    run.currencyThisRun -= cost;
+    _fwTryEvolve(member);
+    _autoSave();
+    return { success: true, memberInstanceId, newCharId: member.currentCharId, cost };
+  }
+
+  /** Boutique — achète directement un bonus de run (parmi une petite sélection dédiée) */
+  function buyFashionWeekShopRunBuff(buffId) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return { error: 'no_run' };
+    const cfg = _fwCfg();
+    const buff = (cfg.shopRunBuffChoices || []).find(b => b.id === buffId);
+    if (!buff) return { error: 'not_found' };
+    if (run.currencyThisRun < buff.cost) return { error: 'insufficient' };
+    run.currencyThisRun -= buff.cost;
+    _fwApplyBossBuff(run, buff);
+    _autoSave();
+    return { success: true, buff };
+  }
+
+  /** Boutique — vend une personnage du roster, la retire définitivement de la run, contre des Jetons proportionnels à son niveau */
+  function sellFashionWeekRosterMember(memberInstanceId) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return { error: 'no_run' };
+    if (run.roster.length <= 1) return { error: 'last_member' }; // jamais un roster totalement vide
+    const idx = run.roster.findIndex(m => m.originalInstanceId === memberInstanceId);
+    if (idx < 0) return { error: 'not_found' };
+    const member = run.roster[idx];
+    const cfg = _fwCfg();
+    const gain = Math.round((cfg.shopSellBaseValue ?? 15) * member.level);
+    run.roster.splice(idx, 1);
+    run.currencyThisRun += gain;
+    _autoSave();
+    return { success: true, gain };
+  }
+
   function resolveFashionWeekShopVisit(layerIdx, nodeIdx) {
     const run = _state.player.fashionWeekRun;
     if (!run || !run.active) return null;
@@ -1756,7 +1848,46 @@ const CWGameState = (() => {
     return { type: 'shop' };
   }
 
-  /** Construit l'équipe adverse d'un nœud Défilé mineur ou du Boss, mise à l'échelle du jour */
+  /** Nœud Évolution : le joueur choisit une personnage éligible à faire évoluer, contre des Jetons */
+  function resolveFashionWeekEvolveNode(layerIdx, nodeIdx, memberInstanceId) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+    const node = run.map.layers[layerIdx]?.[nodeIdx];
+    if (!node || node.resolved || node.category !== 'evolve') return null;
+
+    const member = run.roster.find(m => m.originalInstanceId === memberInstanceId);
+    if (!member) return { error: 'not_found' };
+    const eligible = _state.characters.some(c => c.evolutionLine === member.evolutionLine && c.evolutionStage === member.evolutionStage + 1);
+    if (!eligible) return { error: 'not_eligible' };
+    const cost = cfg.evolveNodeCost ?? 40;
+    if (run.currencyThisRun < cost) return { error: 'insufficient' };
+
+    run.currencyThisRun -= cost;
+    _fwTryEvolve(member);
+
+    node.resolved = true;
+    _fwAddScore(run, cfg.scoreRewards.nodeCompleted);
+    _fwAdvanceLayerIfComplete(run);
+    _autoSave();
+    return { type: 'evolve', memberInstanceId, newCharId: member.currentCharId, cost };
+  }
+
+  /** Passe ce nœud Évolution sans rien faire (aucune personnage éligible, ou joueur ne veut pas dépenser) */
+  function skipFashionWeekEvolveNode(layerIdx, nodeIdx) {
+    const run = _state.player.fashionWeekRun;
+    if (!run || !run.active) return null;
+    const cfg = _fwCfg();
+    const node = run.map.layers[layerIdx]?.[nodeIdx];
+    if (!node || node.resolved || node.category !== 'evolve') return null;
+    node.resolved = true;
+    _fwAddScore(run, cfg.scoreRewards.nodeCompleted);
+    _fwAdvanceLayerIfComplete(run);
+    _autoSave();
+    return { type: 'evolve_skipped' };
+  }
+
+
   /**
    * Applique le résultat d'un VRAI combat de Défilé (moteur classique, planifié
    * manuellement par le joueur comme un Défilé normal) au mode Semaine de Mode.
@@ -1913,7 +2044,6 @@ const CWGameState = (() => {
       return endFashionWeekRun();
     }
     run.map = _fwGenerateDayMap(cfg, run.day);
-    run.pendingDailyBuffChoice = [...cfg.bossBuffChoices].sort(() => Math.random() - 0.5).slice(0, 3).map(b => b.id);
     _autoSave();
     return run;
   }
@@ -3084,8 +3214,10 @@ const CWGameState = (() => {
     getCharacterAffectionTier, addCharacterAffection, giveGiftToCharacter,
     isCharAtFinalEvolutionStage, getUnlockedPortraits, setEquippedPortrait, getDisplayPortraitUrl,
     proposeFashionWeekRoundCandidates, previewFashionWeekRunChar, startFashionWeekRun,
-    getRoguelikeCharStats, resolveFashionWeekNode, resolveFashionWeekEncounter,
+    getRoguelikeCharStats, resolveFashionWeekNode, resolveFashionWeekEncounter, proposeFashionWeekEncounterCandidates,
     buyFashionWeekRunItem, resolveFashionWeekShopVisit,
+    buyFashionWeekShopRecruit, buyFashionWeekShopEvolve, buyFashionWeekShopRunBuff, sellFashionWeekRosterMember,
+    resolveFashionWeekEvolveNode, skipFashionWeekEvolveNode,
     applyFashionWeekDefileResult,
     isFashionWeekMapComplete, chooseFashionWeekBossBuff, chooseFashionWeekDailyBuff, generateFashionWeekConnections,
     advanceFashionWeekDay, endFashionWeekRun,
