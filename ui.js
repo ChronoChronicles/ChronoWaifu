@@ -1840,12 +1840,12 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
    * @param {string} type1 @param {string|null} type2
    */
   /** Version ultra-compacte des affinités (icônes seules, sans libellé) — pour les cartes étroites */
-  function _buildCompactAffinitiesHtml(type1, type2) {
+  function _buildCompactAffinitiesHtml(type1, type2, highlightTypeId = null) {
     const { dealt } = _computeTypeAffinities(type1, type2);
     if (dealt.length === 0) return '';
     const strong = dealt.filter(d => d.mult >= 2).map(d => d.type);
     const weak   = dealt.filter(d => d.mult <= 0.5).map(d => d.type);
-    const badge = (t, cls) => `<span class="defile-affinity-dot ${cls}" style="background:${t.color}" title="${t.name}">${t.icon}</span>`;
+    const badge = (t, cls) => `<span class="defile-affinity-dot ${cls} ${t.id === highlightTypeId ? 'affinity-highlight' : ''}" style="background:${t.color}" title="${t.name}">${t.icon}</span>`;
     return `
       <div class="defile-compact-affinities">
         ${strong.length ? `<div class="defile-affinity-row"><span class="defile-affinity-sign good">✚</span>${strong.map(t => badge(t, 'good')).join('')}</div>` : ''}
@@ -6697,10 +6697,13 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
   function _openDefileCharPicker(round) {
     const state = CWGameState.get();
     const types = state.types;
+    const p = _defileState.programme[round];
+    const roundType = types.find(tt => tt.id === p.typeId);
     const typeBadge = (typeId) => {
       const t = types.find(tt => tt.id === typeId);
       return t ? `<span class="defile-type-badge" style="background:${t.color}">${t.icon}</span>` : '';
     };
+    const STAT_ICON = { atk: '✨', def: '🌹', spd: '🕊️' };
     const available = _defileState.playerTeam.filter(f => _defileUsesLeft(f.instanceId) > 0);
     const modal = document.getElementById('modal');
     modal.style.display = 'block';
@@ -6708,6 +6711,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       <div class="modal-backdrop" id="modal-backdrop">
         <div class="modal-box fw-defile-modal">
           <div class="fw-dialogue-title">Qui défile au Tournage ${round + 1} ?</div>
+          <div class="defile-picker-requirement">
+            Stat jugée : <strong>${STAT_LABELS_SHORT[p.stat]}</strong> &nbsp;•&nbsp; Type du thème :
+            <span class="defile-type-badge" style="background:${roundType?.color || '#888'}">${roundType?.icon || ''} ${roundType?.name || p.typeId}</span>
+          </div>
           <div class="defile-picker-grid">
             ${available.map(f => {
               const left = _defileUsesLeft(f.instanceId);
@@ -6719,18 +6726,21 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                     <div class="defile-chip-name">${f.name}</div>
                     <div class="defile-chip-types">${typeBadge(f.type1)}${typeBadge(f.type2)}</div>
                     <div class="defile-chip-stats-grid">
-                      <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">✨</span><span class="defile-chip-stat-value">${f.atk}</span></div>
-                      <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🌹</span><span class="defile-chip-stat-value">${f.def}</span></div>
-                      <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🕊️</span><span class="defile-chip-stat-value">${f.spd}</span></div>
+                      <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">✨</span><span class="defile-chip-stat-value ${p.stat === 'atk' ? 'stat-highlight' : ''}">${f.atk}</span></div>
+                      <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🌹</span><span class="defile-chip-stat-value ${p.stat === 'def' ? 'stat-highlight' : ''}">${f.def}</span></div>
+                      <div class="defile-chip-stat-col"><span class="defile-chip-stat-label">🕊️</span><span class="defile-chip-stat-value ${p.stat === 'spd' ? 'stat-highlight' : ''}">${f.spd}</span></div>
                     </div>
                     <div class="defile-chip-uses">${left}/${_defileState.usesPerChar} restants</div>
-                    ${_buildCompactAffinitiesHtml(f.type1, f.type2)}
+                    ${_buildCompactAffinitiesHtml(f.type1, f.type2, p.typeId)}
                   </div>
                 </div>`;
             }).join('') || '<p class="empty-msg">Plus personne de disponible.</p>'}
           </div>
+          <button class="admin-btn admin-btn-secondary" id="defile-picker-cancel" style="width:100%;margin-top:12px;">Annuler</button>
         </div>
       </div>`;
+    document.getElementById('defile-picker-cancel')?.addEventListener('click', _closeModal);
+    document.getElementById('modal-backdrop')?.addEventListener('click', (e) => { if (e.target.id === 'modal-backdrop') _closeModal(); });
     modal.querySelectorAll('.defile-picker-card').forEach(card => {
       card.addEventListener('click', () => {
         _defileState.assignment[round] = { instanceId: card.dataset.instance };
@@ -6788,8 +6798,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
                 </div>`;
             }).join('') || '<p class="empty-msg">Plus aucun Talent disponible.</p>'}
           </div>
+          <button class="admin-btn admin-btn-secondary" id="defile-picker-cancel" style="width:100%;margin-top:12px;">Annuler</button>
         </div>
       </div>`;
+    document.getElementById('defile-picker-cancel')?.addEventListener('click', _closeModal);
+    document.getElementById('modal-backdrop')?.addEventListener('click', (e) => { if (e.target.id === 'modal-backdrop') _closeModal(); });
     modal.querySelectorAll('.defile-picker-card').forEach(card => {
       card.addEventListener('click', () => {
         const instanceId = card.dataset.instance, typeId = card.dataset.type;
@@ -7079,18 +7092,14 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
     await _sleep(600);
 
     // Phase 6c — la journée se termine, la Forme redescend EN DIRECT sous
-    // chaque carte, avec la baisse visible et une mention explicative
+    // chaque carte (animation visuelle seule, sans texte d'accompagnement)
     if (l.playerWalked && l.playerEnduranceBefore != null) {
-      const dropAmount = l.playerEnduranceBefore - l.playerEnduranceAfter;
-      _setDefilePhaseCaption(`La journée est terminée, ${l.playerFighter} est fatiguée : -${dropAmount}% Forme`);
       await _animateDefileEnduranceDrop('dpb-endurance-player', l.playerEnduranceMax, l.playerEnduranceBefore, l.playerEnduranceAfter);
-      await _sleep(1800);
+      await _sleep(600);
     }
     if (l.enemyWalked && l.enemyEnduranceBefore != null) {
-      const dropAmount = l.enemyEnduranceBefore - l.enemyEnduranceAfter;
-      _setDefilePhaseCaption(`La journée est terminée, ${l.enemyFighter} est fatiguée : -${dropAmount}% Forme`);
       await _animateDefileEnduranceDrop('dpb-endurance-enemy', l.enemyEnduranceMax, l.enemyEnduranceBefore, l.enemyEnduranceAfter);
-      await _sleep(1800);
+      await _sleep(600);
     }
 
     // Phase 7 — le score du tournage rejoint le total cumulé (compteur animé)

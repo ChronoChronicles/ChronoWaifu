@@ -360,6 +360,19 @@
   .defile-slot-pick-btn-talent{ font-size:.6rem; color:#fbbf24; border-color:rgba(251,191,36,.4); background:rgba(251,191,36,.08); padding:5px; }
 
   /* ── Fenêtre de sélection (personnage ou Talent) — remplace le glisser-déposer ── */
+  .defile-picker-requirement{
+    font-size:.78rem; color:var(--text-dim); text-align:center; margin:6px 0 12px;
+    display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap;
+  }
+  .defile-picker-requirement strong{ color:#fff; }
+  .stat-highlight{
+    color:#fbbf24 !important; font-weight:900 !important;
+    text-shadow:0 0 8px rgba(251,191,36,.6);
+  }
+  .affinity-highlight{
+    box-shadow:0 0 0 2px #fbbf24, 0 0 10px rgba(251,191,36,.7);
+    transform:scale(1.2);
+  }
   .defile-picker-grid{
     display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px;
     max-height:60vh; overflow-y:auto; margin-top:10px;
