@@ -7720,19 +7720,7 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       <div class="fw-roster-row">
         ${run.roster.map(m => `<div class="fw-roster-card-wrap">${_fwRunCharCardHtml(m)}</div>`).join('')}
       </div>
-      <div class="fw-map-progress">
-        ${run.map.layers.map((layer, i) => `
-          <div class="fw-map-dot ${i < run.map.currentLayer ? 'done' : i === run.map.currentLayer ? 'current' : 'future'}"></div>
-        `).join('')}
-        <div class="fw-map-dot fw-map-dot-boss ${mapDone ? 'current' : 'future'}">👑</div>
-      </div>
-      ${mapDone ? `
-        <button class="btn-primary fw-boss-btn" id="fw-boss-btn" style="width:100%;margin-top:16px;">👑 Affronter le Boss du jour</button>
-      ` : `
-        <div class="fw-node-choices">
-          ${run.map.layers[run.map.currentLayer].map((node, nodeIdx) => _fwNodeCardHtml(node, nodeIdx)).join('')}
-        </div>
-      `}
+      ${_fwRenderMapPathHtml(run, cfg)}
     `;
 
     document.getElementById('fw-boss-btn')?.addEventListener('click', () => _fwStartDefileEncounter('boss'));
@@ -7743,18 +7731,95 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       showScreen('fashion-week-gala');
     });
 
-    el.querySelectorAll('.fw-node-card').forEach(card => {
-      card.addEventListener('click', () => _fwOpenNodeResolution(run.map.currentLayer, parseInt(card.dataset.node), cfg));
+    el.querySelectorAll('.fw-map-node-active[data-layer]').forEach(nodeEl => {
+      nodeEl.addEventListener('click', () => _fwOpenNodeResolution(parseInt(nodeEl.dataset.layer), parseInt(nodeEl.dataset.node), cfg));
+    });
+    document.getElementById('fw-map-boss-node')?.addEventListener('click', () => {
+      if (CWGameState.isFashionWeekMapComplete()) _fwStartDefileEncounter('boss');
     });
   }
 
-  function _fwNodeCardHtml(node, nodeIdx) {
-    const meta = FW_CATEGORY_META[node.category] || { icon: '❓', label: node.category, color: '#888' };
+  /**
+   * Construit la carte du jour façon "chemin à embranchements" (Slay the
+   * Spire) : lignes SVG entre nœuds connectés, diamants HTML par-dessus pour
+   * l'icône/l'interaction. Seule la couche courante est cliquable ; le chemin
+   * réellement parcouru est mis en évidence, le reste du futur reste flou.
+   */
+  function _fwRenderMapPathHtml(run, cfg) {
+    const { layers, connections, currentLayer } = run.map;
+    const mapDone = CWGameState.isFashionWeekMapComplete();
+    const numCols = layers.length + 2; // origine + N couches + Boss
+    const colPct  = 100 / (numCols - 1);
+
+    const pos = (col, idx, count) => ({
+      x: col * colPct,
+      y: count > 1 ? ((idx + 1) / (count + 1)) * 100 : 50,
+    });
+    const originPos = { x: 0, y: 50 };
+    const bossPos   = { x: (numCols - 1) * colPct, y: 50 };
+    const layerPos  = layers.map((layer, i) => layer.map((n, j) => pos(i + 1, j, layer.length)));
+
+    // Index du nœud choisi (resolved:true) pour chaque couche déjà franchie
+    const traveled = layers.map(layer => layer.findIndex(n => n.resolved));
+
+    const line = (p1, p2, cls) => `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="${cls}" />`;
+    let lines = '';
+
+    // Origine -> couche 0
+    layers[0]?.forEach((n, j) => {
+      const cls = currentLayer === 0 ? 'fw-path-available' : (traveled[0] === j ? 'fw-path-traveled' : 'fw-path-past-unused');
+      lines += line(originPos, layerPos[0][j], cls);
+    });
+
+    // Entre couches consécutives
+    for (let i = 0; i < layers.length - 1; i++) {
+      connections[i].forEach((targets, fromIdx) => {
+        targets.forEach(toIdx => {
+          let cls;
+          if (i + 1 < currentLayer) cls = (traveled[i] === fromIdx && traveled[i + 1] === toIdx) ? 'fw-path-traveled' : 'fw-path-past-unused';
+          else if (i + 1 === currentLayer) cls = (traveled[i] === fromIdx) ? 'fw-path-available' : 'fw-path-past-unused';
+          else cls = 'fw-path-future';
+          lines += line(layerPos[i][fromIdx], layerPos[i + 1][toIdx], cls);
+        });
+      });
+    }
+
+    // Dernière couche -> Boss
+    const lastIdx = layers.length - 1;
+    layers[lastIdx]?.forEach((n, j) => {
+      let cls;
+      if (mapDone) cls = (traveled[lastIdx] === j) ? 'fw-path-traveled' : 'fw-path-past-unused';
+      else if (currentLayer === lastIdx) cls = 'fw-path-available';
+      else cls = 'fw-path-future';
+      lines += line(layerPos[lastIdx][j], bossPos, cls);
+    });
+
+    // Nœuds (diamants HTML par-dessus le SVG)
+    let nodes = `<div class="fw-map-node fw-map-node-origin" style="left:${originPos.x}%;top:${originPos.y}%;">📍</div>`;
+    layers.forEach((layer, i) => {
+      layer.forEach((node, j) => {
+        const p = layerPos[i][j];
+        const meta = FW_CATEGORY_META[node.category] || { icon: '❓', color: '#888' };
+        let stateCls = 'fw-map-node-future';
+        if (i < currentLayer) stateCls = node.resolved ? 'fw-map-node-traveled' : 'fw-map-node-skipped';
+        else if (i === currentLayer) stateCls = 'fw-map-node-active';
+        nodes += `
+          <div class="fw-map-node ${stateCls}" style="left:${p.x}%;top:${p.y}%;--node-color:${meta.color}" data-layer="${i}" data-node="${j}" title="${node.title}">
+            <div class="fw-map-node-diamond"><span>${meta.icon}</span></div>
+            ${stateCls === 'fw-map-node-active' ? `<div class="fw-map-node-label">${node.title}</div>` : ''}
+          </div>`;
+      });
+    });
+    nodes += `
+      <div class="fw-map-node fw-map-node-boss ${mapDone ? 'fw-map-node-active' : 'fw-map-node-future'}" style="left:${bossPos.x}%;top:${bossPos.y}%;" id="fw-map-boss-node">
+        <div class="fw-map-node-diamond"><span>👑</span></div>
+        ${mapDone ? `<div class="fw-map-node-label">Boss du jour</div>` : ''}
+      </div>`;
+
     return `
-      <div class="fw-node-card" data-node="${nodeIdx}" style="border-color:${meta.color}">
-        <div class="fw-node-icon" style="background:${meta.color}22;color:${meta.color}">${meta.icon}</div>
-        <div class="fw-node-label">${meta.label}</div>
-        <div class="fw-node-title">${node.title}</div>
+      <div class="fw-map-path-wrap">
+        <svg class="fw-map-path-svg" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>
+        ${nodes}
       </div>`;
   }
 

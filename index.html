@@ -4321,34 +4321,45 @@
   .fw-form-gauge-fill{ height:100%; background:linear-gradient(90deg,#f87171,#fca5a5); transition:width .4s ease; }
   .fw-form-gauge-value{ font-size:.68rem; color:var(--text-dim); text-align:right; font-family:var(--font-mono); margin-top:2px; }
 
-  /* ── Barre de progression de la carte (points par palier + Boss) ── */
-  .fw-map-progress{ display:flex; align-items:center; gap:6px; justify-content:center; margin:14px 0; }
-  .fw-map-dot{
-    width:14px; height:14px; border-radius:50%; background:rgba(255,255,255,.12);
-    border:2px solid rgba(255,255,255,.2);
+  /* ── Carte du jour à embranchements (façon Slay the Spire) ── */
+  .fw-map-path-wrap{
+    position:relative; width:100%; aspect-ratio:16/10; min-height:280px;
+    margin:16px 0; overflow:visible;
   }
-  .fw-map-dot.done{ background:#a78bfa; border-color:#a78bfa; }
-  .fw-map-dot.current{ background:#fbbf24; border-color:#fbbf24; box-shadow:0 0 8px rgba(251,191,36,.6); animation:fwDotPulse 1.4s ease-in-out infinite; }
-  @keyframes fwDotPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.3); } }
-  .fw-map-dot-boss{
-    width:24px; height:24px; font-size:.8rem; display:flex; align-items:center; justify-content:center;
-    border-radius:8px; margin-left:6px;
-  }
+  .fw-map-path-svg{ position:absolute; inset:0; width:100%; height:100%; }
+  .fw-map-path-svg line{ stroke-width:.6; vector-effect:non-scaling-stroke; }
+  .fw-map-path-svg line.fw-path-traveled{ stroke:#a78bfa; stroke-width:1; }
+  .fw-map-path-svg line.fw-path-available{ stroke:#fbbf24; stroke-width:.9; opacity:.85; }
+  .fw-map-path-svg line.fw-path-past-unused{ stroke:rgba(255,255,255,.12); }
+  .fw-map-path-svg line.fw-path-future{ stroke:rgba(255,255,255,.08); stroke-dasharray:2 2; }
 
-  /* ── Nœuds du palier courant ── */
-  .fw-node-choices{ display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:10px; }
-  .fw-node-card{
-    background:rgba(255,255,255,.05); border:1.5px solid; border-radius:12px;
-    padding:14px 8px; text-align:center; cursor:pointer;
-    transition:transform .15s ease, background .15s ease;
+  .fw-map-node{
+    position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column;
+    align-items:center; gap:4px; z-index:2;
   }
-  .fw-node-card:active{ transform:scale(.96); background:rgba(255,255,255,.09); }
-  .fw-node-icon{
-    width:40px; height:40px; border-radius:50%; margin:0 auto 8px;
-    display:flex; align-items:center; justify-content:center; font-size:1.3rem;
+  .fw-map-node-origin{ font-size:1.1rem; opacity:.7; z-index:1; }
+  .fw-map-node-diamond{
+    width:38px; height:38px; background:var(--node-color, #666); border-radius:8px;
+    transform:rotate(45deg); display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.4); border:2px solid rgba(255,255,255,.25);
+    font-size:1rem;
   }
-  .fw-node-label{ font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.03em; color:var(--text-dim); }
-  .fw-node-title{ font-size:.78rem; font-weight:700; margin-top:4px; }
+  .fw-map-node-diamond > *{ transform:rotate(-45deg); }
+  .fw-map-node-future .fw-map-node-diamond{ opacity:.3; filter:grayscale(.6); }
+  .fw-map-node-skipped .fw-map-node-diamond{ opacity:.25; filter:grayscale(1); }
+  .fw-map-node-traveled .fw-map-node-diamond{ opacity:.9; box-shadow:0 0 10px var(--node-color); }
+  .fw-map-node-active{ cursor:pointer; }
+  .fw-map-node-active .fw-map-node-diamond{
+    box-shadow:0 0 14px var(--node-color), 0 0 4px #fff; animation:fwNodePulse 1.6s ease-in-out infinite;
+  }
+  .fw-map-node-active:active .fw-map-node-diamond{ transform:rotate(45deg) scale(.9); }
+  @keyframes fwNodePulse{ 0%,100%{ transform:rotate(45deg) scale(1); } 50%{ transform:rotate(45deg) scale(1.12); } }
+  .fw-map-node-label{
+    font-size:.6rem; font-weight:700; color:#fff; text-align:center; max-width:70px;
+    background:rgba(0,0,0,.55); padding:2px 5px; border-radius:5px; line-height:1.15;
+    white-space:normal;
+  }
+  .fw-map-node-boss .fw-map-node-diamond{ width:46px; height:46px; background:linear-gradient(135deg,#fbbf24,#f59e0b); }
 
   .fw-boss-btn{
     background:linear-gradient(135deg,#fbbf24,#f59e0b) !important; color:#1b1330 !important;

@@ -1479,7 +1479,37 @@ const CWGameState = (() => {
       }
       layers.push(nodes);
     }
-    return { day, layers, currentLayer: 0, bossResolved: false };
+
+    // Connexions visuelles entre couches consécutives (façon Slay the Spire) —
+    // chaque nœud pointe vers 1 ou 2 nœuds de la couche suivante, en restant
+    // proche en position pour un rendu propre, et sans jamais laisser un nœud
+    // orphelin (sans connexion entrante).
+    const connections = [];
+    for (let i = 0; i < layers.length - 1; i++) {
+      connections.push(_fwGenerateNodeConnections(layers[i].length, layers[i + 1].length));
+    }
+    // Dernière couche -> Boss (nœud virtuel unique) : tout le monde y mène
+    connections.push(layers[layers.length - 1].map(() => [0]));
+
+    return { day, layers, connections, currentLayer: 0, bossResolved: false };
+  }
+
+  /** Génère des connexions plausibles entre 2 couches, sans nœud orphelin côté arrivée */
+  function _fwGenerateNodeConnections(fromCount, toCount) {
+    const conns = [];
+    for (let i = 0; i < fromCount; i++) {
+      const center = toCount > 1 ? Math.round((i / (fromCount - 1 || 1)) * (toCount - 1)) : 0;
+      const targets = new Set([center]);
+      if (Math.random() < 0.4 && center > 0) targets.add(center - 1);
+      if (Math.random() < 0.4 && center < toCount - 1) targets.add(center + 1);
+      conns.push([...targets]);
+    }
+    // Garantit qu'aucun nœud d'arrivée n'est orphelin
+    const covered = new Set(conns.flat());
+    for (let t = 0; t < toCount; t++) {
+      if (!covered.has(t)) conns[Math.floor(Math.random() * fromCount)].push(t);
+    }
+    return conns;
   }
 
   /** Multiplicateur de difficulté/récompense du jour courant (0-based) */
