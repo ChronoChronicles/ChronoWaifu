@@ -7936,7 +7936,10 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
       case 'triggerDefile':
         text = `⚔️ Un défi est lancé !`;
         break;
-      default: return;
+      default:
+        console.warn('[Semaine de Mode] Type d\'issue de Dialogue non reconnu ou Pari mal configuré (succès/échec manquant) :', result);
+        text = '✨ Quelque chose se passe...'; // filet de sécurité : on affiche quand même quelque chose plutôt que rien
+        break;
     }
     if (result.type === 'gamble') text = (result.success ? '🎲 Pari réussi ! ' : '🎲 Pari perdu... ') + text;
 
@@ -7949,7 +7952,8 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
         ${detail ? `<div class="fw-resolve-detail">${detail}</div>` : ''}
       </div>`;
     document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('active', 'revealed'));
+    overlay.offsetHeight; // force le navigateur à calculer le style de départ avant d'appliquer le suivant (sans dépendre d'un frame d'animation)
+    overlay.classList.add('active', 'revealed');
     CWAudioSystem.playSfx(result.type === 'gamble' && !result.success ? CWAudioSystem.SFX_KEYS.defileTypeBad : CWAudioSystem.SFX_KEYS.defileTypeGood);
     await _sleep(2200);
     overlay.classList.remove('active');
