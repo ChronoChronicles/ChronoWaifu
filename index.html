@@ -4235,9 +4235,11 @@
      RESPONSIVE
      ============================================================ */
   @media (min-width:680px){
-    body{ overflow:auto; }
-    .app-shell{ min-height:100vh; height:auto; border-left:1px solid var(--border-soft); border-right:1px solid var(--border-soft); }
-    .main-content{ max-height:none; }
+    /* Le confinement "en-tête et navigation fixes, seul le contenu défile"
+       s'applique désormais aussi au-delà de cette largeur (mobile ET PC),
+       en attendant une vraie mise en page dédiée au grand écran (Option 2,
+       plus tard) qui exploitera la largeur au lieu de simplement l'autoriser. */
+    .app-shell{ border-left:1px solid var(--border-soft); border-right:1px solid var(--border-soft); }
   }
   /* ═══════════════════════════════════════════════════════
      SEMAINE DE MODE
