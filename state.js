@@ -1512,6 +1512,16 @@ const CWGameState = (() => {
     return conns;
   }
 
+  /** Version publique : régénère un jeu complet de connexions pour une carte existante (filet de sécurité pour les anciennes sauvegardes) */
+  function generateFashionWeekConnections(layers) {
+    const connections = [];
+    for (let i = 0; i < layers.length - 1; i++) {
+      connections.push(_fwGenerateNodeConnections(layers[i].length, layers[i + 1].length));
+    }
+    connections.push(layers[layers.length - 1].map(() => [0]));
+    return connections;
+  }
+
   /** Multiplicateur de difficulté/récompense du jour courant (0-based) */
   function _fwDayMultiplier(cfg, day, kind) {
     const rate = kind === 'reward' ? cfg.rewardScalingPerDay : cfg.difficultyScalingPerDay;
@@ -3077,7 +3087,7 @@ const CWGameState = (() => {
     getRoguelikeCharStats, resolveFashionWeekNode, resolveFashionWeekEncounter,
     buyFashionWeekRunItem, resolveFashionWeekShopVisit,
     applyFashionWeekDefileResult,
-    isFashionWeekMapComplete, chooseFashionWeekBossBuff, chooseFashionWeekDailyBuff,
+    isFashionWeekMapComplete, chooseFashionWeekBossBuff, chooseFashionWeekDailyBuff, generateFashionWeekConnections,
     advanceFashionWeekDay, endFashionWeekRun,
     getTourneeProgress, getLeaderboardSnapshot, registerRecordScore,
     getRecordTotemState, claimNextRecordTier, claimAllRecordTiers,

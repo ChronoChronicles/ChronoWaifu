@@ -7746,7 +7746,11 @@ Le Catalogue affiche aussi les <b>lignées d'évolution</b> — une actrice peut
    * réellement parcouru est mis en évidence, le reste du futur reste flou.
    */
   function _fwRenderMapPathHtml(run, cfg) {
-    const { layers, connections, currentLayer } = run.map;
+    const { layers, currentLayer } = run.map;
+    // Filet de sécurité : une run démarrée AVANT l'ajout des connexions n'en a
+    // pas encore — on les génère à la volée et on les mémorise, sans jamais planter.
+    if (!run.map.connections) run.map.connections = CWGameState.generateFashionWeekConnections(layers);
+    const connections = run.map.connections;
     const mapDone = CWGameState.isFashionWeekMapComplete();
     const numCols = layers.length + 2; // origine + N couches + Boss
     const colPct  = 100 / (numCols - 1);
